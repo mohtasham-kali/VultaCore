@@ -1,0 +1,14 @@
+{
+  "appId": "com.saas2.platform",
+  "appName": "SaaS 2.0 Platform",
+  "webDir": "../web-dashboard/out",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": true
+  },
+  "ios": {
+    "contentInset": "always"
+  }
+}

@@ -1,0 +1,14 @@
+/home/hacker/Documents/SaaS 2.0/tri-stack/analytics-engine/target/debug/deps/serde-cf43949ecce48939.d: /home/hacker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /home/hacker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /home/hacker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /home/hacker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /home/hacker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /home/hacker/Documents/SaaS\ 2.0/tri-stack/analytics-engine/target/debug/build/serde-0c79bc1bb5bf9eba/out/private.rs
+
+/home/hacker/Documents/SaaS 2.0/tri-stack/analytics-engine/target/debug/deps/libserde-cf43949ecce48939.rlib: /home/hacker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /home/hacker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /home/hacker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /home/hacker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /home/hacker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /home/hacker/Documents/SaaS\ 2.0/tri-stack/analytics-engine/target/debug/build/serde-0c79bc1bb5bf9eba/out/private.rs
+
+/home/hacker/Documents/SaaS 2.0/tri-stack/analytics-engine/target/debug/deps/libserde-cf43949ecce48939.rmeta: /home/hacker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /home/hacker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /home/hacker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /home/hacker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /home/hacker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /home/hacker/Documents/SaaS\ 2.0/tri-stack/analytics-engine/target/debug/build/serde-0c79bc1bb5bf9eba/out/private.rs
+
+/home/hacker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs:
+/home/hacker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs:
+/home/hacker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs:
+/home/hacker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs:
+/home/hacker/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs:
+/home/hacker/Documents/SaaS\ 2.0/tri-stack/analytics-engine/target/debug/build/serde-0c79bc1bb5bf9eba/out/private.rs:
+
+# env-dep:OUT_DIR=/home/hacker/Documents/SaaS 2.0/tri-stack/analytics-engine/target/debug/build/serde-0c79bc1bb5bf9eba/out

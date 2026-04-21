@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+python-dotenv
+httpx
+pydantic
+langchain
+langchain-openai
+redis
+psycopg2-binary
+meilisearch
+qdrant-client
+google-generativeai
+groq
+openai
