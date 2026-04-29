@@ -22,7 +22,7 @@ openrouter_client = OpenAI(
     api_key=os.getenv("OPENROUTER_API_KEY"),
 )
 
-app = FastAPI(title="SaaS 2.0 AI Engine", version="2.0")
+app = FastAPI(title="VultaCore AI Engine", version="2.0")
 
 class BotRequest(BaseModel):
     prompt: str

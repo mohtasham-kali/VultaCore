@@ -1,0 +1,57 @@
+name: CI — Web Dashboard
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'web-dashboard/**'
+      - '.github/workflows/ci-web.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'web-dashboard/**'
+
+jobs:
+  build-and-check:
+    name: TypeCheck & Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web-dashboard
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: web-dashboard/package-lock.json
+
+      - name: Restore Next.js build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            web-dashboard/.next/cache
+          key: nextjs-${{ runner.os }}-${{ hashFiles('web-dashboard/package-lock.json') }}-${{ hashFiles('web-dashboard/src/**') }}
+          restore-keys: |
+            nextjs-${{ runner.os }}-${{ hashFiles('web-dashboard/package-lock.json') }}-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_API_URL: http://localhost:3001
+
+      - name: Production build
+        run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_API_URL: http://localhost:3001

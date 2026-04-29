@@ -1,4 +1,4 @@
-# VaultaCore Tri-Stack Platform
+# VultaCore Tri-Stack Platform
 
 ## Architecture
 - **Web Dashboard**: Next.js (React) — static export
@@ -43,6 +43,7 @@ npm run open:ios       # open in Xcode (macOS only)
 ```
 
 > **Note**: Android requires Android Studio + Android SDK.
+> On this system, Android Studio is located at `/home/hacker/android-studio/bin/studio.sh`.
 > iOS requires macOS with Xcode and CocoaPods installed.
 
 ---
@@ -79,7 +80,7 @@ cd backend-api && npm run start:dev
 
 ### AI Services (FastAPI)
 ```bash
-cd ai-services && pip install -r requirements.txt && uvicorn main:app --reload
+cd ai-services && pip install -r requirements.txt && source venv/bin/activate && uvicorn main:app --reload
 ```
 
 ### Analytics Engine (Rust)

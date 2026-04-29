@@ -1,0 +1,51 @@
+name: CI — Analytics Engine (Rust)
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'analytics-engine/**'
+      - '.github/workflows/ci-rust.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'analytics-engine/**'
+
+jobs:
+  build:
+    name: Cargo Build & Check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: analytics-engine
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry & build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            analytics-engine/target
+          key: rust-${{ runner.os }}-${{ hashFiles('analytics-engine/Cargo.lock') }}
+          restore-keys: |
+            rust-${{ runner.os }}-
+
+      - name: Check (fast)
+        run: cargo check
+
+      - name: Build release
+        run: cargo build --release
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: analytics-engine-linux
+          path: analytics-engine/target/release/analytics-engine
+          retention-days: 7

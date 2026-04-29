@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "SaaS 2.0 Platform",
+  "productName": "VultaCore",
   "version": "0.1.0",
-  "identifier": "com.saas2.platform",
+  "identifier": "com.vultacore.app",
   "build": {
     "frontendDist": "../../web-dashboard/out"
   },
@@ -10,7 +10,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "SaaS 2.0 Platform",
+        "title": "VultaCore",
         "width": 1280,
         "height": 800,
         "minWidth": 900,

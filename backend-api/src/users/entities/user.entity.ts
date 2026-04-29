@@ -1,6 +1,7 @@
-import { Entity, Column, PrimaryGeneratedColumn, OneToMany } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, OneToMany, ManyToOne } from 'typeorm';
 import { Post } from '../../forum/entities/post.entity';
 import { Comment } from '../../forum/entities/comment.entity';
+import { Plan } from '../../plans/entities/plan.entity';
 
 @Entity()
 export class User {
@@ -22,9 +23,15 @@ export class User {
   @Column({ default: 'Level 1' })
   rank: string;
 
+  @ManyToOne(() => Plan, (plan) => plan.users)
+  plan: Plan;
+
   @OneToMany(() => Post, (post) => post.author)
   posts: Post[];
 
   @OneToMany(() => Comment, (comment) => comment.author)
   comments: Comment[];
+
+  @OneToMany('Notification', 'user')
+  notifications: any[];
 }

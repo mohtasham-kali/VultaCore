@@ -4,9 +4,12 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UsersModule } from './users/users.module';
+import { PlansModule } from './plans/plans.module';
+import { LeadsModule } from './leads/leads.module';
 import { ForumModule } from './forum/forum.module';
 import { BotsModule } from './bots/bots.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -20,9 +23,12 @@ import { AnalyticsModule } from './analytics/analytics.module';
       synchronize: true, // Only for development
     }),
     UsersModule,
+    PlansModule,
+    LeadsModule,
     ForumModule,
     BotsModule,
     AnalyticsModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

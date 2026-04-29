@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:4000';
+import { API_BASE_URL } from './constants';
 
 export async function fetchPosts(type?: 'dev' | 'cyber') {
   const url = type ? `${API_BASE_URL}/forum?type=${type}` : `${API_BASE_URL}/forum`;

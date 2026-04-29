@@ -1,0 +1,72 @@
+name: CD — Deploy on Merge to Main
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy-web:
+    name: Deploy Web Dashboard
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web-dashboard
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: web-dashboard/package-lock.json
+
+      - name: Restore Next.js build cache
+        uses: actions/cache@v4
+        with:
+          path: web-dashboard/.next/cache
+          key: nextjs-${{ runner.os }}-${{ hashFiles('web-dashboard/package-lock.json') }}-${{ hashFiles('web-dashboard/src/**') }}
+          restore-keys: |
+            nextjs-${{ runner.os }}-${{ hashFiles('web-dashboard/package-lock.json') }}-
+
+      - name: Install & Build
+        run: |
+          npm ci
+          npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+
+      # Option A: Deploy to Vercel
+      - name: Deploy to Vercel
+        if: ${{ vars.DEPLOY_TARGET == 'vercel' }}
+        run: npx vercel --prod --token ${{ secrets.VERCEL_TOKEN }} --yes
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+  deploy-api:
+    name: Deploy Backend API
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t vultacore-api:${{ github.sha }} ./backend-api
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push image
+        run: |
+          docker tag vultacore-api:${{ github.sha }} ghcr.io/${{ github.repository }}/vultacore-api:latest
+          docker push ghcr.io/${{ github.repository }}/vultacore-api:latest

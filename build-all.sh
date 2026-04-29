@@ -5,10 +5,11 @@
 # ============================================================
 
 set -e
+export APPIMAGE_EXTRACT_AND_RUN=1
 
 echo ""
 echo "╔══════════════════════════════════════════════════╗"
-echo "║       SaaS 2.0 Platform — Unified Build          ║"
+echo "║       VultaCore Platform — Unified Build          ║"
 echo "╚══════════════════════════════════════════════════╝"
 echo ""
 

@@ -1,6 +1,6 @@
 {
-  "appId": "com.saas2.platform",
-  "appName": "SaaS 2.0 Platform",
+  "appId": "com.vultacore.app",
+  "appName": "VultaCore",
   "webDir": "../web-dashboard/out",
   "server": {
     "androidScheme": "https"

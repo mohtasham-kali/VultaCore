@@ -22,14 +22,38 @@ let UsersService = class UsersService {
     constructor(usersRepository) {
         this.usersRepository = usersRepository;
     }
-    findOne(id) {
-        return this.usersRepository.findOneBy({ id });
+    async findOne(id) {
+        const user = await this.usersRepository.findOneBy({ id });
+        if (!user) {
+            return { id, rank: 'Free', username: 'Guest' };
+        }
+        return user;
+    }
+    findAll() {
+        return this.usersRepository.find();
     }
     findByUsername(username) {
         return this.usersRepository.findOneBy({ username });
     }
     create(userData) {
         const user = this.usersRepository.create(userData);
+        return this.usersRepository.save(user);
+    }
+    async updatePlan(userId, planName) {
+        let user = await this.usersRepository.findOneBy({ id: userId });
+        if (!user) {
+            console.log(`User ${userId} not found. Creating new record...`);
+            user = this.usersRepository.create({
+                id: userId,
+                username: `user_${userId.slice(0, 4)}`,
+                email: `${userId}@vultacore.app`,
+                password: 'demo_password_placeholder',
+                rank: planName
+            });
+        }
+        else {
+            user.rank = planName;
+        }
         return this.usersRepository.save(user);
     }
 };
