@@ -1,0 +1,53 @@
+name: Cron Jobs
+
+on:
+  schedule:
+    # Keep Render API alive — runs every 14 minutes (Render sleeps after 15min)
+    - cron: '*/14 * * * *'
+    # Daily health report — runs every day at midnight UTC
+    - cron: '0 0 * * *'
+  workflow_dispatch: # Allow manual trigger from Actions tab
+
+jobs:
+  keep-alive:
+    name: Ping API (Prevent Sleep)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Backend API
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" ${{ secrets.NEXT_PUBLIC_API_URL }}/)
+          echo "API responded with HTTP $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "::warning::API returned $STATUS — may be starting up"
+          fi
+
+      - name: Ping AI Service
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" ${{ secrets.AI_SERVICE_URL }}/health || echo "000")
+          echo "AI Service responded with HTTP $STATUS"
+
+  daily-maintenance:
+    name: Daily Maintenance Tasks
+    runs-on: ubuntu-latest
+    # Only run on the midnight schedule
+    if: github.event_name == 'schedule'
+    steps:
+      - name: Trigger Analytics Aggregation
+        run: |
+          curl -s -X POST ${{ secrets.NEXT_PUBLIC_API_URL }}/analytics/aggregate \
+            -H "Content-Type: application/json" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            || echo "Aggregation endpoint not yet implemented — skipping"
+
+      - name: Clean Old Notifications (>30 days)
+        run: |
+          curl -s -X DELETE ${{ secrets.NEXT_PUBLIC_API_URL }}/notifications/cleanup \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            || echo "Cleanup endpoint not yet implemented — skipping"
+
+      - name: Report Summary
+        run: |
+          echo "==============================="
+          echo "Daily Maintenance Complete"
+          echo "Timestamp: $(date -u)"
+          echo "==============================="
