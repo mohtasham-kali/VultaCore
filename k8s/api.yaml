@@ -14,9 +14,11 @@ spec:
       labels:
         app: vultacore-api
     spec:
+      imagePullSecrets:
+      - name: ghcr-login
       containers:
       - name: api
-        image: ghcr.io/mohtasham-kali/vultacore/vultacore-api:latest
+        image: ghcr.io/mohtasham-kali/vultacore-api:latest
         ports:
         - containerPort: 3001
         env:

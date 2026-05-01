@@ -12,8 +12,10 @@ import {
   User, 
   LogOut, 
   LayoutDashboard,
+  Download,
   X
 } from "lucide-react";
+
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 
@@ -44,7 +46,9 @@ const menuItems = [
     category: "Account",
     items: [
       { name: "Settings", icon: Settings, href: "/settings" },
+      { name: "Downloads", icon: Download, href: "/download" },
       { name: "Profile", icon: User, href: "/profile" },
+
     ]
   }
 ];
