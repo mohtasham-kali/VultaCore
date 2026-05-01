@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vultacore-ai
+  labels:
+    app: vultacore-ai
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vultacore-ai
+  template:
+    metadata:
+      labels:
+        app: vultacore-ai
+    spec:
+      containers:
+      - name: ai
+        image: ghcr.io/mohtasham-kali/vultacore/vultacore-ai:latest
+        ports:
+        - containerPort: 8000
+        envFrom:
+        - secretRef:
+            name: ai-secrets
+        resources:
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vultacore-ai
+spec:
+  selector:
+    app: vultacore-ai
+  ports:
+  - protocol: TCP
+    port: 8000
+    targetPort: 8000
+  type: ClusterIP
