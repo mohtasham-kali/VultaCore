@@ -8,6 +8,10 @@ jobs:
   deploy-web:
     name: Deploy Web Dashboard
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
 
     defaults:
       run:
@@ -52,6 +56,10 @@ jobs:
   deploy-api:
     name: Deploy Backend API
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
 
     steps:
       - name: Checkout
@@ -87,6 +95,10 @@ jobs:
   deploy-ai:
     name: Deploy AI Services
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
