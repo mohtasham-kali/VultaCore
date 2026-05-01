@@ -6,7 +6,7 @@ export declare class BotsService {
     private readonly httpService;
     constructor(botsRepository: Repository<Bot>, httpService: HttpService);
     findAll(type?: 'general' | 'cyber'): Promise<Bot[]>;
-    executeBot(id: string, prompt: string, context?: string): Promise<any>;
+    executeBot(id: string, prompt: string, userId: string, context?: string): Promise<any>;
     updateStatus(id: string, status: 'idle' | 'working' | 'completed'): Promise<Bot | null>;
     create(botData: Partial<Bot>): Promise<Bot>;
     seed(): Promise<void>;

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { X, Send, Tag, Loader2, Sparkles } from "lucide-react";
 import { createPost } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 
 interface CreatePostModalProps {
@@ -13,6 +14,7 @@ interface CreatePostModalProps {
 }
 
 export function CreatePostModal({ isOpen, onClose, onSuccess, type }: CreatePostModalProps) {
+  const { user } = useAuth();
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [tags, setTags] = useState("");
@@ -23,14 +25,16 @@ export function CreatePostModal({ isOpen, onClose, onSuccess, type }: CreatePost
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user?.id) return;
     setLoading(true);
     try {
-      const tagArray = tags.split(",").map(t => t.trim()).filter(t => t !== "");
+      const tagArray = tags.split(",").map((t: string) => t.trim()).filter((t: string) => t !== "");
       await createPost({ 
         title, 
         content, 
         type, 
         tags: tagArray,
+        userId: user.id,
         severity: type === 'cyber' ? severity : undefined
       });
       onSuccess();

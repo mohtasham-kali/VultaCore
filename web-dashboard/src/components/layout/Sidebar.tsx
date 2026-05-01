@@ -15,6 +15,8 @@ import {
   X
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/context/AuthContext";
+
 
 const menuItems = [
   {
@@ -55,6 +57,9 @@ interface SidebarProps {
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
 
+  const { user, signOut } = useAuth();
+
+
   return (
     <>
       {/* Mobile Overlay */}
@@ -72,9 +77,14 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       )}>
         {/* Logo */}
         <div className="p-6 flex items-center justify-between">
-          <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-blue-400">
-            SaaS 2.0
-          </h1>
+          <div className="flex items-center gap-3 px-2">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center font-bold text-white shadow-lg shadow-purple-500/20">
+              V
+            </div>
+            <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-blue-400">
+              VultaCore
+            </span>
+          </div>
           <button 
             onClick={onClose}
             className="lg:hidden p-2 text-slate-500 hover:text-white"
@@ -117,9 +127,30 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           ))}
         </div>
 
+        {/* User Info */}
+        <div className="px-4 pb-4">
+          <div className="bg-white/5 rounded-2xl p-4 border border-white/5 flex items-center gap-3">
+             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center font-bold text-white shadow-lg overflow-hidden shrink-0">
+               {user?.user_metadata?.avatar_url ? (
+                 <img src={user.user_metadata.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+               ) : (
+                 <span>{user?.email?.[0].toUpperCase() || 'U'}</span>
+               )}
+             </div>
+             <div className="min-w-0">
+               <p className="text-xs font-bold text-white truncate">{user?.user_metadata?.full_name || 'Authorized User'}</p>
+               <p className="text-[10px] text-slate-500 truncate">{user?.email}</p>
+             </div>
+          </div>
+        </div>
+
         {/* Logout */}
         <div className="p-4 border-t border-white/10">
-          <button className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-red-400 hover:bg-red-500/10 rounded-xl w-full transition-all group">
+
+          <button 
+            onClick={() => signOut()}
+            className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-red-400 hover:bg-red-500/10 rounded-xl w-full transition-all group"
+          >
             <LogOut className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
             Logout
           </button>
@@ -128,3 +159,4 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     </>
   );
 }
+

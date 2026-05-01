@@ -14,10 +14,12 @@ export class BotsController {
   execute(
     @Param('id') id: string, 
     @Body('prompt') prompt: string,
+    @Body('userId') userId: string,
     @Body('context') context?: string
   ) {
-    return this.botsService.executeBot(id, prompt, context);
+    return this.botsService.executeBot(id, prompt, userId, context);
   }
+
 
   @Post('seed')
   seed() {

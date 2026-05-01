@@ -32,16 +32,17 @@ let BotsService = class BotsService {
         }
         return this.botsRepository.find();
     }
-    async executeBot(id, prompt, context) {
+    async executeBot(id, prompt, userId, context) {
         const bot = await this.botsRepository.findOneBy({ id });
         if (!bot)
             return { error: 'Bot not found' };
         bot.status = 'working';
         await this.botsRepository.save(bot);
         try {
+            console.log(`Executing bot ${bot.name} for user ${userId}...`);
             const response = await (0, rxjs_1.firstValueFrom)(this.httpService.post('http://localhost:8000/execute', {
                 prompt,
-                user_id: 'mock-uuid',
+                user_id: userId,
                 bot_type: bot.type,
                 bot_name: bot.name,
                 context: context || null
@@ -53,7 +54,11 @@ let BotsService = class BotsService {
         catch (error) {
             bot.status = 'idle';
             await this.botsRepository.save(bot);
-            return { error: 'AI Service communication failed' };
+            console.error(`AI Service Error (${bot.name}):`, error.message);
+            if (error.response) {
+                console.error('Response data:', error.response.data);
+            }
+            return { error: 'AI Service communication failed: ' + (error.message || 'Unknown error') };
         }
     }
     async updateStatus(id, status) {

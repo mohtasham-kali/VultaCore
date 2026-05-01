@@ -23,9 +23,18 @@ let UsersService = class UsersService {
         this.usersRepository = usersRepository;
     }
     async findOne(id) {
-        const user = await this.usersRepository.findOneBy({ id });
+        return this.usersRepository.findOneBy({ id });
+    }
+    async findOrCreateUser(id, email) {
+        let user = await this.usersRepository.findOneBy({ id });
         if (!user) {
-            return { id, rank: 'Free', username: 'Guest' };
+            user = this.usersRepository.create({
+                id,
+                username: email ? email.split('@')[0] : `user_${id.slice(0, 4)}`,
+                email: email || `${id}@vultacore.app`,
+                password: 'sso_user_no_password',
+            });
+            return this.usersRepository.save(user);
         }
         return user;
     }

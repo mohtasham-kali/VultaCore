@@ -3,19 +3,22 @@
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, LineChart, Line, CartesianGrid } from 'recharts';
 import { BarChart as LucideBarChart, Activity, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { useSettings } from '@/providers/SettingsProvider';
+import { useAuth } from '@/context/AuthContext';
 import { useEffect, useState } from 'react';
 import { fetchAnalytics } from '@/lib/api';
 import { cn } from "@/lib/utils";
 
 export default function AnalyticsPage() {
   const { chartType } = useSettings();
+  const { user } = useAuth();
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadStats() {
+      if (!user?.id) return;
       try {
-        const data = await fetchAnalytics('mock-uuid');
+        const data = await fetchAnalytics(user.id);
         setStats(data);
       } catch (e) {
         console.error("Failed to load analytics", e);
@@ -24,7 +27,7 @@ export default function AnalyticsPage() {
       }
     }
     loadStats();
-  }, []);
+  }, [user?.id]);
 
   const chartData = stats ? [
     { name: 'Engagement', value: stats.engagement_score, color: '#10b981' },

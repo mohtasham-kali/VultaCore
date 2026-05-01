@@ -23,8 +23,8 @@ let BotsController = class BotsController {
     findAll(type) {
         return this.botsService.findAll(type);
     }
-    execute(id, prompt, context) {
-        return this.botsService.executeBot(id, prompt, context);
+    execute(id, prompt, userId, context) {
+        return this.botsService.executeBot(id, prompt, userId, context);
     }
     seed() {
         return this.botsService.seed();
@@ -42,9 +42,10 @@ __decorate([
     (0, common_1.Post)(':id/execute'),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, common_1.Body)('prompt')),
-    __param(2, (0, common_1.Body)('context')),
+    __param(2, (0, common_1.Body)('userId')),
+    __param(3, (0, common_1.Body)('context')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, String]),
+    __metadata("design:paramtypes", [String, String, String, String]),
     __metadata("design:returntype", void 0)
 ], BotsController.prototype, "execute", null);
 __decorate([

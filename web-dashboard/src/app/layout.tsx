@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { SettingsProvider } from "@/providers/SettingsProvider";
+import { AuthProvider } from "@/context/AuthContext";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,8 +15,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SaaS 2.0 Platform",
+  title: "VultaCore",
   description: "Advanced Developer & Cybersecurity Dashboard",
+  icons: {
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export default function RootLayout({
@@ -25,13 +31,55 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                // Total suppression of MetaMask extension noise
+                const suppress = (msg) => msg && typeof msg === 'string' && (msg.includes('MetaMask') || msg.includes('nkbihfbeogaeaoehlefnkodbefgpgknn'));
+                
+                const _error = console.error;
+                console.error = function(...args) {
+                  if (suppress(args[0]) || suppress(args[1])) return;
+                  _error.apply(console, args);
+                };
+
+                const _warn = console.warn;
+                console.warn = function(...args) {
+                  if (suppress(args[0]) || suppress(args[1])) return;
+                  _warn.apply(console, args);
+                };
+
+                window.addEventListener('unhandledrejection', (event) => {
+                  const reason = event.reason;
+                  if (reason && (suppress(reason.message) || suppress(reason.stack) || suppress(reason))) {
+                    event.stopImmediatePropagation();
+                    event.preventDefault();
+                  }
+                }, true);
+
+                window.addEventListener('error', (event) => {
+                  if (suppress(event.message) || suppress(event.filename)) {
+                    event.stopImmediatePropagation();
+                    event.preventDefault();
+                  }
+                }, true);
+              })();
+            `,
+          }}
+        />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <SettingsProvider>
-          {children}
-        </SettingsProvider>
+        <AuthProvider>
+          <SettingsProvider>
+            {children}
+          </SettingsProvider>
+        </AuthProvider>
       </body>
     </html>
   );
 }
+

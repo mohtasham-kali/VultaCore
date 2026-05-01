@@ -13,12 +13,16 @@ const forum_service_1 = require("./forum.service");
 const forum_controller_1 = require("./forum.controller");
 const post_entity_1 = require("./entities/post.entity");
 const comment_entity_1 = require("./entities/comment.entity");
+const users_module_1 = require("../users/users.module");
 let ForumModule = class ForumModule {
 };
 exports.ForumModule = ForumModule;
 exports.ForumModule = ForumModule = __decorate([
     (0, common_1.Module)({
-        imports: [typeorm_1.TypeOrmModule.forFeature([post_entity_1.Post, comment_entity_1.Comment])],
+        imports: [
+            typeorm_1.TypeOrmModule.forFeature([post_entity_1.Post, comment_entity_1.Comment]),
+            users_module_1.UsersModule
+        ],
         providers: [forum_service_1.ForumService],
         controllers: [forum_controller_1.ForumController],
         exports: [forum_service_1.ForumService],

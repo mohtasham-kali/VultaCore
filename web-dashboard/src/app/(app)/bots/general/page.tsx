@@ -3,8 +3,10 @@
 import { Bot, Sparkles, MessageSquare, Loader2, Play, Terminal, Upload, File, X as CloseIcon } from "lucide-react";
 import { useEffect, useState, useRef } from "react";
 import { fetchBots, executeBot } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 
 export default function GeneralBotsPage() {
+  const { user } = useAuth();
   const [bots, setBots] = useState<any[]>([]);
   const [selectedBot, setSelectedBot] = useState<any>(null);
   const [userPrompt, setUserPrompt] = useState("");
@@ -28,7 +30,7 @@ export default function GeneralBotsPage() {
   }, []);
 
   const handleLaunch = async () => {
-    if (!selectedBot || !userPrompt.trim()) return;
+    if (!selectedBot || !userPrompt.trim() || !user?.id) return;
     setExecuting(selectedBot.id);
     setResult(null);
     try {
@@ -40,7 +42,7 @@ export default function GeneralBotsPage() {
           reader.readAsText(selectedFile);
         });
       }
-      const data = await executeBot(selectedBot.id, userPrompt, fileContext);
+      const data = await executeBot(selectedBot.id, userPrompt, user.id, fileContext);
       setResult({ ...data, forBot: selectedBot.name });
     } catch (e) {
       console.error(e);

@@ -15,16 +15,18 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ForumController = void 0;
 const common_1 = require("@nestjs/common");
 const forum_service_1 = require("./forum.service");
-const create_post_dto_1 = require("./dto/create-post.dto");
-const create_comment_dto_1 = require("./dto/create-comment.dto");
+const users_service_1 = require("../users/users.service");
 let ForumController = class ForumController {
     forumService;
-    constructor(forumService) {
+    usersService;
+    constructor(forumService, usersService) {
         this.forumService = forumService;
+        this.usersService = usersService;
     }
-    create(createPostDto) {
-        const mockUser = { id: 'mock-uuid' };
-        return this.forumService.createPost(createPostDto, mockUser);
+    async create(createPostDto) {
+        const { userId, email, ...dto } = createPostDto;
+        const author = await this.usersService.findOrCreateUser(userId, email);
+        return this.forumService.createPost(dto, author);
     }
     findAll(type) {
         return this.forumService.findAllPosts(type);
@@ -35,9 +37,10 @@ let ForumController = class ForumController {
     like(id) {
         return this.forumService.likePost(id);
     }
-    createComment(id, createCommentDto) {
-        const mockUser = { id: 'mock-uuid' };
-        return this.forumService.createComment(id, createCommentDto, mockUser);
+    async createComment(id, createCommentDto) {
+        const { userId, email, ...dto } = createCommentDto;
+        const author = await this.usersService.findOrCreateUser(userId, email);
+        return this.forumService.createComment(id, dto, author);
     }
 };
 exports.ForumController = ForumController;
@@ -45,8 +48,8 @@ __decorate([
     (0, common_1.Post)(),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [create_post_dto_1.CreatePostDto]),
-    __metadata("design:returntype", void 0)
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
 ], ForumController.prototype, "create", null);
 __decorate([
     (0, common_1.Get)(),
@@ -74,11 +77,12 @@ __decorate([
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, create_comment_dto_1.CreateCommentDto]),
-    __metadata("design:returntype", void 0)
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
 ], ForumController.prototype, "createComment", null);
 exports.ForumController = ForumController = __decorate([
     (0, common_1.Controller)('forum'),
-    __metadata("design:paramtypes", [forum_service_1.ForumService])
+    __metadata("design:paramtypes", [forum_service_1.ForumService,
+        users_service_1.UsersService])
 ], ForumController);
 //# sourceMappingURL=forum.controller.js.map

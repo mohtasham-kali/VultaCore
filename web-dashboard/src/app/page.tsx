@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { UserDropdown } from '@/components/auth/UserDropdown';
+import { NotificationCenter } from '@/components/notifications/NotificationCenter';
 
 export default function Home() {
   return (
@@ -13,13 +15,12 @@ export default function Home() {
         {/* Header */}
         <header className="flex justify-between items-center mb-16">
           <div className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-blue-400">
-            SaaS 2.0 Platform
+            VultaCore
           </div>
-          <div className="flex gap-4 items-center">
-            <button className="px-4 py-2 rounded-full border border-white/10 hover:bg-white/5 transition-colors text-sm">
-              Notifications
-            </button>
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 border-2 border-white/20" />
+          <div className="flex gap-6 items-center">
+            <NotificationCenter />
+            <div className="w-px h-6 bg-white/10" />
+            <UserDropdown />
           </div>
         </header>
 

@@ -27,14 +27,15 @@ export async function likePost(postId: string) {
   return res.json();
 }
 
-export async function executeBot(id: string, prompt: string, context?: string) {
+export async function executeBot(id: string, prompt: string, userId: string, context?: string) {
   const res = await fetch(`${API_BASE_URL}/bots/${id}/execute`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, context }),
+    body: JSON.stringify({ prompt, userId, context }),
   });
   return res.json();
 }
+
 
 export async function fetchAnalytics(userId: string) {
   const res = await fetch(`${API_BASE_URL}/analytics/${userId}`);
@@ -51,6 +52,7 @@ export async function createPost(postData: {
   content: string, 
   type: 'dev' | 'cyber', 
   tags: string[],
+  userId: string,
   severity?: 'low' | 'medium' | 'high' | 'critical'
 }) {
   const res = await fetch(`${API_BASE_URL}/forum`, {

@@ -21,7 +21,7 @@ export default function AdminLeadsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/leads")
+    fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/leads`)
       .then(res => res.json())
       .then(data => {
         setLeads(data);

@@ -2,6 +2,7 @@
 
 import { Sidebar } from "@/components/layout/Sidebar";
 import { MobileHeader } from "@/components/layout/MobileHeader";
+import { Header } from "@/components/layout/Header";
 import { useState } from "react";
 
 export default function AppLayout({
@@ -24,6 +25,7 @@ export default function AppLayout({
       />
       
       <main className="lg:pl-64 min-h-screen transition-all duration-300">
+        <Header />
         <div className="container mx-auto p-4 lg:p-8 max-w-7xl">
           {children}
         </div>

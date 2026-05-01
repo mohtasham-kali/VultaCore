@@ -11,13 +11,23 @@ export class UsersService {
   ) {}
 
   async findOne(id: string): Promise<User | null> {
-    const user = await this.usersRepository.findOneBy({ id });
+    return this.usersRepository.findOneBy({ id });
+  }
+
+  async findOrCreateUser(id: string, email?: string): Promise<User> {
+    let user = await this.usersRepository.findOneBy({ id });
     if (!user) {
-      // Return a skeleton user for development stability
-      return { id, rank: 'Free', username: 'Guest' } as User;
+      user = this.usersRepository.create({
+        id,
+        username: email ? email.split('@')[0] : `user_${id.slice(0, 4)}`,
+        email: email || `${id}@vultacore.app`,
+        password: 'sso_user_no_password',
+      });
+      return this.usersRepository.save(user);
     }
     return user;
   }
+
 
   findAll(): Promise<User[]> {
     return this.usersRepository.find();
