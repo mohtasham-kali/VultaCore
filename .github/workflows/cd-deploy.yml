@@ -8,6 +8,7 @@ jobs:
   deploy-web:
     name: Deploy Web Dashboard
     runs-on: ubuntu-latest
+
     defaults:
       run:
         working-directory: web-dashboard
@@ -66,7 +67,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set lower case owner name
+        run: |
+          echo "REPO_LOWER=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
+
       - name: Push image
         run: |
-          docker tag vultacore-api:${{ github.sha }} ghcr.io/${{ github.repository }}/vultacore-api:latest
-          docker push ghcr.io/${{ github.repository }}/vultacore-api:latest
+          docker tag vultacore-api:${{ github.sha }} ghcr.io/${{ env.REPO_LOWER }}/vultacore-api:latest
+          docker push ghcr.io/${{ env.REPO_LOWER }}/vultacore-api:latest
+
