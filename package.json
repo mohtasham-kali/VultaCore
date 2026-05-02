@@ -10,22 +10,17 @@
     "mobile-app"
   ],
   "scripts": {
-    "build": "npm install && npm run build -w web-dashboard && npm run build -w backend-api && cp -r backend-api/dist ./",
-    "start": "node dist/main",
+    "build": "npm install && npm run build -w web-dashboard && npm run build -w backend-api",
+    "start": "node server.js",
     "deploy:hostinger": "npm run build && npm run start",
-    "build:all:platforms": "./build-all.sh && npm run build",
     "dashboard:dev": "npm run dev -w web-dashboard",
     "api:dev": "npm run start:dev -w backend-api",
-    "desktop:dev": "npm run dev -w desktop-app",
     "desktop:build": "npm run build -w desktop-app",
     "mobile:sync": "npm run sync -w mobile-app",
-    "mobile:android": "npm run open:android -w mobile-app",
-    "mobile:ios": "npm run open:ios -w mobile-app",
     "ai:dev": "cd ai-services && source venv/bin/activate && uvicorn main:app --reload",
-    "ai:install": "cd ai-services && python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt",
-    "analytics:run": "cd analytics-engine && cargo run",
-    "analytics:build": "cd analytics-engine && cargo build --release",
-    "infra:up": "docker-compose up -d",
-    "infra:down": "docker-compose down"
+    "infra:up": "docker-compose up -d"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
   }
 }
