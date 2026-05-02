@@ -8,6 +8,8 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppModule = void 0;
 const common_1 = require("@nestjs/common");
+const path_1 = require("path");
+const serve_static_1 = require("@nestjs/serve-static");
 const config_1 = require("@nestjs/config");
 const typeorm_1 = require("@nestjs/typeorm");
 const app_controller_1 = require("./app.controller");
@@ -41,6 +43,9 @@ exports.AppModule = AppModule = __decorate([
             bots_module_1.BotsModule,
             analytics_module_1.AnalyticsModule,
             notifications_module_1.NotificationsModule,
+            serve_static_1.ServeStaticModule.forRoot({
+                rootPath: (0, path_1.join)(process.cwd(), 'web-dashboard', 'out'),
+            }),
         ],
         controllers: [app_controller_1.AppController],
         providers: [app_service_1.AppService],
