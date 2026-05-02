@@ -26,6 +26,7 @@
     "@nestjs/config": "^4.0.3",
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",
+    "@nestjs/serve-static": "^5.0.5",
     "@nestjs/typeorm": "^11.0.0",
     "@vercel/analytics": "^2.0.1",
     "axios": "^1.13.4",

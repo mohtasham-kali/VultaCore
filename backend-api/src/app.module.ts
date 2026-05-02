@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { join } from 'path';
+import { ServeStaticModule } from '@nestjs/serve-static';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
@@ -29,6 +31,10 @@ import { NotificationsModule } from './notifications/notifications.module';
     BotsModule,
     AnalyticsModule,
     NotificationsModule,
+    ServeStaticModule.forRoot({
+      rootPath: join(__dirname, '..', '..', 'web-dashboard', 'out'),
+      exclude: ['/api/(.*)'],
+    }),
   ],
   controllers: [AppController],
   providers: [AppService],
