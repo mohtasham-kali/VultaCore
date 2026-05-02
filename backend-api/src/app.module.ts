@@ -1,7 +1,4 @@
 import { Module } from '@nestjs/common';
-import { join } from 'path';
-import { existsSync } from 'fs';
-import { ServeStaticModule } from '@nestjs/serve-static';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
@@ -32,11 +29,6 @@ import { NotificationsModule } from './notifications/notifications.module';
     BotsModule,
     AnalyticsModule,
     NotificationsModule,
-    ServeStaticModule.forRoot({
-      rootPath: existsSync(join(process.cwd(), 'web-dashboard', 'out'))
-        ? join(process.cwd(), 'web-dashboard', 'out')
-        : join(process.cwd(), '..', 'web-dashboard', 'out'),
-    }),
   ],
   controllers: [AppController],
   providers: [AppService],
