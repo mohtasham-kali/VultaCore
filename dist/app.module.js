@@ -9,7 +9,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppModule = void 0;
 const common_1 = require("@nestjs/common");
 const path_1 = require("path");
-const fs_1 = require("fs");
 const serve_static_1 = require("@nestjs/serve-static");
 const config_1 = require("@nestjs/config");
 const typeorm_1 = require("@nestjs/typeorm");
@@ -45,9 +44,7 @@ exports.AppModule = AppModule = __decorate([
             analytics_module_1.AnalyticsModule,
             notifications_module_1.NotificationsModule,
             serve_static_1.ServeStaticModule.forRoot({
-                rootPath: (0, fs_1.existsSync)((0, path_1.join)(process.cwd(), 'web-dashboard', 'out'))
-                    ? (0, path_1.join)(process.cwd(), 'web-dashboard', 'out')
-                    : (0, path_1.join)(process.cwd(), '..', 'web-dashboard', 'out'),
+                rootPath: (0, path_1.join)(process.cwd(), 'web-dashboard', 'out'),
             }),
         ],
         controllers: [app_controller_1.AppController],
