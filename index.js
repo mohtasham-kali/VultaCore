@@ -9,7 +9,14 @@ const server = http.createServer((req, res) => {
 });
 
 const port = process.env.PORT || 3000;
+
+// Log all env variables to help us find the right port
+const envs = Object.keys(process.env)
+  .map(key => `${key}=${key.includes('PASS') || key.includes('KEY') ? '***' : process.env[key]}`)
+  .join('\n');
+fs.writeFileSync('env_debug.txt', `[DEBUG ENV] ${new Date().toISOString()}\n${envs}\n`);
+
 server.listen(port, '0.0.0.0', () => {
   console.log(`🚀 Proof of Life running on port ${port}`);
-  fs.writeFileSync('alive_check.txt', 'Successfully started at ' + new Date().toISOString());
+  fs.writeFileSync('alive_check.txt', 'Successfully started at ' + new Date().toISOString() + ' on port ' + port);
 });
