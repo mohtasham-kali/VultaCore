@@ -7,12 +7,15 @@ async function bootstrap() {
     const app = await NestFactory.create(AppModule);
     app.enableCors();
     
-    const port = process.env.PORT || 3001;
+    const port = process.env.PORT || 3000;
     await app.listen(port, '0.0.0.0');
-    console.log(`VultaCore API is running on: http://0.0.0.0:${port}`);
-  } catch (error) {
-    fs.writeFileSync('error_log.txt', `[STUPID ERROR] ${new Date().toISOString()}\n${error.stack}\n`);
+    console.log(`VultaCore API is running on PORT: ${port}`);
+  } catch (error: any) {
+    fs.writeFileSync(
+      'error_log.txt',
+      `[STUPID ERROR] ${new Date().toISOString()}\n${error?.stack || error}\n`,
+    );
     process.exit(1);
   }
 }
-bootstrap();
+void bootstrap();
