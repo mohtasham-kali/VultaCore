@@ -11,16 +11,7 @@
   ],
   "scripts": {
     "build": "npm install && npm run build -w web-dashboard && npm run build -w backend-api && cp -r backend-api/dist ./",
-    "start": "node server.js",
-    "deploy:hostinger": "npm run build && npm run start",
-    "dashboard:dev": "npm run dev -w web-dashboard",
-    "api:dev": "npm run start:dev -w backend-api",
-    "desktop:build": "npm run build -w desktop-app",
-    "mobile:sync": "npm run sync -w mobile-app",
-    "ai:dev": "cd ai-services && source venv/bin/activate && uvicorn main:app --reload",
-    "infra:up": "docker-compose up -d"
-  },
-  "devDependencies": {
-    "concurrently": "^9.1.2"
+    "start": "node dist/main.js",
+    "deploy:hostinger": "npm run build && npm run start"
   }
 }
