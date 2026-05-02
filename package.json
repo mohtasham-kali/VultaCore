@@ -4,7 +4,7 @@
   "description": "Unified VultaCore Platform Monorepo",
   "private": true,
   "scripts": {
-    "build": "npm install --prefix web-dashboard && npm run build --prefix web-dashboard && npm install --prefix backend-api && npm run build --prefix backend-api",
+    "build": "npm install --prefix web-dashboard && npm run build --prefix web-dashboard && npm install --prefix backend-api && npm run build --prefix backend-api && cp -r backend-api/dist ./",
     "install:all": "npm install --prefix web-dashboard && npm install --prefix backend-api && npm install --prefix desktop-app && npm install --prefix mobile-app",
     "start": "npm run start:prod --prefix backend-api",
     "deploy:hostinger": "npm run install:all && npm run build && npm run start",
