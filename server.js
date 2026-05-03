@@ -5,9 +5,21 @@ console.log("🚀 Starting VultaCore Platform via server.js wrapper...");
 
 // Import the compiled NestJS backend directly.
 try {
-  require('./backend-api/dist/main.js');
-} catch (error) {
-  console.error("❌ Failed to load main.js:", error);
+  console.log("📂 Current Directory:", process.cwd());
+  console.log("🔍 Checking for backend-api/dist/main.js...");
   const fs = require('fs');
-  fs.writeFileSync('error_log.txt', `[STUPID ERROR] ${new Date().toISOString()}\n${error.stack}\n`);
+  const path = require('path');
+  const backendPath = path.join(__dirname, 'backend-api', 'dist', 'main.js');
+  
+  if (fs.existsSync(backendPath)) {
+    console.log("✅ File found! Attempting to boot...");
+    require(backendPath);
+  } else {
+    throw new Error(`CRITICAL: backend-api/dist/main.js not found at ${backendPath}`);
+  }
+} catch (error) {
+  const fs = require('fs');
+  const logMessage = `[${new Date().toISOString()}] CRASH ERROR: ${error.message}\nSTACK: ${error.stack}\n\n`;
+  fs.appendFileSync('error_log.txt', logMessage);
+  console.error("❌ " + logMessage);
 }
