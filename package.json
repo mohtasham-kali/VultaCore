@@ -10,7 +10,7 @@
     "mobile-app"
   ],
   "scripts": {
-    "build": "npm install && npm run build -w backend-api && npm run build -w web-dashboard",
+    "build": "npm install && npm run build -w backend-api && npm run build -w web-dashboard && mkdir -p dist",
     "start": "node server.js"
   },
   "dependencies": {
