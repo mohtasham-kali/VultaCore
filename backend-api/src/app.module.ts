@@ -20,7 +20,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     }),
     TypeOrmModule.forRoot({
       type: 'sqlite',
-      database: 'saas.sqlite',
+      database: join(process.cwd(), 'saas.sqlite'),
       autoLoadEntities: true,
       synchronize: true, // Only for development
     }),
