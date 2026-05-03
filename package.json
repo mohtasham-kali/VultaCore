@@ -11,11 +11,15 @@
     "mobile-app"
   ],
   "scripts": {
-    "build": "npm install && npm run build -w backend-api && npm run build -w web-dashboard && rm -rf out && cp -r web-dashboard/out out && mkdir -p dist",
+    "build": "npm install --include=dev && npm run build -w backend-api && npm run build -w web-dashboard",
     "start": "node server.js"
   },
   "dependencies": {
     "@nestjs/core": "^11.0.1",
-    "next": "^15.0.0"
+    "@nestjs/common": "^11.0.1",
+    "@nestjs/platform-express": "^11.0.1",
+    "next": "^15.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   }
 }
