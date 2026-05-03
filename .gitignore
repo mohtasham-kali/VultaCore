@@ -1,6 +1,7 @@
 node_modules/
+# Ignore root dist if needed, but DO NOT ignore backend-api/dist.
+/dist/
 .next/
-dist/
 *.sqlite
 .env
 .env.local
