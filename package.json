@@ -10,9 +10,8 @@
     "mobile-app"
   ],
   "scripts": {
-    "build": "npm install && npm run build -w backend-api && npm run build -w web-dashboard && mkdir -p dist && echo \"require('../server.js');\" > dist/main.js",
-    "start": "node server.js",
-    "deploy:hostinger": "npm run build && npm run start"
+    "build": "npm install && npm run build -w backend-api && npm run build -w web-dashboard",
+    "start": "node server.js"
   },
   "dependencies": {
     "@nestjs/core": "^11.0.1",
