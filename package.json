@@ -10,7 +10,7 @@
     "mobile-app"
   ],
   "scripts": {
-    "build": "npm install --include=dev && npm run build -w web-dashboard && rm -rf dist && mkdir dist && cp -r backend-api dist/ && cp -r web-dashboard dist/ && cp server.js dist/ && cp -a node_modules dist/",
+    "build": "npm install --include=dev && npm run build -w web-dashboard",
     "start": "node server.js",
     "deploy:hostinger": "npm run build && npm run start"
   }
