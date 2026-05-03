@@ -35,7 +35,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     AnalyticsModule,
     NotificationsModule,
     ServeStaticModule.forRoot({
-      rootPath: join(process.cwd(), 'web-dashboard', 'out'),
+      rootPath: join(process.cwd(), 'out'),
     }),
   ],
   controllers: [AppController],
