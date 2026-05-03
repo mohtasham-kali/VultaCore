@@ -7,9 +7,9 @@ async function bootstrap() {
     const app = await NestFactory.create(AppModule);
     app.enableCors();
     app.setGlobalPrefix('api');
-    const port = process.env.PORT || 3333;
+    const port = process.env.PORT || 3001;
     await app.listen(port, '0.0.0.0');
-    console.log(`VultaCore API is running on PORT: ${port}`);
+    console.log(`Application is running on: http://localhost:${port}`);
   } catch (error: any) {
     fs.writeFileSync(
       'error_log.txt',
