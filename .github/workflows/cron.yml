@@ -15,16 +15,26 @@ jobs:
     steps:
       - name: Ping Backend API
         run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" ${{ secrets.NEXT_PUBLIC_API_URL }}/)
-          echo "API responded with HTTP $STATUS"
-          if [ "$STATUS" != "200" ]; then
-            echo "::warning::API returned $STATUS — may be starting up"
+          URL="${{ secrets.NEXT_PUBLIC_API_URL }}"
+          if [ -z "$URL" ]; then
+            echo "::warning::NEXT_PUBLIC_API_URL secret is not set, skipping ping..."
+          else
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL/" || echo "curl_failed")
+            echo "API responded with HTTP $STATUS"
+            if [ "$STATUS" != "200" ]; then
+              echo "::warning::API returned $STATUS — may be starting up"
+            fi
           fi
 
       - name: Ping AI Service
         run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" ${{ secrets.AI_SERVICE_URL }}/health || echo "000")
-          echo "AI Service responded with HTTP $STATUS"
+          URL="${{ secrets.AI_SERVICE_URL }}"
+          if [ -z "$URL" ]; then
+            echo "::warning::AI_SERVICE_URL secret is not set, skipping ping..."
+          else
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL/health" || echo "000")
+            echo "AI Service responded with HTTP $STATUS"
+          fi
 
   daily-maintenance:
     name: Daily Maintenance Tasks
