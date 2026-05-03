@@ -1,35 +1,34 @@
-// This file acts as the primary entry point for Hostinger's Passenger Node.js server.
-// Hostinger requires a top-level file (like server.js) to correctly boot the application environment.
+const fs = require('fs');
+const path = require('path');
 
-console.log("🚀 Starting VultaCore Platform via server.js wrapper...");
+console.log("🚀 VultaCore Booting...");
 
-// Import the compiled NestJS backend directly.
+// 1. Determine absolute paths
+const rootDir = process.cwd();
+const backendAppPath = path.join(rootDir, 'backend-api', 'dist', 'main.js');
+
+// 2. Emergency Logging
+function logError(err) {
+  const msg = `[${new Date().toISOString()}] ${err.stack || err}\n`;
+  fs.appendFileSync(path.join(rootDir, 'error_log.txt'), msg);
+  console.error(msg);
+}
+
+// 3. Start the Application
 try {
-  const fs = require('fs');
-  const path = require('path');
-  
-  console.log("📂 Current Directory:", process.cwd());
-  console.log("📁 Root Files:", fs.readdirSync(process.cwd()).join(', '));
-  
-  const outPath = path.join(process.cwd(), 'out');
-  if (!fs.existsSync(outPath)) {
-    console.warn("⚠️ Warning: 'out' directory not found at root. Creating it...");
-    fs.mkdirSync(outPath, { recursive: true });
-    fs.writeFileSync(path.join(outPath, 'index.html'), '<html><body><h1>VultaCore is building... Please refresh in a minute.</h1></body></html>');
-  }
-
-  const backendPath = path.join(__dirname, 'backend-api', 'dist', 'main.js');
-  console.log("🔍 Checking for backend-api/dist/main.js...");
-  
-  if (fs.existsSync(backendPath)) {
-    console.log("✅ Backend found! Attempting to boot...");
-    require(backendPath);
+  if (fs.existsSync(backendAppPath)) {
+    console.log("✅ Loading Backend...");
+    require(backendAppPath);
   } else {
-    throw new Error(`CRITICAL: backend-api/dist/main.js not found at ${backendPath}`);
+    throw new Error(`File not found: ${backendAppPath}`);
   }
-} catch (error) {
-  const fs = require('fs');
-  const logMessage = `[${new Date().toISOString()}] CRASH ERROR: ${error.message}\nSTACK: ${error.stack}\n\n`;
-  fs.appendFileSync('error_log.txt', logMessage);
-  console.error("❌ " + logMessage);
+} catch (e) {
+  logError(e);
+  // Fail-over: Start a tiny HTTP server so we don't get a silent 500
+  const http = require('http');
+  const server = http.createServer((req, res) => {
+    res.writeHead(500, { 'Content-Type': 'text/plain' });
+    res.end(`VultaCore Error: ${e.message}\nCheck error_log.txt for details.`);
+  });
+  server.listen(process.env.PORT || 3001);
 }
