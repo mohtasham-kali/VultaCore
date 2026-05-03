@@ -11,7 +11,7 @@
   ],
   "scripts": {
     "build": "npm install && npm run build -w web-dashboard && npm run build -w backend-api && cp -r backend-api/dist ./",
-    "start": "node dist/main.js",
+    "start": "node server.js",
     "deploy:hostinger": "npm run build && npm run start"
   }
 }
