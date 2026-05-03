@@ -1,0 +1,23 @@
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Hostinger Node.js Bridge .htaccess
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+RewriteEngine On
+
+# 1. Handle common Node.js application routing
+# This tells Apache to pass all requests to the Passenger/Node.js engine
+PassengerEnabled on
+PassengerAppType node
+PassengerStartupFile server.js
+
+# 2. Security: Deny access to sensitive files
+<FilesMatch "^\.env|package-lock\.json|README\.md|Dockerfile">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# 3. Optimization
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresDefault "access plus 1 year"
+</IfModule>
