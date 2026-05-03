@@ -19,10 +19,13 @@ import { NotificationsModule } from './notifications/notifications.module';
       isGlobal: true,
     }),
     TypeOrmModule.forRoot({
-      type: 'sqlite',
-      database: join(process.cwd(), 'saas.sqlite'),
+      type: 'postgres',
+      url: process.env.DATABASE_URL, // You must add DATABASE_URL to Hostinger
       autoLoadEntities: true,
       synchronize: true, // Only for development
+      ssl: {
+        rejectUnauthorized: false,
+      },
     }),
     UsersModule,
     PlansModule,
