@@ -1,9 +1,9 @@
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Hostinger Debug Mode Bridge
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# PassengerEnabled on
-# PassengerAppType node
-# PassengerStartupFile server.js
+PassengerEnabled on
+PassengerAppType node
+PassengerStartupFile server.js
 
 <IfModule mod_rewrite.c>
   RewriteEngine On
@@ -17,6 +17,3 @@
   RewriteCond %{REQUEST_FILENAME} !-d
   RewriteRule . /server.js [L]
 </IfModule>
-
-# Custom error document to bypass Hostinger's generic 500
-ErrorDocument 500 /error_info.html
