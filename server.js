@@ -7,6 +7,7 @@ console.log("🚀 VultaCore Booting...");
 const rootDir = process.cwd();
 const possiblePaths = [
   path.join(rootDir, 'backend-api', 'dist', 'main.js'),
+  path.join(rootDir, 'dist', 'main.js'), // Root dist as backup
   path.join(rootDir, 'repository', 'backend-api', 'dist', 'main.js'),
   path.join(rootDir, '..', 'backend-api', 'dist', 'main.js')
 ];
@@ -25,9 +26,11 @@ async function start() {
   try {
     if (backendAppPath) {
       console.log(`✅ Loading Backend from: ${backendAppPath}`);
-      await import('file://' + backendAppPath);
+      // Use require for CommonJS NestJS build
+      require(backendAppPath);
     } else {
-      throw new Error(`CRITICAL: backend-api/dist/main.js not found in any common locations. Searched: ${possiblePaths.join(', ')}`);
+      const searchStatus = possiblePaths.map(p => `${p} (${fs.existsSync(p) ? 'FOUND' : 'MISSING'})`).join('\n');
+      throw new Error(`CRITICAL: backend distribution not found. Searched:\n${searchStatus}`);
     }
   } catch (e) {
     logError(e);

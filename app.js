@@ -5,7 +5,11 @@ console.log("🚀 VultaCore Booting...");
 
 // 1. Determine absolute paths
 const rootDir = process.cwd();
-const backendAppPath = path.join(rootDir, 'backend-api', 'dist', 'main.js');
+const possiblePaths = [
+  path.join(rootDir, 'backend-api', 'dist', 'main.js'),
+  path.join(rootDir, 'dist', 'main.js')
+];
+const backendAppPath = possiblePaths.find(p => fs.existsSync(p));
 
 // 2. Emergency Logging
 function logError(err) {
@@ -16,11 +20,11 @@ function logError(err) {
 
 // 3. Start the Application
 try {
-  if (fs.existsSync(backendAppPath)) {
-    console.log("✅ Loading Backend...");
+  if (backendAppPath) {
+    console.log(`✅ Loading Backend from: ${backendAppPath}`);
     require(backendAppPath);
   } else {
-    throw new Error(`File not found: ${backendAppPath}`);
+    throw new Error(`CRITICAL: backend distribution not found. Searched: ${possiblePaths.join(', ')}`);
   }
 } catch (e) {
   logError(e);
