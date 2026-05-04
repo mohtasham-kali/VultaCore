@@ -48,8 +48,18 @@ process.on('unhandledRejection', (reason) => {
 });
 
 async function start() {
-  // ISO TEST: Skip loading backend completely to see if Litespeed can reach Node at all!
-  startFallbackServer("Running in Isolation Mode to verify Passenger routing.");
+  try {
+    if (backendAppPath) {
+      console.log(`✅ Loading Backend from: ${backendAppPath}`);
+      require(backendAppPath);
+    } else {
+      const searchStatus = possiblePaths.map(p => `${p} (${fs.existsSync(p) ? 'FOUND' : 'MISSING'})`).join('\n');
+      throw new Error(`CRITICAL: backend distribution not found. Searched:\n${searchStatus}`);
+    }
+  } catch (e) {
+    logError(e);
+    startFallbackServer(e);
+  }
 }
 
 start();
