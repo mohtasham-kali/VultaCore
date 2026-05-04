@@ -15,20 +15,24 @@ function logError(err) {
 }
 
 // 3. Start the Application
-try {
-  if (fs.existsSync(backendAppPath)) {
-    console.log("✅ Loading Backend...");
-    require(backendAppPath);
-  } else {
-    throw new Error(`File not found: ${backendAppPath}`);
+async function start() {
+  try {
+    if (fs.existsSync(backendAppPath)) {
+      console.log("✅ Loading Backend via Dynamic Import...");
+      await import('file://' + backendAppPath);
+    } else {
+      throw new Error(`File not found: ${backendAppPath}`);
+    }
+  } catch (e) {
+    logError(e);
+    // Fail-over: Start a tiny HTTP server so we don't get a silent 500
+    const http = require('http');
+    const server = http.createServer((req, res) => {
+      res.writeHead(500, { 'Content-Type': 'text/html' });
+      res.end(`<h1>VultaCore Boot Error</h1><p>${e.message}</p><pre>${e.stack}</pre>`);
+    });
+    server.listen(process.env.PORT || 3001);
   }
-} catch (e) {
-  logError(e);
-  // Fail-over: Start a tiny HTTP server so we don't get a silent 500
-  const http = require('http');
-  const server = http.createServer((req, res) => {
-    res.writeHead(500, { 'Content-Type': 'text/plain' });
-    res.end(`VultaCore Error: ${e.message}\nCheck error_log.txt for details.`);
-  });
-  server.listen(process.env.PORT || 3001);
 }
+
+start();
