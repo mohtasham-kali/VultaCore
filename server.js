@@ -3,9 +3,15 @@ const path = require('path');
 
 console.log("🚀 VultaCore Booting...");
 
-// 1. Determine absolute paths
+// 1. Determine absolute paths (Searching in multiple common locations)
 const rootDir = process.cwd();
-const backendAppPath = path.join(rootDir, 'backend-api', 'dist', 'main.js');
+const possiblePaths = [
+  path.join(rootDir, 'backend-api', 'dist', 'main.js'),
+  path.join(rootDir, 'repository', 'backend-api', 'dist', 'main.js'),
+  path.join(rootDir, '..', 'backend-api', 'dist', 'main.js')
+];
+
+let backendAppPath = possiblePaths.find(p => fs.existsSync(p));
 
 // 2. Emergency Logging
 function logError(err) {
@@ -17,11 +23,11 @@ function logError(err) {
 // 3. Start the Application
 async function start() {
   try {
-    if (fs.existsSync(backendAppPath)) {
-      console.log("✅ Loading Backend via Dynamic Import...");
+    if (backendAppPath) {
+      console.log(`✅ Loading Backend from: ${backendAppPath}`);
       await import('file://' + backendAppPath);
     } else {
-      throw new Error(`File not found: ${backendAppPath}`);
+      throw new Error(`CRITICAL: backend-api/dist/main.js not found in any common locations. Searched: ${possiblePaths.join(', ')}`);
     }
   } catch (e) {
     logError(e);
