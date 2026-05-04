@@ -11,7 +11,7 @@
     "mobile-app"
   ],
   "scripts": {
-    "build": "npm install --include=dev && npm run build -w backend-api && npm run build -w web-dashboard",
+    "build": "npm install --include=dev && npm run build -w backend-api && npm run build -w web-dashboard && cp -r web-dashboard/out out && mkdir -p dist",
     "start": "node server.js"
   },
   "dependencies": {
