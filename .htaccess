@@ -1,9 +1,6 @@
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Hostinger Debug Mode Bridge
+# VultaCore Routing
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-PassengerEnabled on
-PassengerAppType node
-PassengerStartupFile server.js
 
 <IfModule mod_rewrite.c>
   RewriteEngine On
@@ -12,8 +9,6 @@ PassengerStartupFile server.js
   RewriteCond %{DOCUMENT_ROOT}/out/%{REQUEST_URI} -f
   RewriteRule ^(.*)$ /out/$1 [L]
 
-  # Otherwise, let server.js handle it
-  RewriteCond %{REQUEST_FILENAME} !-f
-  RewriteCond %{REQUEST_FILENAME} !-d
-  RewriteRule . /server.js [L]
+  # Passenger (configured in hPanel) automatically handles routing to Node.js
+  # We do not override it here.
 </IfModule>
