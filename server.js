@@ -3,50 +3,64 @@ const path = require('path');
 
 console.log("🚀 VultaCore Booting...");
 
-// 1. Determine absolute paths using __dirname instead of cwd (for Hostinger stability)
 const rootDir = __dirname;
 const possiblePaths = [
   path.join(rootDir, 'backend-api', 'dist', 'main.js'),
-  path.join(rootDir, 'dist', 'main.js'), // Root dist as backup
+  path.join(rootDir, 'dist', 'main.js'),
   path.join(rootDir, 'repository', 'backend-api', 'dist', 'main.js'),
   path.join(rootDir, '..', 'backend-api', 'dist', 'main.js')
 ];
 
 let backendAppPath = possiblePaths.find(p => fs.existsSync(p));
 
-// 2. Emergency Logging
+let fallbackActive = false;
+
 function logError(err) {
-  const msg = `[${new Date().toISOString()}] ${err.stack || err}\n`;
-  fs.appendFileSync(path.join(rootDir, 'error_log.txt'), msg);
+  const msg = `[${new Date().toISOString()}] ${err?.stack || err}\n`;
+  try {
+    fs.appendFileSync(path.join(rootDir, 'error_log.txt'), msg);
+  } catch (e) {
+    // Ignore permissions errors to prevent recursive failure
+  }
   console.error(msg);
 }
 
-// 3. Fallback Server function
 function startFallbackServer(error) {
+  if (fallbackActive) return;
+  fallbackActive = true;
   try {
     const http = require('http');
+    const port = process.env.PORT || 3001;
     const server = http.createServer((req, res) => {
       res.writeHead(500, { 'Content-Type': 'text/html' });
-      res.end(`<h1>VultaCore Boot Error</h1><p>${error.message || error}</p><pre>${error.stack || ''}</pre>`);
+      res.end(`<h1>VultaCore Error Diagnostic</h1><p><b>A FATAL BOOT ERROR OCCURRED:</b></p><pre>${error?.stack || error}</pre>`);
     });
-    server.listen(process.env.PORT || 3001);
+    // Safely bind to Unix sockets if needed
+    if (typeof port === 'string') {
+      server.listen(port);
+    } else {
+      server.listen(port, '0.0.0.0');
+    }
+    console.log("⚠️ Fallback server successfully bound to " + port);
   } catch (err) {
-    logError("Fallback server failed: " + err.message);
+    logError("Fallback server failed to bind: " + err.message);
   }
 }
 
-// 4. Catch Asynchronous Boot Failures (e.g. from NestJS bootstrap)
-process.on('unhandledRejection', (reason, promise) => {
+process.on('uncaughtException', (err) => {
+  logError(err);
+  startFallbackServer(err);
+});
+
+process.on('unhandledRejection', (reason) => {
   logError(reason);
   startFallbackServer(reason);
 });
 
-// 5. Start the Application
 async function start() {
   try {
     if (backendAppPath) {
       console.log(`✅ Loading Backend from: ${backendAppPath}`);
-      // Use require for CommonJS NestJS build
       require(backendAppPath);
     } else {
       const searchStatus = possiblePaths.map(p => `${p} (${fs.existsSync(p) ? 'FOUND' : 'MISSING'})`).join('\n');
