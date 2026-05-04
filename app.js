@@ -4,15 +4,6 @@ const path = require('path');
 console.log("🚀 VultaCore Booting...");
 
 const rootDir = __dirname;
-const possiblePaths = [
-  path.join(rootDir, 'backend-api', 'dist', 'main.js'),
-  path.join(rootDir, 'dist', 'main.js'),
-  path.join(rootDir, 'repository', 'backend-api', 'dist', 'main.js'),
-  path.join(rootDir, '..', 'backend-api', 'dist', 'main.js')
-];
-
-let backendAppPath = possiblePaths.find(p => fs.existsSync(p));
-
 let fallbackActive = false;
 
 function logError(err) {
@@ -33,17 +24,16 @@ function startFallbackServer(error) {
     const port = process.env.PORT || 3001;
     const server = http.createServer((req, res) => {
       res.writeHead(500, { 'Content-Type': 'text/html' });
-      res.end(`<h1>VultaCore Error Diagnostic</h1><p><b>A FATAL BOOT ERROR OCCURRED:</b></p><pre>${error?.stack || error}</pre>`);
+      res.end(`<h1>VultaCore Error Diagnostic</h1><p><b>ISOLATION MODE HOSTINGER TEST</b></p><pre>${error?.stack || error}</pre>`);
     });
-    // Safely bind to Unix sockets if needed
     if (typeof port === 'string') {
       server.listen(port);
     } else {
       server.listen(port, '0.0.0.0');
     }
-    console.log("⚠️ Fallback server successfully bound to " + port);
+    console.log("⚠️ Diagnostic server successfully bound to " + port);
   } catch (err) {
-    logError("Fallback server failed to bind: " + err.message);
+    logError("Diagnostic server failed to bind: " + err.message);
   }
 }
 
@@ -58,18 +48,8 @@ process.on('unhandledRejection', (reason) => {
 });
 
 async function start() {
-  try {
-    if (backendAppPath) {
-      console.log(`✅ Loading Backend from: ${backendAppPath}`);
-      require(backendAppPath);
-    } else {
-      const searchStatus = possiblePaths.map(p => `${p} (${fs.existsSync(p) ? 'FOUND' : 'MISSING'})`).join('\n');
-      throw new Error(`CRITICAL: backend distribution not found. Searched:\n${searchStatus}`);
-    }
-  } catch (e) {
-    logError(e);
-    startFallbackServer(e);
-  }
+  // ISO TEST: Skip loading backend completely to see if Litespeed can reach Node at all!
+  startFallbackServer("Running in Isolation Mode to verify Passenger routing.");
 }
 
 start();
