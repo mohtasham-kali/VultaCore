@@ -1,5 +1,5 @@
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Hostinger Bridge
+# Hostinger Debug Mode Bridge
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 PassengerEnabled on
 PassengerAppType node
@@ -7,9 +7,16 @@ PassengerStartupFile server.js
 
 <IfModule mod_rewrite.c>
   RewriteEngine On
-  RewriteBase /
-  RewriteRule ^index\.html$ - [L]
+  
+  # If a real file exists in /out/, serve it (Next.js static files)
+  RewriteCond %{DOCUMENT_ROOT}/out/%{REQUEST_URI} -f
+  RewriteRule ^(.*)$ /out/$1 [L]
+
+  # Otherwise, let server.js handle it
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
-  RewriteRule . /index.html [L]
+  RewriteRule . /server.js [L]
 </IfModule>
+
+# Custom error document to bypass Hostinger's generic 500
+ErrorDocument 500 /error_info.html
