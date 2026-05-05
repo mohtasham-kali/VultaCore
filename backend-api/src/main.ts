@@ -10,11 +10,7 @@ async function bootstrap() {
     const port = process.env.PORT || 3001;
     
     // Support Unix sockets from Hostinger/Passenger natively
-    if (typeof port === 'string' && isNaN(Number(port))) {
-      await app.listen(port);
-    } else {
-      await app.listen(port, '0.0.0.0');
-    }
+    await app.listen(port);
     console.log(`Application is running on: ${port}`);
   } catch (error: any) {
     fs.writeFileSync(

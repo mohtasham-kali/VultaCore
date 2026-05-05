@@ -26,12 +26,12 @@ function startFallbackServer(error) {
       res.writeHead(500, { 'Content-Type': 'text/html' });
       res.end(`<h1>VultaCore Error Diagnostic</h1><p><b>ISOLATION MODE HOSTINGER TEST</b></p><pre>${error?.stack || error}</pre>`);
     });
-    if (typeof port === 'string') {
-      server.listen(port);
-    } else {
-      server.listen(port, '0.0.0.0');
-    }
-    console.log("⚠️ Diagnostic server successfully bound to " + port);
+    // Safely bind to Unix sockets if needed
+    server.on('error', (e) => {
+      console.error("HTTP Server Error:", e);
+    });
+    server.listen(port);
+    console.log("⚠️ Fallback server successfully bound to " + port);
   } catch (err) {
     logError("Diagnostic server failed to bind: " + err.message);
   }
