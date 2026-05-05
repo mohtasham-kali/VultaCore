@@ -6,6 +6,14 @@ console.log("🚀 VultaCore Booting...");
 
 const rootDir = __dirname;
 let fallbackActive = false;
+const possiblePaths = [
+  path.join(rootDir, 'backend-api', 'dist', 'main.js'),
+  path.join(rootDir, 'dist', 'main.js'),
+  path.join(rootDir, 'repository', 'backend-api', 'dist', 'main.js'),
+  path.join(rootDir, '..', 'backend-api', 'dist', 'main.js')
+];
+
+let backendAppPath = possiblePaths.find(p => fs.existsSync(p));
 
 function logError(err) {
   const msg = `[${new Date().toISOString()}] ${err?.stack || err}\n`;
@@ -25,16 +33,16 @@ function startFallbackServer(error) {
     const port = process.env.PORT || 3001;
     const server = http.createServer((req, res) => {
       res.writeHead(500, { 'Content-Type': 'text/html' });
-      res.end(`<h1>VultaCore Error Diagnostic</h1><p><b>ISOLATION MODE HOSTINGER TEST</b></p><pre>${error?.stack || error}</pre>`);
+      res.end(`<h1>VultaCore Boot Diagnostic</h1><p><b>A FATAL BOOT ERROR OCCURRED:</b></p><pre>${error?.stack || error}</pre>`);
     });
-    // Safely bind to Unix sockets if needed
+    // Safely bind to internal ports/sockets
     server.on('error', (e) => {
       console.error("HTTP Server Error:", e);
     });
     server.listen(port);
     console.log("⚠️ Fallback server successfully bound to " + port);
   } catch (err) {
-    logError("Diagnostic server failed to bind: " + err.message);
+    logError("Fallback server failed to bind: " + err.message);
   }
 }
 
