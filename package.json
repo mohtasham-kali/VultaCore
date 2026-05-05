@@ -11,7 +11,7 @@
     "mobile-app"
   ],
   "scripts": {
-    "build": "echo 'Safe Deploy: Pre-built artifacts are tracked. Bypassing heavy Next.js build to avoid Hostinger OOM limits.'",
+    "build": "mkdir -p out dist .next && echo 'Safe Deploy: Pre-built artifacts are tracked.'",
     "start": "node server.js"
   },
   "dependencies": {
