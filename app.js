@@ -8,6 +8,7 @@ const rootDir = __dirname;
 let fallbackActive = false;
 const possiblePaths = [
   path.join(rootDir, 'backend-api', 'dist', 'main.js'),
+  path.join(rootDir, 'backend', 'dist', 'main.js'),
   path.join(rootDir, 'dist', 'main.js'),
   path.join(rootDir, 'repository', 'backend-api', 'dist', 'main.js'),
   path.join(rootDir, '..', 'backend-api', 'dist', 'main.js')
