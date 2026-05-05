@@ -1,2 +1,3 @@
+git push origin main
 *.sqlite
 .env
