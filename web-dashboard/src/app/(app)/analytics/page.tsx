@@ -1,6 +1,18 @@
 "use client";
 
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, LineChart, Line, CartesianGrid } from 'recharts';
+import dynamic from 'next/dynamic';
+const PieChart = dynamic(() => import('recharts').then(mod => mod.PieChart), { ssr: false }) as any;
+const Pie = dynamic(() => import('recharts').then(mod => mod.Pie), { ssr: false }) as any;
+const Cell = dynamic(() => import('recharts').then(mod => mod.Cell), { ssr: false }) as any;
+const ResponsiveContainer = dynamic(() => import('recharts').then(mod => mod.ResponsiveContainer), { ssr: false }) as any;
+const Tooltip = dynamic(() => import('recharts').then(mod => mod.Tooltip), { ssr: false }) as any;
+const BarChart = dynamic(() => import('recharts').then(mod => mod.BarChart), { ssr: false }) as any;
+const Bar = dynamic(() => import('recharts').then(mod => mod.Bar), { ssr: false }) as any;
+const XAxis = dynamic(() => import('recharts').then(mod => mod.XAxis), { ssr: false }) as any;
+const YAxis = dynamic(() => import('recharts').then(mod => mod.YAxis), { ssr: false }) as any;
+const LineChart = dynamic(() => import('recharts').then(mod => mod.LineChart), { ssr: false }) as any;
+const Line = dynamic(() => import('recharts').then(mod => mod.Line), { ssr: false }) as any;
+const CartesianGrid = dynamic(() => import('recharts').then(mod => mod.CartesianGrid), { ssr: false }) as any;
 import { BarChart as LucideBarChart, Activity, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { useSettings } from '@/providers/SettingsProvider';
 import { useAuth } from '@/context/AuthContext';

@@ -3,7 +3,8 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
-import { App } from "@capacitor/app";
+
+// Capacitor import moved to useEffect to prevent SSR/Build errors
 
 interface AuthContextType {
   user: User | null;
@@ -34,18 +35,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Handle Capacitor Deep Links (for Mobile Auth Redirects)
     const setupDeepLinks = async () => {
-      App.addListener('appUrlOpen', async (event: any) => {
-        const url = new URL(event.url);
-        const hash = url.hash.substring(1);
-        
-        if (hash) {
-          const { error } = await supabase.auth.setSession({
-            access_token: new URLSearchParams(hash).get('access_token') || "",
-            refresh_token: new URLSearchParams(hash).get('refresh_token') || "",
-          });
-          if (error) console.error("Session sync error:", error.message);
-        }
-      });
+      try {
+        const { App } = await import("@capacitor/app");
+        App.addListener('appUrlOpen', async (event: { url: string }) => {
+          const url = new URL(event.url);
+          const hash = url.hash.substring(1);
+          
+          if (hash) {
+            const { error } = await supabase.auth.setSession({
+              access_token: new URLSearchParams(hash).get('access_token') || "",
+              refresh_token: new URLSearchParams(hash).get('refresh_token') || "",
+            });
+            if (error) console.error("Session sync error:", error.message);
+          }
+        });
+      } catch (e) {
+        console.warn("Capacitor App plugin not available", e);
+      }
     };
 
     setupDeepLinks();

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
-import { Loader2, X, Upload, Camera } from "lucide-react";
+import { Loader2, X, Camera } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
 interface EditProfileModalProps {
@@ -71,8 +71,8 @@ export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
         .getPublicUrl(filePath);
 
       setAvatarUrl(data.publicUrl);
-    } catch (err: any) {
-      setError(err.message || "Failed to upload avatar");
+    } catch (err: unknown) {
+      setError((err as Error).message || "Failed to upload avatar");
     } finally {
       setUploading(false);
     }
@@ -97,8 +97,8 @@ export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
       onClose();
       // Optionally reload the page to refresh deep state. We could also just let context react.
       window.location.reload(); 
-    } catch (err: any) {
-      setError(err.message || "Failed to update profile");
+    } catch (err: unknown) {
+      setError((err as Error).message || "Failed to update profile");
     } finally {
       setLoading(false);
     }

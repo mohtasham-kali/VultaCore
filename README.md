@@ -1,94 +1,63 @@
-# VultaCore Tri-Stack Platform
+# VultaCore Tri-Stack Platform 🚀
 
-## Architecture
-- **Web Dashboard**: Next.js (React) — static export
-- **Desktop App**: Tauri v2 — wraps the web dashboard
-- **Mobile App**: Capacitor v6 — Android & iOS
-- **Backend API**: NestJS
-- **AI Services**: Python (FastAPI)
-- **Analytics Engine**: Rust
+Advanced Developer & Cybersecurity Dashboard with AI-powered assistance.
 
----
-
-## 🖥️ Desktop App (Linux / Windows / macOS)
-
-Built with **Tauri v2** — uses the exact same Next.js UI.
-
-```bash
-# First build the web dashboard
-cd web-dashboard && npm run build
-
-# Then run/build the desktop app
-cd ../desktop-app
-npm install
-npm run dev       # hot-reload dev mode
-npm run build     # production binary → src-tauri/target/release/
-```
+## 🏗️ Architecture
+- **Web Dashboard**: Next.js 16 (React 19) — High-performance static export.
+- **Desktop App**: Tauri v2 — Native performance with a web soul.
+- **Mobile App**: Capacitor v6 — Cross-platform Android & iOS.
+- **Backend API**: NestJS (Unified PostgreSQL/SQLite support).
+- **AI Services**: Python (FastAPI) — Specialized LLM agents.
+- **Analytics Engine**: Rust — Real-time high-speed data processing.
 
 ---
 
-## 📱 Mobile App (Android & iOS)
-
-Built with **Capacitor v6** — same Next.js UI packaged as a native app.
-
-```bash
-# After building the web dashboard (web-dashboard/out):
-cd mobile-app
-
-npm run sync           # sync all platforms
-npm run sync:android   # sync Android only
-npm run sync:ios       # sync iOS only
-npm run open:android   # open in Android Studio
-npm run open:ios       # open in Xcode (macOS only)
-```
-
-> **Note**: Android requires Android Studio + Android SDK.
-> On this system, Android Studio is located at `/home/hacker/android-studio/bin/studio.sh`.
-> iOS requires macOS with Xcode and CocoaPods installed.
+## ⚡ Performance Features
+- **Smooth Animations**: Powered by `framer-motion` for 60fps UI transitions.
+- **Instant Feedback**: integrated `nprogress` for route change indicators.
+- **Optimized Data**: Automated payload compression and aggressive caching.
+- **Database Fallback**: Automatic failover from PostgreSQL (Production) to SQLite (Local Development).
 
 ---
 
-## 🌐 Web Dashboard
+## 🛠️ Local Development
 
+### 1. Web Dashboard
 ```bash
 cd web-dashboard
-npm run dev      # local dev server → http://localhost:3000
-npm run build    # static export → out/
+npm install
+npm run dev      # http://localhost:3000
+```
+
+### 2. Backend API
+```bash
+cd backend-api
+npm install
+npm run start:dev
+# Automatically uses local saas.sqlite if DATABASE_URL is not set.
+```
+
+### 3. Unified Build
+```bash
+./build-all.sh   # Builds Web, Desktop, and Mobile in one go.
 ```
 
 ---
 
-## 🚀 Unified Build (All Platforms)
-
-```bash
-./build-all.sh
-```
-
-This will:
-1. Build the Next.js dashboard (`out/`)
-2. Sync to Android + iOS via Capacitor
-3. Compile the Tauri desktop binary
+## 🌐 Deployment
+This platform is designed for high-availability deployment on **Hostinger** or **Vercel/Render**.
+- **Database**: Use Supabase or Hostinger PostgreSQL.
+- **Environment**: Ensure `DATABASE_URL` is set in production to enable PostgreSQL.
 
 ---
 
-## 🔧 Backend Services
-
-### Backend API (NestJS)
+## 🧹 Maintenance
+Remove cache and temporary files:
 ```bash
-cd backend-api && npm run start:dev
+rm -rf web-dashboard/.next
+rm -rf **/node_modules/.cache
 ```
 
-### AI Services (FastAPI)
-```bash
-cd ai-services && pip install -r requirements.txt && source venv/bin/activate && uvicorn main:app --reload
-```
+---
 
-### Analytics Engine (Rust)
-```bash
-cd analytics-engine && cargo run
-```
-
-### Infrastructure
-```bash
-docker-compose up -d
-```
+*Built with ❤️ for the Cybersecurity and Dev Community.*

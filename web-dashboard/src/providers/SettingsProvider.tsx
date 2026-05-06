@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useState } from "react";
 
 type ChartType = "pie" | "bar" | "line";
 
@@ -24,20 +24,26 @@ interface SettingsContextType {
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
-  const [chartType, setChartType] = useState<ChartType>("pie");
-  const [activeModel, setActiveModel] = useState<AIModel>("gemini-pro");
-  const [apiKeys, setApiKeys] = useState<APIKeys>({});
+  const [chartType, setChartType] = useState<ChartType>(() => {
+    if (typeof window !== "undefined") {
+      return (localStorage.getItem("chartType") as ChartType) || "pie";
+    }
+    return "pie";
+  });
+  const [activeModel, setActiveModel] = useState<AIModel>(() => {
+    if (typeof window !== "undefined") {
+      return (localStorage.getItem("activeModel") as AIModel) || "gemini-pro";
+    }
+    return "gemini-pro";
+  });
+  const [apiKeys, setApiKeys] = useState<APIKeys>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("apiKeys");
+      return saved ? JSON.parse(saved) : {};
+    }
+    return {};
+  });
 
-  useEffect(() => {
-    const savedChart = localStorage.getItem("chartType") as ChartType;
-    if (savedChart) setChartType(savedChart);
-
-    const savedModel = localStorage.getItem("activeModel") as AIModel;
-    if (savedModel) setActiveModel(savedModel);
-
-    const savedKeys = localStorage.getItem("apiKeys");
-    if (savedKeys) setApiKeys(JSON.parse(savedKeys));
-  }, []);
 
   const saveChartType = (type: ChartType) => {
     setChartType(type);
