@@ -26,11 +26,15 @@ export const metadata: Metadata = {
   },
 };
 
+import { NavigationEvents } from "@/components/NavigationEvents";
+import { Suspense } from "react";
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -77,10 +81,12 @@ export default function RootLayout({
       >
         <AuthProvider>
           <SettingsProvider>
+            <Suspense fallback={null}>
+              <NavigationEvents />
+            </Suspense>
             {children}
             <Analytics />
           </SettingsProvider>
-
         </AuthProvider>
       </body>
     </html>

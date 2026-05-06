@@ -31,13 +31,14 @@ exports.AppModule = AppModule = __decorate([
                 isGlobal: true,
             }),
             typeorm_1.TypeOrmModule.forRoot({
-                type: 'postgres',
+                type: (process.env.DATABASE_URL ? 'postgres' : 'sqlite'),
                 url: process.env.DATABASE_URL,
+                database: process.env.DATABASE_URL ? undefined : 'saas.sqlite',
                 autoLoadEntities: true,
                 synchronize: true,
-                ssl: {
-                    rejectUnauthorized: false,
-                },
+                ssl: process.env.DATABASE_URL
+                    ? { rejectUnauthorized: false }
+                    : false,
             }),
             users_module_1.UsersModule,
             plans_module_1.PlansModule,
