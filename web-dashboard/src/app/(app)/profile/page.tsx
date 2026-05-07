@@ -112,7 +112,7 @@ export default function ProfilePage() {
                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Verified Badges</p>
                <div className="flex gap-2">
                  <span className="px-2.5 py-1 rounded-md text-[10px] font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20 uppercase tracking-wider">Newbie</span>
-                 {stats?.total_points > 100 && <span className="px-2.5 py-1 rounded-md text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-wider">Active Contributor</span>}
+                 {(stats?.total_points ?? 0) > 100 && <span className="px-2.5 py-1 rounded-md text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-wider">Active Contributor</span>}
                </div>
             </div>
           </div>
