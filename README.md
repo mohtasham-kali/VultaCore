@@ -37,7 +37,51 @@ npm run start:dev
 # Automatically uses local saas.sqlite if DATABASE_URL is not set.
 ```
 
-### 3. Unified Build
+### 3. Desktop App (Tauri)
+```bash
+# First build the web dashboard
+cd web-dashboard && npm run build
+
+# Then run/build the desktop app
+cd ../desktop-app
+npm install
+npm run dev       # hot-reload dev mode
+npm run build     # production binary → src-tauri/target/release/
+```
+
+### 4. Mobile App (Capacitor)
+```bash
+# After building the web dashboard (web-dashboard/out):
+cd mobile-app
+
+npm run sync           # sync all platforms
+npm run sync:android   # sync Android only
+npm run sync:ios       # sync iOS only
+npm run open:android   # open in Android Studio
+npm run open:ios       # open in Xcode (macOS only)
+```
+> **Note**: Android requires Android Studio + Android SDK. On this system, Android Studio is located at `/home/hacker/android-studio/bin/studio.sh`. iOS requires macOS with Xcode and CocoaPods installed.
+
+### 5. AI Services (FastAPI)
+```bash
+cd ai-services
+pip install -r requirements.txt
+source venv/bin/activate
+uvicorn main:app --reload
+```
+
+### 6. Analytics Engine (Rust)
+```bash
+cd analytics-engine
+cargo run
+```
+
+### 7. Core Infrastructure (Docker)
+```bash
+docker-compose up -d
+```
+
+### 8. Unified Build (All Platforms)
 ```bash
 ./build-all.sh   # Builds Web, Desktop, and Mobile in one go.
 ```

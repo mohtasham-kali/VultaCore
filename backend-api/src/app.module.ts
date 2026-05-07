@@ -13,6 +13,12 @@ import { BotsModule } from './bots/bots.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { NotificationsModule } from './notifications/notifications.module';
 
+import * as fs from 'fs';
+
+const staticModuleOptions = fs.existsSync(join(process.cwd(), 'out'))
+  ? [ServeStaticModule.forRoot({ rootPath: join(process.cwd(), 'out') })]
+  : [];
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -35,9 +41,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     BotsModule,
     AnalyticsModule,
     NotificationsModule,
-    ServeStaticModule.forRoot({
-      rootPath: join(process.cwd(), 'out'),
-    }),
+    ...staticModuleOptions,
   ],
   controllers: [AppController],
   providers: [AppService],

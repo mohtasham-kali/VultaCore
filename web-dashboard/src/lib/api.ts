@@ -2,12 +2,12 @@ import { API_BASE_URL } from './constants';
 
 export async function fetchPosts(type?: 'dev' | 'cyber') {
   const url = type ? `${API_BASE_URL}/forum?type=${type}` : `${API_BASE_URL}/forum`;
-  const res = await fetch(url);
+  const res = await fetch(url, { cache: 'no-store' });
   return res.json();
 }
 
 export async function fetchPostDetail(id: string) {
-  const res = await fetch(`${API_BASE_URL}/forum/${id}`);
+  const res = await fetch(`${API_BASE_URL}/forum/${id}`, { cache: 'no-store' });
   return res.json();
 }
 
@@ -38,12 +38,12 @@ export async function executeBot(id: string, prompt: string, userId: string, con
 
 
 export async function fetchAnalytics(userId: string) {
-  const res = await fetch(`${API_BASE_URL}/analytics/${userId}`);
+  const res = await fetch(`${API_BASE_URL}/analytics/${userId}`, { cache: 'no-store' });
   return res.json();
 }
 
 export async function fetchBots() {
-  const res = await fetch(`${API_BASE_URL}/bots`);
+  const res = await fetch(`${API_BASE_URL}/bots`, { cache: 'no-store' });
   return res.json();
 }
 

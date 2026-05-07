@@ -4,11 +4,22 @@ import { PostCard } from "@/components/forum/PostCard";
 import { Search, Plus, Filter, ShieldCheck, Loader2 } from "lucide-react";
 import { useEffect, useState, useCallback } from "react";
 import { fetchPosts } from "@/lib/api";
-import { cn } from "@/lib/utils";
 import { CreatePostModal } from "@/components/forum/CreatePostModal";
 
+interface Post {
+  id: string;
+  title: string;
+  content: string;
+  tags: string[];
+  likes: number;
+  commentsCount: number;
+  isResolved?: boolean;
+  severity?: 'low' | 'medium' | 'high' | 'critical';
+  author?: { username: string };
+}
+
 export default function CyberForumPage() {
-  const [posts, setPosts] = useState<any[]>([]);
+  const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -16,7 +27,7 @@ export default function CyberForumPage() {
     setLoading(true);
     try {
       const data = await fetchPosts('cyber');
-      setPosts(data);
+      setPosts(Array.isArray(data) ? data : (data?.posts || []));
     } catch (e) {
       console.error("Failed to load posts", e);
     } finally {

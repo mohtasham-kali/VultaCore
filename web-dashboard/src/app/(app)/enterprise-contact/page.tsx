@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronRight, ShieldCheck, Mail, Building2, Users, MessageSquare, Phone } from "lucide-react";
+import { ChevronRight, ShieldCheck, Mail, Building2, Phone } from "lucide-react";
 
 export default function EnterpriseContactPage() {
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -131,7 +131,7 @@ export default function EnterpriseContactPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">What's your interest?</label>
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">What&apos;s your interest?</label>
               <select required name="interest" value={formData.interest} onChange={handleChange} className="w-full bg-slate-950 border border-white/10 rounded-xl py-4 px-4 text-sm text-white focus:border-purple-500 outline-none transition-all">
                 <option value="">Select your area of interest</option>
                 <option value="custom-ai">Custom AI Training & Deployment</option>

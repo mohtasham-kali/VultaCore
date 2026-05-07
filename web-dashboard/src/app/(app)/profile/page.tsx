@@ -1,14 +1,20 @@
 "use client";
 
-import { User, LogOut, Mail, Award, Shield, Loader2, Activity } from "lucide-react";
+import { User, LogOut, Mail, Award, Shield } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useEffect, useState } from "react";
 import { fetchAnalytics } from "@/lib/api";
+import Image from "next/image";
+
+interface ProfileStats {
+  total_points: number;
+  rank_estimate: string;
+  activityLog?: unknown[];
+}
 
 export default function ProfilePage() {
   const { user, signOut } = useAuth();
-  const [stats, setStats] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<ProfileStats | null>(null);
 
   useEffect(() => {
     async function loadStats() {
@@ -18,8 +24,6 @@ export default function ProfilePage() {
         setStats(data);
       } catch (e) {
         console.error("Failed to load profile stats", e);
-      } finally {
-        setLoading(false);
       }
     }
     loadStats();
@@ -48,7 +52,7 @@ export default function ProfilePage() {
         <div className="relative">
           <div className="w-28 h-28 rounded-full bg-gradient-to-br from-purple-500 via-indigo-500 to-blue-500 mb-4 p-1 shadow-2xl group-hover:scale-105 transition-transform duration-500">
             {avatarUrl ? (
-              <img src={avatarUrl} alt={fullName} className="w-full h-full rounded-full border-4 border-slate-950 object-cover" />
+              <Image src={avatarUrl} alt={fullName} width={112} height={112} className="w-full h-full rounded-full border-4 border-slate-950 object-cover" unoptimized />
             ) : (
               <div className="w-full h-full rounded-full bg-slate-950 flex items-center justify-center">
                 <span className="text-3xl font-extrabold text-white tracking-widest">{initials}</span>

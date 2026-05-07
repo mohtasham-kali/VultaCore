@@ -37,8 +37,8 @@ export default function AuthPage() {
         // Option to display success message or redirect assuming auto-login
         router.push("/");
       }
-    } catch (err: any) {
-      setError(err.message || "An error occurred during authentication.");
+    } catch (err: unknown) {
+      setError((err as Error).message || "An error occurred during authentication.");
     } finally {
       setLoading(false);
     }
@@ -46,7 +46,7 @@ export default function AuthPage() {
 
   const getRedirectUrl = () => {
     // If we're on mobile (Capacitor), use the custom scheme
-    if (typeof window !== "undefined" && (window as any).Capacitor?.isNativePlatform()) {
+    if (typeof window !== "undefined" && (window as Window & { Capacitor?: { isNativePlatform: () => boolean } }).Capacitor?.isNativePlatform()) {
       return "com.saas2.platform://auth-callback";
     }
     return `${window.location.origin}/`;

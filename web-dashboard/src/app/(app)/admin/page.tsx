@@ -16,14 +16,14 @@ export default function AdminOverview() {
   useEffect(() => {
     // Parallel fetches for efficiency
     Promise.all([
-      fetch("${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/users").then(res => res.json()),
-      fetch("${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/leads").then(res => res.json())
+      fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/users`).then(res => res.json()),
+      fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/leads`).then(res => res.json())
     ]).then(([users, leads]) => {
       setStats({
         totalUsers: users.length,
         totalLeads: leads.length,
         // Mock revenue logic: 29 per standard, 99 per premium
-        totalRevenue: users.reduce((acc: number, u: any) => {
+        totalRevenue: users.reduce((acc: number, u: { rank?: string }) => {
           if (u.rank === "Standard") return acc + 29;
           if (u.rank === "Premium") return acc + 99;
           return acc;

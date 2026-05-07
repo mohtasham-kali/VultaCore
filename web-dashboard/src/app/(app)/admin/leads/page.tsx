@@ -108,7 +108,7 @@ export default function AdminLeadsPage() {
                     Business Challenges
                   </h4>
                   <p className="text-slate-400 text-sm leading-relaxed italic">
-                    "{lead.challenges}"
+                    &quot;{lead.challenges}&quot;
                   </p>
                 </div>
               </div>
