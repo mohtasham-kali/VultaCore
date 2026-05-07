@@ -11,7 +11,7 @@
     "mobile-app"
   ],
   "scripts": {
-    "build": "npm run build -w web-dashboard && npm run build -w backend-api && rm -rf ./out && cp -r web-dashboard/out ./out",
+    "build": "npm run build -w web-dashboard && rm -rf ./out && cp -r web-dashboard/out ./out",
     "start": "node server.js"
   },
   "dependencies": {
