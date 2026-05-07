@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { Loader2, X, Camera } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import Image from "next/image";
 
 interface EditProfileModalProps {
   isOpen: boolean;
@@ -132,7 +133,7 @@ export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
             <div className="relative group">
               <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-slate-950 shadow-2xl relative">
                 {avatarUrl ? (
-                  <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                  <Image src={avatarUrl} alt="Avatar" width={96} height={96} className="w-full h-full object-cover" unoptimized />
                 ) : (
                   <div className="w-full h-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-3xl font-bold text-white">
                     {fullName.charAt(0) || user?.email?.charAt(0) || "U"}

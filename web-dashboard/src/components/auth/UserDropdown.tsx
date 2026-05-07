@@ -5,6 +5,7 @@ import Link from "next/link";
 import { User, LogOut, Settings, Pencil } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { EditProfileModal } from "../profile/EditProfileModal";
+import Image from "next/image";
 
 export function UserDropdown() {
   const { user, signOut } = useAuth();
@@ -46,10 +47,13 @@ export function UserDropdown() {
         aria-label="User menu"
       >
         {avatarUrl ? (
-          <img 
-            src={avatarUrl} 
-            alt="Profile" 
+          <Image
+            src={avatarUrl}
+            alt="Profile"
+            width={40}
+            height={40}
             className="w-10 h-10 rounded-full border-2 border-white/20 object-cover"
+            unoptimized
           />
         ) : (
           <div className="w-10 h-10 rounded-full flex items-center justify-center bg-gradient-to-br from-purple-500 to-blue-500 border-2 border-white/20">

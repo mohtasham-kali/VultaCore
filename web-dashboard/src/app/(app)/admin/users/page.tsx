@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { User as UserIcon, Shield, Search, MoreVertical, Edit2, Trash2 } from "lucide-react";
+import { User as UserIcon, Search, MoreVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface User {

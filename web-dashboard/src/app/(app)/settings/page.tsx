@@ -1,11 +1,12 @@
 "use client";
 
-import { Monitor, Bell, BrainCircuit } from "lucide-react";
+import { Monitor, BrainCircuit } from "lucide-react";
 import { useSettings } from "@/providers/SettingsProvider";
+import type { AIModel } from "@/providers/SettingsProvider";
 import { cn } from "@/lib/utils";
 
 export default function SettingsPage() {
-  const { chartType, setChartType, activeModel, setActiveModel, apiKeys, updateAPIKey } = useSettings();
+  const { chartType, setChartType, activeModel, setActiveModel } = useSettings();
 
   const aiProviders = [
     { 
@@ -89,7 +90,7 @@ export default function SettingsPage() {
               {aiProviders.map((provider) => (
                 <div 
                   key={provider.id}
-                  onClick={() => setActiveModel(provider.id as any)}
+                  onClick={() => setActiveModel(provider.id as AIModel)}
                   className={cn(
                     "p-5 rounded-2xl border transition-all cursor-pointer relative group",
                     activeModel === provider.id 
@@ -138,7 +139,7 @@ export default function SettingsPage() {
               <label className="text-xs font-bold text-slate-500 uppercase tracking-widest px-1">Default Dashboard Chart</label>
               <select 
                 value={chartType}
-                onChange={(e) => setChartType(e.target.value as any)}
+                onChange={(e) => setChartType(e.target.value as 'pie' | 'bar' | 'line')}
                 className="bg-slate-950 border border-white/10 rounded-xl p-3 text-sm text-slate-300 outline-none focus:border-emerald-500/50 transition-all"
               >
                 <option value="pie">Pie Chart (Distribution)</option>

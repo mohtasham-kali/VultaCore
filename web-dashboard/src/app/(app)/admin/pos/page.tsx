@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { CreditCard, Search, UserCheck, ShieldPlus, ChevronRight, Loader2 } from "lucide-react";
+import { CreditCard, Search, ShieldPlus, ChevronRight, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface User {
@@ -19,7 +19,7 @@ export default function SalesPOSTerminal() {
   const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
-    fetch("${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/users")
+    fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/users`)
       .then(res => res.json())
       .then(setUsers);
   }, []);
@@ -42,7 +42,7 @@ export default function SalesPOSTerminal() {
       alert(`Manual upgrade successful! ${selectedUser.username} is now on the ${selectedPlan} tier.`);
       setSelectedUser(null);
       // Refresh list
-      const res = await fetch("${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/users");
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/users`);
       setUsers(await res.json());
     } catch (err) {
       console.error("POS Error:", err);

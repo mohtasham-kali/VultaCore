@@ -4,7 +4,7 @@ import { createContext, useContext, useState } from "react";
 
 type ChartType = "pie" | "bar" | "line";
 
-type AIModel = "gemini-pro" | "gpt-4o" | "claude-3-opus" | "meta-llama-3";
+export type AIModel = "gemini-pro" | "gpt-4o" | "claude-3-opus" | "meta-llama-3";
 
 interface APIKeys {
   gemini?: string;

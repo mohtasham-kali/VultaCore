@@ -1,18 +1,31 @@
 "use client";
 
-import { ShieldAlert, Lock, FileSearch, Eye, Loader2, Play, Terminal, Upload, File, X as CloseIcon } from "lucide-react";
+import { ShieldAlert, Lock, FileSearch, Eye, Terminal, Upload, File, X as CloseIcon } from "lucide-react";
 import { useEffect, useState, useRef } from "react";
 import { fetchBots, executeBot } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 
+interface Bot {
+  id: string;
+  name: string;
+  type: string;
+  category?: string;
+}
+
+interface BotResult {
+  response: string;
+  confidence: number;
+  forBot: string;
+}
+
 export default function CyberBotsPage() {
   const { user } = useAuth();
-  const [bots, setBots] = useState<any[]>([]);
-  const [selectedBot, setSelectedBot] = useState<any>(null);
+  const [bots, setBots] = useState<Bot[]>([]);
+  const [selectedBot, setSelectedBot] = useState<Bot | null>(null);
   const [userPrompt, setUserPrompt] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [executing, setExecuting] = useState<string | null>(null);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<BotResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -20,7 +33,7 @@ export default function CyberBotsPage() {
       try {
         const data = await fetchBots();
         if (Array.isArray(data)) {
-          setBots(data.filter((b: any) => b.type === 'cyber'));
+          setBots(data.filter((b: Bot) => b.type === 'cyber'));
         }
       } catch (e) {
         console.error("Failed to load bots", e);
@@ -80,20 +93,20 @@ export default function CyberBotsPage() {
         <div className="lg:col-span-1 space-y-4">
           <div className="space-y-6">
             {Object.entries(
-              bots.reduce((acc: any, bot) => {
+              bots.reduce((acc: Record<string, Bot[]>, bot: Bot) => {
                 const category = bot.category || 'Other';
                 if (!acc[category]) acc[category] = [];
                 acc[category].push(bot);
                 return acc;
               }, {})
-            ).map(([category, items]: [string, any]) => (
+            ).map(([category, items]: [string, Bot[]]) => (
               <div key={category} className="space-y-3">
                 <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] px-2 flex items-center gap-2">
                   <span className="w-1 h-1 rounded-full bg-red-500" />
                   {category}
                 </h3>
                 <div className="grid grid-cols-1 gap-2">
-                  {items.map((bot: any, i: number) => (
+                  {items.map((bot: Bot, i: number) => (
                     <button 
                       key={i} 
                       onClick={() => { setSelectedBot(bot); setResult(null); setSelectedFile(null); }}

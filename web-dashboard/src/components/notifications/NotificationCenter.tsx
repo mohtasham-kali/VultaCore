@@ -1,7 +1,7 @@
 "use client";
 
 import { Bell, Info, AlertTriangle, CheckCircle, XCircle, Trash2, CheckCheck } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 
@@ -22,7 +22,7 @@ export function NotificationCenter() {
   const [loading, setLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const fetchNotifications = async () => {
+  const fetchNotifications = useCallback(async () => {
     if (!user) return;
     try {
       setLoading(true);
@@ -36,13 +36,13 @@ export function NotificationCenter() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
   useEffect(() => {
     if (user && isOpen) {
       fetchNotifications();
     }
-  }, [user, isOpen]);
+  }, [user, isOpen, fetchNotifications]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import Image from "next/image";
 import { 
   MessageSquare, 
   ShieldAlert, 
@@ -136,7 +137,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           <div className="bg-white/5 rounded-2xl p-4 border border-white/5 flex items-center gap-3">
              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center font-bold text-white shadow-lg overflow-hidden shrink-0">
                {user?.user_metadata?.avatar_url ? (
-                 <img src={user.user_metadata.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                 <Image src={user.user_metadata.avatar_url} alt="Profile" width={40} height={40} className="w-full h-full object-cover" unoptimized />
                ) : (
                  <span>{user?.email?.[0].toUpperCase() || 'U'}</span>
                )}

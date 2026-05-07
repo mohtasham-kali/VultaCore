@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Check, Loader2, Wallet } from "lucide-react";
+import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 import { PaymentModal } from "@/components/pricing/PaymentModal";
+import Image from "next/image";
 
 const MOCK_PLANS = [
   {
@@ -45,10 +46,19 @@ const MOCK_PLANS = [
   }
 ];
 
+interface Plan {
+  id: string;
+  name: string;
+  price: string;
+  description: string;
+  features: string[];
+  buttonText: string;
+  highlight: boolean;
+}
+
 export default function PricingPage() {
   const { user } = useAuth();
-  const [loading, setLoading] = useState<string | null>(null);
-  const [selectedPlan, setSelectedPlan] = useState<any>(null);
+  const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentPlan, setCurrentPlan] = useState<string>("Free");
 
@@ -76,7 +86,7 @@ export default function PricingPage() {
     fetchRank();
   }, [user, isModalOpen]);
 
-  const handleUpgrade = (plan: any) => {
+  const handleUpgrade = (plan: Plan) => {
     if (plan.id === "enterprise") {
       window.location.href = "/enterprise-contact";
       return;
@@ -119,11 +129,11 @@ export default function PricingPage() {
             Credit Card
           </div>
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-slate-400">
-             <img src="https://upload.wikimedia.org/wikipedia/commons/f/f2/Google_Pay_Logo.svg" className="h-3 w-auto grayscale invert" alt="Google Pay" />
+             <Image src="https://upload.wikimedia.org/wikipedia/commons/f/f2/Google_Pay_Logo.svg" width={36} height={12} className="h-3 w-auto grayscale invert" alt="Google Pay" unoptimized />
              Google Pay
           </div>
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-slate-400">
-            <img src="https://upload.wikimedia.org/wikipedia/commons/b/b5/PayPal.svg" className="h-3 w-auto grayscale" alt="PayPal" />
+            <Image src="https://upload.wikimedia.org/wikipedia/commons/b/b5/PayPal.svg" width={36} height={12} className="h-3 w-auto grayscale" alt="PayPal" unoptimized />
             PayPal
           </div>
         </div>
@@ -178,7 +188,7 @@ export default function PricingPage() {
 
             <button 
               onClick={() => handleUpgrade(plan)}
-              disabled={loading !== null || (plan.name === currentPlan)}
+              disabled={plan.name === currentPlan}
               className={cn(
                 "w-full py-4 rounded-2xl font-bold transition-all flex items-center justify-center gap-2",
                 plan.highlight || plan.name === currentPlan

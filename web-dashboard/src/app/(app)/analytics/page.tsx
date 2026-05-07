@@ -1,18 +1,19 @@
 "use client";
 
 import dynamic from 'next/dynamic';
-const PieChart = dynamic(() => import('recharts').then(mod => mod.PieChart), { ssr: false }) as any;
-const Pie = dynamic(() => import('recharts').then(mod => mod.Pie), { ssr: false }) as any;
-const Cell = dynamic(() => import('recharts').then(mod => mod.Cell), { ssr: false }) as any;
-const ResponsiveContainer = dynamic(() => import('recharts').then(mod => mod.ResponsiveContainer), { ssr: false }) as any;
-const Tooltip = dynamic(() => import('recharts').then(mod => mod.Tooltip), { ssr: false }) as any;
-const BarChart = dynamic(() => import('recharts').then(mod => mod.BarChart), { ssr: false }) as any;
-const Bar = dynamic(() => import('recharts').then(mod => mod.Bar), { ssr: false }) as any;
-const XAxis = dynamic(() => import('recharts').then(mod => mod.XAxis), { ssr: false }) as any;
-const YAxis = dynamic(() => import('recharts').then(mod => mod.YAxis), { ssr: false }) as any;
-const LineChart = dynamic(() => import('recharts').then(mod => mod.LineChart), { ssr: false }) as any;
-const Line = dynamic(() => import('recharts').then(mod => mod.Line), { ssr: false }) as any;
-const CartesianGrid = dynamic(() => import('recharts').then(mod => mod.CartesianGrid), { ssr: false }) as any;
+import type { ComponentType } from 'react';
+const PieChart = dynamic(() => import('recharts').then(mod => mod.PieChart), { ssr: false }) as ComponentType<Record<string, unknown>>;
+const Pie = dynamic(() => import('recharts').then(mod => mod.Pie), { ssr: false }) as ComponentType<Record<string, unknown>>;
+const Cell = dynamic(() => import('recharts').then(mod => mod.Cell), { ssr: false }) as ComponentType<Record<string, unknown>>;
+const ResponsiveContainer = dynamic(() => import('recharts').then(mod => mod.ResponsiveContainer), { ssr: false }) as ComponentType<Record<string, unknown>>;
+const Tooltip = dynamic(() => import('recharts').then(mod => mod.Tooltip), { ssr: false }) as ComponentType<Record<string, unknown>>;
+const BarChart = dynamic(() => import('recharts').then(mod => mod.BarChart), { ssr: false }) as ComponentType<Record<string, unknown>>;
+const Bar = dynamic(() => import('recharts').then(mod => mod.Bar), { ssr: false }) as ComponentType<Record<string, unknown>>;
+const XAxis = dynamic(() => import('recharts').then(mod => mod.XAxis), { ssr: false }) as ComponentType<Record<string, unknown>>;
+const YAxis = dynamic(() => import('recharts').then(mod => mod.YAxis), { ssr: false }) as ComponentType<Record<string, unknown>>;
+const LineChart = dynamic(() => import('recharts').then(mod => mod.LineChart), { ssr: false }) as ComponentType<Record<string, unknown>>;
+const Line = dynamic(() => import('recharts').then(mod => mod.Line), { ssr: false }) as ComponentType<Record<string, unknown>>;
+const CartesianGrid = dynamic(() => import('recharts').then(mod => mod.CartesianGrid), { ssr: false }) as ComponentType<Record<string, unknown>>;
 import { BarChart as LucideBarChart, Activity, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { useSettings } from '@/providers/SettingsProvider';
 import { useAuth } from '@/context/AuthContext';
@@ -20,10 +21,24 @@ import { useEffect, useState } from 'react';
 import { fetchAnalytics } from '@/lib/api';
 import { cn } from "@/lib/utils";
 
+interface ActivityLogEntry {
+  type: 'post' | 'comment';
+  title: string;
+  date: string;
+  points: number;
+}
+
+interface AnalyticsStats {
+  total_points: number;
+  rank_estimate: string;
+  engagement_score: number;
+  activityLog?: ActivityLogEntry[];
+}
+
 export default function AnalyticsPage() {
   const { chartType } = useSettings();
   const { user } = useAuth();
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<AnalyticsStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -166,7 +181,7 @@ export default function AnalyticsPage() {
         <div className="bg-slate-900/50 border border-white/5 p-6 rounded-2xl h-[400px] overflow-y-auto custom-scrollbar">
           <h3 className="text-lg font-bold text-white mb-4">Live Activity Log</h3>
           <div className="space-y-4">
-            {stats?.activityLog?.map((action: any, i: number) => (
+            {stats?.activityLog?.map((action: ActivityLogEntry, i: number) => (
               <div key={i} className="flex items-center gap-4 p-3 rounded-lg hover:bg-white/5 transition-colors border border-transparent hover:border-white/5">
                 <div className={cn(
                   "w-8 h-8 rounded-full flex items-center justify-center text-xs border border-white/5",

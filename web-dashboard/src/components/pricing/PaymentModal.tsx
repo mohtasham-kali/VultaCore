@@ -3,6 +3,20 @@
 import { useState } from "react";
 import { X, CreditCard, ShieldCheck, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import Image from "next/image";
+
+interface GooglePayWindow extends Window {
+  google: {
+    payments: {
+      api: {
+        PaymentsClient: new (config: { environment: string }) => {
+          isReadyToPay: (req: Record<string, unknown>) => Promise<{ result: boolean }>;
+          loadPaymentData: (req: Record<string, unknown>) => Promise<Record<string, unknown>>;
+        };
+      };
+    };
+  };
+}
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -40,37 +54,9 @@ export function PaymentModal({ isOpen, onClose, planName, planPrice, userId }: P
     }
   };
 
-  // Direct Google Pay API Initialization
-  const onGooglePayLoaded = async () => {
-    const paymentsClient = new (window as any).google.payments.api.PaymentsClient({
-      environment: 'TEST' // Change to 'PRODUCTION' when your merchant ID is verified
-    });
-
-    const isReadyToPayRequest = {
-      apiVersion: 2,
-      apiVersionMinor: 0,
-      allowedPaymentMethods: [{
-        type: 'CARD',
-        parameters: {
-          allowedAuthMethods: ['PAN_ONLY', 'CRYPTOGRAM_3DS'],
-          allowedCardNetworks: ['AMEX', 'DISCOVER', 'INTERAC', 'JCB', 'MASTERCARD', 'VISA']
-        }
-      }]
-    };
-
-    try {
-      const response = await paymentsClient.isReadyToPay(isReadyToPayRequest);
-      if (response.result) {
-        // GPay is ready
-      }
-    } catch (err) {
-      console.error("GPay Ready Error:", err);
-    }
-  };
-
   const handleGooglePay = async () => {
     setIsProcessing(true);
-    const paymentsClient = new (window as any).google.payments.api.PaymentsClient({
+    const paymentsClient = new (window as unknown as GooglePayWindow).google.payments.api.PaymentsClient({
       environment: 'TEST'
     });
 
@@ -171,7 +157,7 @@ export function PaymentModal({ isOpen, onClose, planName, planPrice, userId }: P
               method === "gpay" ? "text-white border-b-2 border-purple-500 bg-white/5" : "text-slate-500 hover:text-slate-300"
             )}
           >
-            <img src="https://upload.wikimedia.org/wikipedia/commons/f/f2/Google_Pay_Logo.svg" className="h-4 w-auto grayscale invert" alt="GPay" />
+            <Image src="https://upload.wikimedia.org/wikipedia/commons/f/f2/Google_Pay_Logo.svg" width={40} height={16} className="h-4 w-auto grayscale invert" alt="GPay" unoptimized />
             Google Pay
           </button>
         </div>
@@ -219,7 +205,7 @@ export function PaymentModal({ isOpen, onClose, planName, planPrice, userId }: P
           ) : (
             <div className="space-y-8 text-center py-4">
               <div className="p-8 border-2 border-dashed border-white/10 rounded-3xl bg-slate-950/50">
-                <img src="https://upload.wikimedia.org/wikipedia/commons/f/f2/Google_Pay_Logo.svg" className="h-8 w-auto mx-auto mb-4 invert" alt="GPay" />
+                <Image src="https://upload.wikimedia.org/wikipedia/commons/f/f2/Google_Pay_Logo.svg" width={120} height={32} className="h-8 w-auto mx-auto mb-4 invert" alt="GPay" unoptimized />
                 <p className="text-slate-400 text-sm">Pay quickly and securely with your Google account.</p>
               </div>
               <button 
@@ -229,7 +215,7 @@ export function PaymentModal({ isOpen, onClose, planName, planPrice, userId }: P
               >
                 {isProcessing ? <Loader2 className="w-6 h-6 animate-spin text-black" /> : (
                   <>
-                    <img src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" className="w-5 h-5" alt="G" />
+                    <Image src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" width={20} height={20} className="w-5 h-5" alt="G" unoptimized />
                     Pay with Google Pay
                   </>
                 )}

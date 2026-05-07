@@ -1,7 +1,6 @@
 "use client";
 
-import { Download, Monitor, Laptop, Terminal, Shield, ArrowRight, Package, Cpu } from "lucide-react";
-import { useState } from "react";
+import { Download, Monitor, Laptop, Terminal, Shield, Cpu } from "lucide-react";
 
 const downloadOptions = [
   {
@@ -131,10 +130,10 @@ export default function DownloadPage() {
             </div>
             
             <div className="space-y-4">
-              <p className="text-slate-500">// Linux Installation Steps</p>
+              {/* Linux Installation Steps */}
               <p className="text-blue-400">sudo dpkg -i vultacore-v2.0.4-linux.deb</p>
               <p className="text-emerald-400">vultacore --init --token=YOUR_JWT_SECRET</p>
-              <p className="text-slate-500 mt-4">// Success Response</p>
+              {/* Success Response */}
               <p className="text-slate-300">
                 [SYSTEM] Initializing Infrastructure Core...<br />
                 [SYSTEM] Connecting to Supabase Persistence Layer...<br />

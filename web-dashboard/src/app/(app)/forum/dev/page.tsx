@@ -6,8 +6,19 @@ import { useEffect, useState, useCallback } from "react";
 import { fetchPosts } from "@/lib/api";
 import { CreatePostModal } from "@/components/forum/CreatePostModal";
 
+interface Post {
+  id: string;
+  title: string;
+  content: string;
+  tags: string[];
+  likes: number;
+  commentsCount: number;
+  isResolved?: boolean;
+  author?: { username: string };
+}
+
 export default function DevForumPage() {
-  const [posts, setPosts] = useState<any[]>([]);
+  const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -15,7 +26,7 @@ export default function DevForumPage() {
     setLoading(true);
     try {
       const data = await fetchPosts('dev');
-      setPosts(data);
+      setPosts(Array.isArray(data) ? data : (data?.posts || []));
     } catch (e) {
       console.error("Failed to load posts", e);
     } finally {

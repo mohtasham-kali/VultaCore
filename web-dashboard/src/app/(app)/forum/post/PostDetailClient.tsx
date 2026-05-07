@@ -5,12 +5,32 @@ import { ArrowLeft, MessageSquare, ThumbsUp, Send, Share2, MoreHorizontal, Loade
 import { useEffect, useState, useCallback } from "react";
 import { fetchPostDetail, createComment, likePost } from "@/lib/api";
 
+interface Comment {
+  id: string;
+  content: string;
+  likes: number;
+  createdAt: string;
+  author?: { username: string };
+}
+
+interface Post {
+  id: string;
+  title: string;
+  content: string;
+  type: 'dev' | 'cyber';
+  likes: number;
+  tags?: string[];
+  createdAt: string;
+  author?: { username: string };
+  comments?: Comment[];
+}
+
 export function PostDetailClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const id = searchParams.get("id") || "";
   
-  const [post, setPost] = useState<any>(null);
+  const [post, setPost] = useState<Post | null>(null);
   const [loading, setLoading] = useState(true);
   const [newComment, setNewComment] = useState("");
   const [submittingComment, setSubmittingComment] = useState(false);
@@ -176,7 +196,7 @@ export function PostDetailClient() {
 
         {/* Comments List */}
         <div className="space-y-6">
-          {post.comments?.map((comment: any) => (
+          {post.comments?.map((comment: Comment) => (
             <div key={comment.id} className="flex gap-4 group">
               <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 text-sm font-bold border border-white/5">
                 {comment.author?.username?.[0] || 'A'}
