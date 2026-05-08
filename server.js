@@ -40,11 +40,16 @@ setTimeout(() => {
 const masterPort = process.env.PORT || 3000;
 const server = http.createServer((req, res) => {
     // Route /api to Backend, everything else to Dashboard
-    const target = req.url.startsWith('/api') ? BACK_PORT : DASH_PORT;
+    const isApi = req.url.startsWith('/api');
+    const targetPort = isApi ? BACK_PORT : DASH_PORT;
     
-    proxy.web(req, res, { target: `http://localhost:${target}` }, (e) => {
+    proxy.web(req, res, { 
+        target: `http://localhost:${targetPort}`,
+        changeOrigin: true,
+        xfwd: true 
+    }, (e) => {
         res.writeHead(502, { 'Content-Type': 'text/plain' });
-        res.end("System is initializing / No engine response. Please refresh in 5 seconds.");
+        res.end("System is initializing. Please refresh in 5 seconds.");
     });
 });
 
