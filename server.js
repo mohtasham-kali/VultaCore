@@ -7,52 +7,64 @@ const fs = require('fs');
 
 const proxy = httpProxy.createProxyServer({});
 const rootDir = __dirname;
-
-// Use high ports to avoid common conflicts on shared hosting
 const BACK_PORT = 49152;
 const DASH_PORT = 49153;
 
-console.log("🚀 VultaCore Master Proxy Booting...");
+// Log file for debugging engine startups
+const logFile = path.join(rootDir, 'engine_log.txt');
+fs.writeFileSync(logFile, `--- Boot Log ${new Date().toISOString()} ---\n`);
 
-function startApp(name, filePath, port) {
-    if (!fs.existsSync(filePath)) {
-        console.error(`❌ ${name} file not found at ${filePath}`);
-        return;
-    }
-    console.log(`📡 Spawning ${name} engine on port ${port}...`);
-    const child = spawn('node', [filePath], {
-        env: { ...process.env, PORT: port },
-        stdio: 'inherit',
-        shell: true
-    });
-    child.on('error', (err) => console.error(`❌ ${name} process error:`, err));
-    child.on('exit', (code) => console.log(`ℹ️ ${name} exited with code ${code}`));
+function log(msg) {
+    const line = `[${new Date().toLocaleTimeString()}] ${msg}\n`;
+    fs.appendFileSync(logFile, line);
+    console.log(line.trim());
 }
 
-// 1. Start Engines
-startApp('Backend', path.join(rootDir, 'backend-api', 'dist', 'main.js'), BACK_PORT);
+function startApp(name, filePath, port, cwd) {
+    if (!fs.existsSync(filePath)) {
+        log(`❌ ${name} file not found at ${filePath}`);
+        return;
+    }
+    
+    log(`📡 Spawning ${name} engine on port ${port}...`);
+    const child = spawn('node', [filePath], {
+        env: { ...process.env, PORT: port },
+        cwd: cwd || rootDir,
+        shell: true
+    });
+
+    child.stdout.on('data', (data) => log(`[${name}] ${data}`));
+    child.stderr.on('data', (data) => log(`[${name} ERROR] ${data}`));
+    
+    child.on('exit', (code) => log(`ℹ️ ${name} exited with code ${code}`));
+}
+
+// 1. Start Engines with correct WorkDirs
+const backendEntry = path.join(rootDir, 'backend-api', 'dist', 'main.js');
+startApp('Backend', backendEntry, BACK_PORT, path.join(rootDir, 'backend-api'));
 
 setTimeout(() => {
-    startApp('Dashboard', path.join(rootDir, 'web-dashboard', '.next', 'standalone', 'web-dashboard', 'server.js'), DASH_PORT);
-}, 4000);
+    // Next.js standalone must be run from the standalone folder to find .next/static
+    const dashboardEntry = path.join(rootDir, 'web-dashboard', '.next', 'standalone', 'web-dashboard', 'server.js');
+    const dashboardCwd = path.join(rootDir, 'web-dashboard', '.next', 'standalone', 'web-dashboard');
+    startApp('Dashboard', dashboardEntry, DASH_PORT, dashboardCwd);
+}, 5000);
 
 // 2. Proxy Server
 const masterPort = process.env.PORT || 3000;
 const server = http.createServer((req, res) => {
-    // Route /api to Backend, everything else to Dashboard
-    const isApi = req.url.startsWith('/api');
-    const targetPort = isApi ? BACK_PORT : DASH_PORT;
+    const target = req.url.startsWith('/api') ? BACK_PORT : DASH_PORT;
     
     proxy.web(req, res, { 
-        target: `http://localhost:${targetPort}`,
+        target: `http://localhost:${target}`,
         changeOrigin: true,
-        xfwd: true 
+        xfwd: true
     }, (e) => {
         res.writeHead(502, { 'Content-Type': 'text/plain' });
-        res.end("System is initializing. Please refresh in 5 seconds.");
+        res.end("System is initializing. Please refresh in 5 seconds.\nCheck engine_log.txt for details.");
     });
 });
 
 server.listen(masterPort, () => {
-    console.log(`✨ VultaCore Master Proxy Online at port ${masterPort}`);
+    log(`✨ Master Proxy Online at port ${masterPort}`);
 });
