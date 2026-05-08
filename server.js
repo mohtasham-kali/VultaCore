@@ -1,75 +1,52 @@
 #!/usr/bin/env node
-const fs = require('fs');
+const http = require('http');
+const httpProxy = require('http-proxy');
 const path = require('path');
+const fs = require('fs');
 
-console.log("🚀 VultaCore Booting...");
-
+const proxy = httpProxy.createProxyServer({});
 const rootDir = __dirname;
-let fallbackActive = false;
-const possiblePaths = [
-  path.join(rootDir, 'backend-api', 'dist', 'main.js'),
-  path.join(rootDir, 'backend', 'dist', 'main.js'),
-  path.join(rootDir, 'dist', 'main.js'),
-  path.join(rootDir, 'repository', 'backend-api', 'dist', 'main.js'),
-  path.join(rootDir, '..', 'backend-api', 'dist', 'main.js')
-];
 
-let backendAppPath = possiblePaths.find(p => fs.existsSync(p));
+// Ports for internal apps
+const BACKEND_PORT = 3001;
+const DASHBOARD_PORT = 3002;
 
-function logError(err) {
-  const msg = `[${new Date().toISOString()}] ${err?.stack || err}\n`;
-  try {
-    fs.appendFileSync(path.join(rootDir, 'error_log.txt'), msg);
-  } catch (e) {
-    // Ignore permissions errors to prevent recursive failure
-  }
-  console.error(msg);
+console.log("🚀 VultaCore Master Controller Booting...");
+
+// 1. Start Backend (NestJS)
+const backendPath = path.join(rootDir, 'backend-api', 'dist', 'main.js');
+if (fs.existsSync(backendPath)) {
+    process.env.PORT = BACKEND_PORT;
+    require(backendPath);
+    console.log(`✅ Backend engine started on port ${BACKEND_PORT}`);
 }
 
-function startFallbackServer(error) {
-  if (fallbackActive) return;
-  fallbackActive = true;
-  try {
-    const http = require('http');
-    const port = process.env.PORT || 3001;
-    const server = http.createServer((req, res) => {
-      res.writeHead(500, { 'Content-Type': 'text/html' });
-      res.end(`<h1>VultaCore Boot Diagnostic</h1><p><b>A FATAL BOOT ERROR OCCURRED:</b></p><pre>${error?.stack || error}</pre>`);
-    });
-    // Safely bind to internal ports/sockets
-    server.on('error', (e) => {
-      console.error("HTTP Server Error:", e);
-    });
-    server.listen(port);
-    console.log("⚠️ Fallback server successfully bound to " + port);
-  } catch (err) {
-    logError("Fallback server failed to bind: " + err.message);
-  }
+// 2. Start Dashboard (Next.js Standalone)
+const dashboardPath = path.join(rootDir, 'web-dashboard', '.next', 'standalone', 'web-dashboard', 'server.js');
+if (fs.existsSync(dashboardPath)) {
+    // We need to run this in a way that it doesn't conflict with the root env
+    // Next.js standalone usually reads from its own environment
+    process.env.PORT = DASHBOARD_PORT;
+    require(dashboardPath);
+    console.log(`✅ Dashboard engine started on port ${DASHBOARD_PORT}`);
 }
 
-process.on('uncaughtException', (err) => {
-  logError(err);
-  startFallbackServer(err);
-});
-
-process.on('unhandledRejection', (reason) => {
-  logError(reason);
-  startFallbackServer(reason);
-});
-
-async function start() {
-  try {
-    if (backendAppPath) {
-      console.log(`✅ Loading Backend from: ${backendAppPath}`);
-      require(backendAppPath);
+// 3. Master Proxy Server
+const masterPort = process.env.REAL_PORT || process.env.PORT || 3000;
+const server = http.createServer((req, res) => {
+    if (req.url.startsWith('/api')) {
+        // Route to Backend
+        proxy.web(req, res, { target: `http://localhost:${BACKEND_PORT}` });
     } else {
-      const searchStatus = possiblePaths.map(p => `${p} (${fs.existsSync(p) ? 'FOUND' : 'MISSING'})`).join('\n');
-      throw new Error(`CRITICAL: backend distribution not found. Searched:\n${searchStatus}`);
+        // Route to Dashboard
+        proxy.web(req, res, { target: `http://localhost:${DASHBOARD_PORT}` });
     }
-  } catch (e) {
-    logError(e);
-    startFallbackServer(e);
-  }
-}
+});
 
-start();
+server.on('error', (err) => {
+    console.error("Master Proxy Error:", err);
+});
+
+server.listen(masterPort, () => {
+    console.log(`✨ VultaCore Online at port ${masterPort}`);
+});
