@@ -1,7 +1,12 @@
 node_modules/
-# Ignore root dist if needed, but DO NOT ignore backend-api/dist.
+# Ignore root dist, but allow backend-api/dist
 /dist/
+!backend-api/dist/
+
+# Allow Next.js standalone output
 .next/
+!web-dashboard/.next/standalone/
+
 .env
 .env.local
 error_log.txt
