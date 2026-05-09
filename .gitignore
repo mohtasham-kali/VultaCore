@@ -2,7 +2,6 @@ node_modules/
 # Ignore root dist if needed, but DO NOT ignore backend-api/dist.
 /dist/
 .next/
-*.sqlite
 .env
 .env.local
 error_log.txt
