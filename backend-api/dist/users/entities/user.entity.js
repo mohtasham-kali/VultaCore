@@ -21,6 +21,7 @@ let User = class User {
     password;
     points;
     rank;
+    isBot;
     plan;
     posts;
     comments;
@@ -51,6 +52,10 @@ __decorate([
     (0, typeorm_1.Column)({ default: 'Level 1' }),
     __metadata("design:type", String)
 ], User.prototype, "rank", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ default: false }),
+    __metadata("design:type", Boolean)
+], User.prototype, "isBot", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)(() => plan_entity_1.Plan, (plan) => plan.users),
     __metadata("design:type", plan_entity_1.Plan)

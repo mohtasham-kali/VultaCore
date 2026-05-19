@@ -18,6 +18,14 @@ async function bootstrap() {
         password: 'password123',
         points: 1250,
     });
+    await usersService.create({
+        id: 'vultabot-uuid',
+        username: 'VultaBot',
+        email: 'bot@vultacore.app',
+        password: 'bot-password-123',
+        points: 0,
+        isBot: true,
+    });
     await forumService.createPost({
         title: 'How to fix "TypeError: Cannot read property map of undefined" in React?',
         content: `I'm getting this frustrating error in my React component when trying to render a list. The data comes from an API call...`,

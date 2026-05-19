@@ -42,6 +42,9 @@ let ForumController = class ForumController {
         const author = await this.usersService.findOrCreateUser(userId, email);
         return this.forumService.createComment(id, dto, author);
     }
+    likeComment(commentId) {
+        return this.forumService.likeComment(commentId);
+    }
 };
 exports.ForumController = ForumController;
 __decorate([
@@ -80,6 +83,13 @@ __decorate([
     __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", Promise)
 ], ForumController.prototype, "createComment", null);
+__decorate([
+    (0, common_1.Post)('comments/:commentId/like'),
+    __param(0, (0, common_1.Param)('commentId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], ForumController.prototype, "likeComment", null);
 exports.ForumController = ForumController = __decorate([
     (0, common_1.Controller)('forum'),
     __metadata("design:paramtypes", [forum_service_1.ForumService,
