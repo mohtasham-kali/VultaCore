@@ -7,8 +7,8 @@ const fs = require('fs');
 
 const proxy = httpProxy.createProxyServer({});
 const rootDir = __dirname;
-const BACK_PORT = 49152;
-const DASH_PORT = 49155;
+const BACK_PORT = process.env.BACK_PORT || (Math.floor(Math.random() * 10000) + 40000);
+const DASH_PORT = process.env.DASH_PORT || (Math.floor(Math.random() * 10000) + 50000);
 
 let bootLogs = [`[${new Date().toLocaleTimeString()}] Master Proxy Booting...` || ""];
 
