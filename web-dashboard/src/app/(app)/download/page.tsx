@@ -5,36 +5,36 @@ import { Download, Monitor, Laptop, Terminal, Shield, Cpu } from "lucide-react";
 const downloadOptions = [
   {
     platform: "Windows",
-    version: "2.0.4",
+    version: "2.1.0",
     format: ".exe",
     icon: Monitor,
     color: "text-blue-400",
     bgColor: "bg-blue-500/10",
     borderColor: "border-blue-500/20",
-    url: "#",
-    description: "Full desktop client with specialized security auditing tools."
+    url: "https://github.com/mohtasham-kali/VultaCore/releases/download/v2.1.0/desktop-app_2.1.0_x64-setup.exe",
+    description: "Installable executable for Windows 10/11 with full hardware acceleration."
   },
   {
     platform: "Linux",
-    version: "2.0.4",
-    format: ".deb",
+    version: "2.1.0",
+    format: "AppImage",
     icon: Terminal,
     color: "text-orange-400",
     bgColor: "bg-orange-500/10",
     borderColor: "border-orange-500/20",
-    url: "#",
-    description: "Debian/Ubuntu package optimized for core infrastructure tasks."
+    url: "https://github.com/mohtasham-kali/VultaCore/releases/download/v2.1.0/desktop-app_2.1.0_amd64.AppImage",
+    description: "Portable AppImage for all distributions. No installation required."
   },
   {
     platform: "macOS",
-    version: "2.0.4 (Beta)",
+    version: "2.1.0",
     format: ".dmg",
     icon: Laptop,
     color: "text-purple-400",
     bgColor: "bg-purple-500/10",
     borderColor: "border-purple-500/20",
-    url: "#",
-    description: "Apple Silicon & Intel support with high-performance ML core."
+    url: "https://github.com/mohtasham-kali/VultaCore/releases/download/v2.1.0/desktop-app_2.1.0_aarch64.dmg",
+    description: "Universal disk image for Apple Silicon (M1/M2/M3) and Intel Macs."
   }
 ];
 
@@ -75,10 +75,13 @@ export default function DownloadPage() {
               {opt.description}
             </p>
 
-            <button className="w-full py-4 rounded-2xl bg-white text-slate-950 font-black text-sm flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors shadow-2xl shadow-white/10">
+            <a 
+              href={opt.url}
+              className="w-full py-4 rounded-2xl bg-white text-slate-950 font-black text-sm flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors shadow-2xl shadow-white/10"
+            >
               <Download className="w-4 h-4" />
               DOWNLOAD NOW
-            </button>
+            </a>
           </div>
         ))}
       </div>
@@ -131,14 +134,16 @@ export default function DownloadPage() {
             
             <div className="space-y-4">
               {/* Linux Installation Steps */}
-              <p className="text-blue-400">sudo dpkg -i vultacore-v2.0.4-linux.deb</p>
-              <p className="text-emerald-400">vultacore --init --token=YOUR_JWT_SECRET</p>
-              {/* Success Response */}
-              <p className="text-slate-300">
-                [SYSTEM] Initializing Infrastructure Core...<br />
-                [SYSTEM] Connecting to Supabase Persistence Layer...<br />
-                [SYSTEM] <span className="text-emerald-400 font-bold">READY</span> — Port :3001 occupied by background daemon.
-              </p>
+              <div className="space-y-1">
+                <p className="text-slate-500"># Via Curl (Universal)</p>
+                <p className="text-blue-400">curl -fsSL https://vultacore.tech/install.sh | sh</p>
+              </div>
+              
+              <div className="space-y-1 pt-2">
+                <p className="text-slate-500"># Via APT (Debian/Ubuntu)</p>
+                <p className="text-blue-400">sudo apt update && sudo apt install vultacore</p>
+              </div>
+
             </div>
           </div>
         </div>

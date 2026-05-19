@@ -27,6 +27,13 @@ export async function likePost(postId: string) {
   return res.json();
 }
 
+export async function likeComment(commentId: string) {
+  const res = await fetch(`${API_BASE_URL}/forum/comments/${commentId}/like`, {
+    method: 'POST',
+  });
+  return res.json();
+}
+
 export async function executeBot(id: string, prompt: string, userId: string, context?: string) {
   const res = await fetch(`${API_BASE_URL}/bots/${id}/execute`, {
     method: 'POST',
