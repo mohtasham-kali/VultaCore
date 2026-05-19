@@ -14,7 +14,9 @@
 /coverage
 
 # next.js
-/.next/
+# We MUST track .next for Hostinger deployment, but omit the cache
+!/.next/
+/.next/cache/
 /out/
 
 # production
