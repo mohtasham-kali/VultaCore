@@ -19,14 +19,14 @@ function log(msg) {
     console.log(line);
 }
 
-function startApp(name, filePath, port, cwd) {
+function startApp(name, filePath, args, port, cwd) {
     if (!fs.existsSync(filePath)) {
         log(`❌ ${name} file not found at ${filePath}`);
         return;
     }
     
     log(`📡 Spawning ${name} engine on port ${port}...`);
-    const child = spawn(process.execPath, [`"${filePath}"`], {
+    const child = spawn(process.execPath, args, {
         env: { ...process.env, PORT: port },
         cwd: cwd || rootDir,
         shell: true
@@ -39,12 +39,25 @@ function startApp(name, filePath, port, cwd) {
 
 // 1. Start Engines
 const backendEntry = path.join(rootDir, 'backend-api', 'dist', 'main.js');
-startApp('Backend', backendEntry, BACK_PORT, path.join(rootDir, 'backend-api'));
+startApp('Backend', backendEntry, [`"${backendEntry}"`], BACK_PORT, path.join(rootDir, 'backend-api'));
 
 setTimeout(() => {
-    const dashboardEntry = path.join(rootDir, 'web-dashboard', '.next', 'standalone', 'web-dashboard', 'server.js');
-    const dashboardCwd = path.join(rootDir, 'web-dashboard', '.next', 'standalone', 'web-dashboard');
-    startApp('Dashboard', dashboardEntry, DASH_PORT, dashboardCwd);
+    let dashboardEntry = path.join(rootDir, 'web-dashboard', '.next', 'standalone', 'web-dashboard', 'server.js');
+    let dashboardCwd = path.join(rootDir, 'web-dashboard', '.next', 'standalone', 'web-dashboard');
+    let dArgs = [`"${dashboardEntry}"`];
+
+    if (!fs.existsSync(dashboardEntry)) {
+        dashboardEntry = path.join(rootDir, 'web-dashboard', '.next', 'standalone', 'server.js');
+        dashboardCwd = path.join(rootDir, 'web-dashboard', '.next', 'standalone');
+        dArgs = [`"${dashboardEntry}"`];
+    }
+    if (!fs.existsSync(dashboardEntry)) {
+        dashboardEntry = path.join(rootDir, 'web-dashboard', 'node_modules', 'next', 'dist', 'bin', 'next');
+        dashboardCwd = path.join(rootDir, 'web-dashboard');
+        dArgs = [`"${dashboardEntry}"`, 'start'];
+    }
+
+    startApp('Dashboard', dashboardEntry, dArgs, DASH_PORT, dashboardCwd);
 }, 5000);
 
 // 2. Proxy Server
