@@ -1,9 +1,9 @@
 "use client";
 
 import { useSearchParams, useRouter } from "next/navigation";
-import { ArrowLeft, MessageSquare, ThumbsUp, Send, Share2, MoreHorizontal, Loader2 } from "lucide-react";
+import { ArrowLeft, MessageSquare, ThumbsUp, Send, MoreHorizontal, Loader2 } from "lucide-react";
 import { useEffect, useState, useCallback } from "react";
-import { fetchPostDetail, createComment, likePost } from "@/lib/api";
+import { fetchPostDetail, createComment, likePost, likeComment } from "@/lib/api";
 
 interface Comment {
   id: string;
@@ -72,7 +72,23 @@ export function PostDetailClient() {
       await likePost(id);
     } catch (e) {
       console.error(e);
-      // Rollback on error if needed, but keeping it simple for dev
+      // Rollback on error if needed
+    }
+  };
+
+  const handleLikeComment = async (commentId: string) => {
+    if (!post) return;
+    
+    // Optimistic update for comments
+    const updatedComments = post.comments?.map(c => 
+      c.id === commentId ? { ...c, likes: c.likes + 1 } : c
+    );
+    setPost({ ...post, comments: updatedComments });
+
+    try {
+      await likeComment(commentId);
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -158,10 +174,6 @@ export function PostDetailClient() {
               <span>{post.comments?.length || 0} Comments</span>
             </button>
           </div>
-          <button className="flex items-center gap-2 text-slate-400 hover:text-white group">
-            <Share2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
-            Share
-          </button>
         </div>
       </div>
 
@@ -211,7 +223,10 @@ export function PostDetailClient() {
                     {comment.content}
                   </p>
                   <div className="flex items-center gap-4">
-                    <button className="flex items-center gap-1 text-xs text-slate-500 hover:text-purple-400 transition-colors">
+                    <button 
+                      onClick={() => handleLikeComment(comment.id)}
+                      className="flex items-center gap-1 text-xs text-slate-500 hover:text-purple-400 transition-colors"
+                    >
                       <ThumbsUp className="w-3 h-3" />
                       {comment.likes}
                     </button>
