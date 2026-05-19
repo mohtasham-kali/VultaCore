@@ -43,5 +43,10 @@ export class ForumController {
     const author = await this.usersService.findOrCreateUser(userId, email);
     return this.forumService.createComment(id, dto, author);
   }
+
+  @Post('comments/:commentId/like')
+  likeComment(@Param('commentId') commentId: string) {
+    return this.forumService.likeComment(commentId);
+  }
 }
 

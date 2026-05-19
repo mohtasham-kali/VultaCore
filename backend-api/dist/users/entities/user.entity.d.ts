@@ -8,6 +8,7 @@ export declare class User {
     password: string;
     points: number;
     rank: string;
+    isBot: boolean;
     plan: Plan;
     posts: Post[];
     comments: Comment[];

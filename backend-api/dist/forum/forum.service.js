@@ -63,6 +63,31 @@ let ForumService = class ForumService {
             post,
             author,
         });
+        const savedComment = await this.commentRepository.save(comment);
+        if (!author.isBot) {
+            const now = new Date();
+            const diffMs = now.getTime() - post.createdAt.getTime();
+            const diffMin = diffMs / (1000 * 60);
+            if (diffMin <= 15) {
+                author.points += 10;
+                await this.postRepository.manager.save(author);
+            }
+        }
+        return savedComment;
+    }
+    async likeComment(commentId) {
+        const comment = await this.commentRepository.findOne({
+            where: { id: commentId },
+            relations: ['author'],
+        });
+        if (!comment) {
+            throw new common_1.NotFoundException(`Comment with ID "${commentId}" not found`);
+        }
+        comment.likes += 1;
+        if (comment.author && !comment.author.isBot) {
+            comment.author.points += 1;
+            await this.postRepository.manager.save(comment.author);
+        }
         return this.commentRepository.save(comment);
     }
 };

@@ -62,6 +62,42 @@ export class ForumService {
       post,
       author,
     });
-    return this.commentRepository.save(comment) as any;
+    
+    const savedComment = await this.commentRepository.save(comment);
+
+    // Reward Logic: if human user replies within 15 minutes
+    if (!author.isBot) {
+      const now = new Date();
+      const diffMs = now.getTime() - post.createdAt.getTime();
+      const diffMin = diffMs / (1000 * 60);
+
+      if (diffMin <= 15) {
+        author.points += 10; // Reward for quick answer
+        await this.postRepository.manager.save(author);
+      }
+    }
+
+    return savedComment as any;
+  }
+
+  async likeComment(commentId: string): Promise<Comment> {
+    const comment = await this.commentRepository.findOne({
+      where: { id: commentId },
+      relations: ['author'],
+    });
+
+    if (!comment) {
+      throw new NotFoundException(`Comment with ID "${commentId}" not found`);
+    }
+
+    comment.likes += 1;
+    
+    // Reward for confirmation point (if not a bot)
+    if (comment.author && !comment.author.isBot) {
+      comment.author.points += 1;
+      await this.postRepository.manager.save(comment.author);
+    }
+
+    return this.commentRepository.save(comment);
   }
 }

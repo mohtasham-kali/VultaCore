@@ -13,4 +13,5 @@ export declare class ForumService {
     findOnePost(id: string): Promise<Post>;
     likePost(id: string): Promise<Post>;
     createComment(postId: string, createCommentDto: CreateCommentDto, author: User): Promise<Comment>;
+    likeComment(commentId: string): Promise<Comment>;
 }

@@ -20,6 +20,16 @@ async function bootstrap() {
     password: 'password123',
     points: 1250,
   });
+  
+  // Create AI Bot User
+  await usersService.create({
+    id: 'vultabot-uuid',
+    username: 'VultaBot',
+    email: 'bot@vultacore.app',
+    password: 'bot-password-123',
+    points: 0,
+    isBot: true,
+  });
 
   // Create Mock Posts
   await forumService.createPost({

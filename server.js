@@ -8,7 +8,7 @@ const fs = require('fs');
 const proxy = httpProxy.createProxyServer({});
 const rootDir = __dirname;
 const BACK_PORT = 49152;
-const DASH_PORT = 49153;
+const DASH_PORT = 49155;
 
 let bootLogs = [`[${new Date().toLocaleTimeString()}] Master Proxy Booting...` || ""];
 
@@ -26,7 +26,7 @@ function startApp(name, filePath, port, cwd) {
     }
     
     log(`📡 Spawning ${name} engine on port ${port}...`);
-    const child = spawn(process.execPath, [filePath], {
+    const child = spawn(process.execPath, [`"${filePath}"`], {
         env: { ...process.env, PORT: port },
         cwd: cwd || rootDir,
         shell: true
@@ -72,14 +72,16 @@ const server = http.createServer((req, res) => {
         }
     }
 
-    if (req.url.match(/\.(png|jpg|jpeg|gif|svg|ico|webp|woff|woff2|json)$/)) {
+    if (req.url.match(/\.(png|jpg|jpeg|gif|svg|ico|webp|woff|woff2|json|exe|dmg|AppImage|deb)$/)) {
         const filePath = path.join(rootDir, 'web-dashboard', 'public', req.url);
         if (fs.existsSync(filePath)) {
              const ext = path.extname(filePath).toLowerCase();
              const mimeTypes = { 
                 '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', 
                 '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.webp': 'image/webp',
-                '.woff': 'font/woff', '.woff2': 'font/woff2', '.json': 'application/json'
+                '.woff': 'font/woff', '.woff2': 'font/woff2', '.json': 'application/json',
+                '.exe': 'application/vnd.microsoft.portable-executable', '.dmg': 'application/x-apple-diskimage',
+                '.appimage': 'application/x-executable', '.deb': 'application/vnd.debian.binary-package'
              };
              res.writeHead(200, { 'Content-Type': mimeTypes[ext] || 'application/octet-stream' });
              return fs.createReadStream(filePath).pipe(res);

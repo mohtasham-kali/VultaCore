@@ -22,6 +22,9 @@ export class User {
 
   @Column({ default: 'Level 1' })
   rank: string;
+  
+  @Column({ default: false })
+  isBot: boolean;
 
   @ManyToOne(() => Plan, (plan) => plan.users)
   plan: Plan;

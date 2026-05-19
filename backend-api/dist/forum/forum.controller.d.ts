@@ -17,4 +17,5 @@ export declare class ForumController {
         userId: string;
         email?: string;
     }): Promise<import("./entities/comment.entity").Comment>;
+    likeComment(commentId: string): Promise<import("./entities/comment.entity").Comment>;
 }
