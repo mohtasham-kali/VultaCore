@@ -50,6 +50,43 @@ setTimeout(() => {
 // 2. Proxy Server
 const masterPort = process.env.PORT || 3000;
 const server = http.createServer((req, res) => {
+    // 1. Handle Static Assets Automatically
+    if (req.url.startsWith('/_next/static/')) {
+        const filePath = path.join(rootDir, 'web-dashboard', '.next', 'static', req.url.replace('/_next/static/', ''));
+        if (fs.existsSync(filePath)) {
+            const ext = path.extname(filePath).toLowerCase();
+            const mimeTypes = { 
+                '.css': 'text/css', 
+                '.js': 'text/javascript', 
+                '.png': 'image/png', 
+                '.jpg': 'image/jpeg', 
+                '.jpeg': 'image/jpeg', 
+                '.svg': 'image/svg+xml', 
+                '.json': 'application/json',
+                '.woff': 'font/woff',
+                '.woff2': 'font/woff2',
+                '.ico': 'image/x-icon'
+            };
+            res.writeHead(200, { 'Content-Type': mimeTypes[ext] || 'application/octet-stream' });
+            return fs.createReadStream(filePath).pipe(res);
+        }
+    }
+
+    if (req.url.match(/\.(png|jpg|jpeg|gif|svg|ico|webp|woff|woff2|json)$/)) {
+        const filePath = path.join(rootDir, 'web-dashboard', 'public', req.url);
+        if (fs.existsSync(filePath)) {
+             const ext = path.extname(filePath).toLowerCase();
+             const mimeTypes = { 
+                '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', 
+                '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.webp': 'image/webp',
+                '.woff': 'font/woff', '.woff2': 'font/woff2', '.json': 'application/json'
+             };
+             res.writeHead(200, { 'Content-Type': mimeTypes[ext] || 'application/octet-stream' });
+             return fs.createReadStream(filePath).pipe(res);
+        }
+    }
+
+    // 2. Proxy to Engines
     const target = req.url.startsWith('/api') ? BACK_PORT : DASH_PORT;
     
     proxy.web(req, res, { 
