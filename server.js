@@ -26,7 +26,7 @@ function startApp(name, filePath, port, cwd) {
     }
     
     log(`📡 Spawning ${name} engine on port ${port}...`);
-    const child = spawn('node', [filePath], {
+    const child = spawn(process.execPath, [filePath], {
         env: { ...process.env, PORT: port },
         cwd: cwd || rootDir,
         shell: true
