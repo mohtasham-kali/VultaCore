@@ -10,14 +10,14 @@
   "/(app)/bots/general/page": "/bots/general",
   "/(app)/download/page": "/download",
   "/(app)/enterprise-contact/page": "/enterprise-contact",
-  "/(app)/forum/cyber/page": "/forum/cyber",
   "/(app)/forum/dev/page": "/forum/dev",
+  "/(app)/forum/cyber/page": "/forum/cyber",
   "/(app)/forum/post/page": "/forum/post",
+  "/(app)/pricing/page": "/pricing",
   "/(app)/profile/page": "/profile",
   "/(app)/settings/page": "/settings",
-  "/(app)/pricing/page": "/pricing",
-  "/(app)/admin/page": "/admin",
   "/(app)/admin/leads/page": "/admin/leads",
-  "/(app)/admin/pos/page": "/admin/pos",
-  "/(app)/admin/users/page": "/admin/users"
+  "/(app)/admin/page": "/admin",
+  "/(app)/admin/users/page": "/admin/users",
+  "/(app)/admin/pos/page": "/admin/pos"
 }
