@@ -5,17 +5,9 @@ on:
     branches: [main]
 
 jobs:
-  deploy-web:
-    name: Deploy Web Dashboard
+  deploy-hostinger:
+    name: Build & Deploy to Hostinger
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
-
-    defaults:
-      run:
-        working-directory: web-dashboard
 
     steps:
       - name: Checkout
@@ -36,22 +28,35 @@ jobs:
           restore-keys: |
             nextjs-${{ runner.os }}-${{ hashFiles('web-dashboard/package-lock.json') }}-
 
-      - name: Install & Build
+      - name: Install & Build Next.js
+        working-directory: web-dashboard
         run: |
           npm ci
           npm run build
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+          NEXT_PUBLIC_API_URL: https://vultacore.techprogression.com/api
 
-      # Option A: Deploy to Vercel
-      - name: Deploy to Vercel
-        if: ${{ vars.DEPLOY_TARGET == 'vercel' }}
-        run: npx vercel --prod --token ${{ secrets.VERCEL_TOKEN }} --yes
-        env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      - name: Commit built .next back to repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add web-dashboard/.next/
+          git diff --staged --quiet || git commit -m "ci: update compiled next.js build [skip ci]"
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/mohtasham-kali/VultaCore.git main
+
+      - name: Deploy to Hostinger via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOSTINGER_SSH_HOST }}
+          port: ${{ secrets.HOSTINGER_SSH_PORT }}
+          username: ${{ secrets.HOSTINGER_SSH_USER }}
+          password: ${{ secrets.HOSTINGER_SSH_PASS }}
+          script: |
+            cd ~/domains/vultacore.techprogression.com/nodejs
+            git fetch origin main
+            git reset --hard origin/main
 
   deploy-api:
     name: Deploy Backend API
