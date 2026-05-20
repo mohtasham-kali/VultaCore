@@ -42,6 +42,33 @@ jobs:
           git pull --rebase origin main
           git push origin main
 
+      - name: 🔍 Diagnose Hostinger Server State
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOSTINGER_SSH_HOST }}
+          port: ${{ secrets.HOSTINGER_SSH_PORT }}
+          username: ${{ secrets.HOSTINGER_SSH_USER }}
+          password: ${{ secrets.HOSTINGER_SSH_PASS }}
+          script: |
+            echo "=== NODE VERSION ==="
+            node --version || echo "node not found"
+
+            echo "=== RUNNING NODE PROCESSES ==="
+            ps aux | grep node | grep -v grep || echo "none"
+
+            echo "=== APP DIRECTORY ==="
+            ls ~/domains/vultacore.techprogression.com/nodejs/ 2>/dev/null || echo "dir missing"
+
+            echo "=== http-proxy INSTALLED? ==="
+            ls ~/domains/vultacore.techprogression.com/nodejs/node_modules/http-proxy 2>/dev/null && echo "YES" || echo "NO — npm install needed"
+
+            echo "=== LAST 50 LINES OF SERVER LOG ==="
+            tail -n 50 ~/domains/vultacore.techprogression.com/nodejs/logs/server.log 2>/dev/null || echo "(no log file)"
+
+            echo "=== PASSENGER ERROR LOG (if exists) ==="
+            find ~/logs -name "*.log" 2>/dev/null | head -5
+            find ~/logs -name "*.log" 2>/dev/null | xargs tail -n 20 2>/dev/null || echo "(no passenger logs found)"
+
       - name: Deploy to Hostinger via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
