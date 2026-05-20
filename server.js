@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 const http = require('http');
 const httpProxy = require('http-proxy');
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
@@ -19,7 +19,15 @@ function log(msg) {
     console.log(line);
 }
 
-function startApp(name, filePath, args, port, cwd) {
+/** Kill any zombie process holding the given port so we can bind cleanly. */
+function freePort(port) {
+    try {
+        execSync(`fuser -k ${port}/tcp`, { stdio: 'ignore' });
+        log(`🧹 Freed port ${port}`);
+    } catch (_) { /* nothing was holding it — that's fine */ }
+}
+
+function startApp(name, filePath, args, port, cwd, retryDelay = 3000) {
     if (!fs.existsSync(filePath)) {
         log(`❌ ${name} file not found at ${filePath}`);
         return;
@@ -33,11 +41,18 @@ function startApp(name, filePath, args, port, cwd) {
     });
 
     child.stdout.on('data', (data) => log(`[${name}] ${data.toString().trim()}`));
-    child.stderr.on('data', (data) => log(`[${name} ERROR] ${data.toString().trim()}`));
-    child.on('exit', (code) => log(`ℹ️ ${name} exited with code ${code}`));
+    child.stderr.on('data', (data) => log(`[${name}] ${data.toString().trim()}`));
+    child.on('exit', (code) => {
+        log(`⚠️  ${name} exited (code ${code}). Restarting in ${retryDelay / 1000}s...`);
+        setTimeout(() => {
+            freePort(port);
+            startApp(name, filePath, args, port, cwd, retryDelay);
+        }, retryDelay);
+    });
 }
 
-// 1. Start Engines
+// 1. Free ports, then Start Engines
+freePort(BACK_PORT);
 const backendEntry = path.join(rootDir, 'backend-api', 'dist', 'main.js');
 startApp('Backend', backendEntry, [`"${backendEntry}"`], BACK_PORT, path.join(rootDir, 'backend-api'));
 
@@ -57,6 +72,7 @@ setTimeout(() => {
         dArgs = [`"${dashboardEntry}"`, 'start'];
     }
 
+    freePort(DASH_PORT);
     startApp('Dashboard', dashboardEntry, dArgs, DASH_PORT, dashboardCwd);
 }, 5000);
 
