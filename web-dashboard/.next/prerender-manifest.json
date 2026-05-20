@@ -232,30 +232,6 @@
         "x-next-revalidate-tag-token"
       ]
     },
-    "/forum/cyber": {
-      "experimentalBypassFor": [
-        {
-          "type": "header",
-          "key": "Next-Action"
-        },
-        {
-          "type": "header",
-          "key": "content-type",
-          "value": "multipart/form-data;.*"
-        }
-      ],
-      "initialRevalidateSeconds": false,
-      "srcRoute": "/forum/cyber",
-      "dataRoute": "/forum/cyber.rsc",
-      "allowHeader": [
-        "host",
-        "x-matched-path",
-        "x-prerender-revalidate",
-        "x-prerender-revalidate-if-generated",
-        "x-next-revalidated-tags",
-        "x-next-revalidate-tag-token"
-      ]
-    },
     "/enterprise-contact": {
       "experimentalBypassFor": [
         {
@@ -271,6 +247,30 @@
       "initialRevalidateSeconds": false,
       "srcRoute": "/enterprise-contact",
       "dataRoute": "/enterprise-contact.rsc",
+      "allowHeader": [
+        "host",
+        "x-matched-path",
+        "x-prerender-revalidate",
+        "x-prerender-revalidate-if-generated",
+        "x-next-revalidated-tags",
+        "x-next-revalidate-tag-token"
+      ]
+    },
+    "/forum/cyber": {
+      "experimentalBypassFor": [
+        {
+          "type": "header",
+          "key": "Next-Action"
+        },
+        {
+          "type": "header",
+          "key": "content-type",
+          "value": "multipart/form-data;.*"
+        }
+      ],
+      "initialRevalidateSeconds": false,
+      "srcRoute": "/forum/cyber",
+      "dataRoute": "/forum/cyber.rsc",
       "allowHeader": [
         "host",
         "x-matched-path",
@@ -500,8 +500,8 @@
   "dynamicRoutes": {},
   "notFoundRoutes": [],
   "preview": {
-    "previewModeId": "c9c24cfc767c0ee654447c254690b39e",
-    "previewModeSigningKey": "d91d13caf193f977e92341ccfece8ff1443482a0fa361772e92dbcfbdd5ca3fc",
-    "previewModeEncryptionKey": "158469f74b39d24b903f170c8ab39d983c4cb87bd649fe3ae259e8109d8aaf9c"
+    "previewModeId": "88c21fdf25f393b2fc08dc839c901509",
+    "previewModeSigningKey": "82228d1a82f620f7b6d9f4c719c1b3308fc077dea367660d1a66f6fa6324b3b8",
+    "previewModeEncryptionKey": "14daae9ad73bd85dea10b7a5aa3716cdde8bd86feca3f921ad7fe69301762d8d"
   }
 }
