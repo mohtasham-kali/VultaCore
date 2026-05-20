@@ -1,11 +1,27 @@
 #!/usr/bin/env node
 const http = require('http');
-const httpProxy = require('http-proxy');
 const { spawn, execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
+// Self-heal: install deps if http-proxy is missing (e.g. fresh Hostinger deploy)
+let httpProxy;
+try {
+    httpProxy = require('http-proxy');
+} catch (e) {
+    console.log('[Boot] http-proxy not found — running npm install...');
+    try {
+        execSync('npm install --omit=dev', { cwd: __dirname, stdio: 'inherit' });
+        httpProxy = require('http-proxy');
+        console.log('[Boot] ✅ npm install complete');
+    } catch (installErr) {
+        console.error('[Boot] ❌ npm install failed:', installErr.message);
+        process.exit(1);
+    }
+}
+
 const proxy = httpProxy.createProxyServer({});
+
 const rootDir = __dirname;
 const BACK_PORT = process.env.BACK_PORT || (Math.floor(Math.random() * 10000) + 40000);
 const DASH_PORT = process.env.DASH_PORT || (Math.floor(Math.random() * 10000) + 50000);
