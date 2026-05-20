@@ -97,7 +97,7 @@
         "transform": "lodash/{{member}}"
       }
     },
-    "outputFileTracingRoot": "/home/hacker/Documents/SaaS 2.0/tri-stack",
+    "outputFileTracingRoot": "/home/runner/work/VultaCore/VultaCore",
     "experimental": {
       "nodeMiddleware": false,
       "cacheLife": {
@@ -155,7 +155,7 @@
       "middlewarePrefetch": "flexible",
       "optimisticClientCache": true,
       "manualClientBasePath": false,
-      "cpus": 3,
+      "cpus": 1,
       "memoryBasedWorkersCount": false,
       "imgOptConcurrency": null,
       "imgOptTimeoutInSeconds": 7,
@@ -280,10 +280,10 @@
     "bundlePagesRouterDependencies": false,
     "configFileName": "next.config.ts",
     "turbopack": {
-      "root": "/home/hacker/Documents/SaaS 2.0/tri-stack"
+      "root": "/home/runner/work/VultaCore/VultaCore"
     }
   },
-  "appDir": "/home/hacker/Documents/SaaS 2.0/tri-stack/web-dashboard",
+  "appDir": "/home/runner/work/VultaCore/VultaCore/web-dashboard",
   "relativeAppDir": "web-dashboard",
   "files": [
     ".next/routes-manifest.json",
