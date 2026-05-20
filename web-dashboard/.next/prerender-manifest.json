@@ -1,35 +1,6 @@
 {
   "version": 4,
   "routes": {
-    "/favicon.ico": {
-      "initialHeaders": {
-        "cache-control": "public, max-age=0, must-revalidate",
-        "content-type": "image/x-icon",
-        "x-next-cache-tags": "_N_T_/layout,_N_T_/favicon.ico/layout,_N_T_/favicon.ico/route,_N_T_/favicon.ico"
-      },
-      "experimentalBypassFor": [
-        {
-          "type": "header",
-          "key": "Next-Action"
-        },
-        {
-          "type": "header",
-          "key": "content-type",
-          "value": "multipart/form-data;.*"
-        }
-      ],
-      "initialRevalidateSeconds": false,
-      "srcRoute": "/favicon.ico",
-      "dataRoute": null,
-      "allowHeader": [
-        "host",
-        "x-matched-path",
-        "x-prerender-revalidate",
-        "x-prerender-revalidate-if-generated",
-        "x-next-revalidated-tags",
-        "x-next-revalidate-tag-token"
-      ]
-    },
     "/apple-icon.png": {
       "initialHeaders": {
         "cache-control": "public, immutable, no-transform, max-age=31536000",
@@ -49,6 +20,35 @@
       ],
       "initialRevalidateSeconds": false,
       "srcRoute": "/apple-icon.png",
+      "dataRoute": null,
+      "allowHeader": [
+        "host",
+        "x-matched-path",
+        "x-prerender-revalidate",
+        "x-prerender-revalidate-if-generated",
+        "x-next-revalidated-tags",
+        "x-next-revalidate-tag-token"
+      ]
+    },
+    "/favicon.ico": {
+      "initialHeaders": {
+        "cache-control": "public, max-age=0, must-revalidate",
+        "content-type": "image/x-icon",
+        "x-next-cache-tags": "_N_T_/layout,_N_T_/favicon.ico/layout,_N_T_/favicon.ico/route,_N_T_/favicon.ico"
+      },
+      "experimentalBypassFor": [
+        {
+          "type": "header",
+          "key": "Next-Action"
+        },
+        {
+          "type": "header",
+          "key": "content-type",
+          "value": "multipart/form-data;.*"
+        }
+      ],
+      "initialRevalidateSeconds": false,
+      "srcRoute": "/favicon.ico",
       "dataRoute": null,
       "allowHeader": [
         "host",
@@ -500,8 +500,8 @@
   "dynamicRoutes": {},
   "notFoundRoutes": [],
   "preview": {
-    "previewModeId": "c257c88178c9fe8df0e6bd4c404de95a",
-    "previewModeSigningKey": "3818505e5d246dc3d4a487132f1e694a86278239dcf60d1b8e9b3dc24d04d6da",
-    "previewModeEncryptionKey": "01996505ef4bdc190da57e6cee6619eec6405a188157cac860b047390def93cf"
+    "previewModeId": "273564eb5453bfac606f22a7c23d5512",
+    "previewModeSigningKey": "a6efb3197e3646c321ffa27987a0405515a12c0f20a25cefb44edd1affd34cd0",
+    "previewModeEncryptionKey": "aee20e35ed3bdd5c171212b26be40285da82e9c45ae7d0d63c7f042e4d6c6cad"
   }
 }
