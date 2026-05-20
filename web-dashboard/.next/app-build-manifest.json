@@ -96,13 +96,6 @@
       "static/chunks/main-app-9884b53645b656ed.js",
       "static/chunks/app/(app)/enterprise-contact/page-dd25cb304e6d330d.js"
     ],
-    "/(app)/download/page": [
-      "static/chunks/webpack-90063832a35b8ba0.js",
-      "static/chunks/4bd1b696-0215919f8923d790.js",
-      "static/chunks/684-b73c16874bfc7cf3.js",
-      "static/chunks/main-app-9884b53645b656ed.js",
-      "static/chunks/app/(app)/download/page-a55690a30281554d.js"
-    ],
     "/(app)/forum/cyber/page": [
       "static/chunks/webpack-90063832a35b8ba0.js",
       "static/chunks/4bd1b696-0215919f8923d790.js",
@@ -113,6 +106,13 @@
       "static/chunks/926-108a2eb3c76e3b57.js",
       "static/chunks/639-e1f28e3ceea6ebab.js",
       "static/chunks/app/(app)/forum/cyber/page-6d296bd4b7efa2e2.js"
+    ],
+    "/(app)/download/page": [
+      "static/chunks/webpack-90063832a35b8ba0.js",
+      "static/chunks/4bd1b696-0215919f8923d790.js",
+      "static/chunks/684-b73c16874bfc7cf3.js",
+      "static/chunks/main-app-9884b53645b656ed.js",
+      "static/chunks/app/(app)/download/page-a55690a30281554d.js"
     ],
     "/(app)/forum/dev/page": [
       "static/chunks/webpack-90063832a35b8ba0.js",
@@ -178,13 +178,6 @@
       "static/chunks/874-a1e111dd065795db.js",
       "static/chunks/app/(app)/admin/page-e62819a728e21a3b.js"
     ],
-    "/(app)/admin/leads/page": [
-      "static/chunks/webpack-90063832a35b8ba0.js",
-      "static/chunks/4bd1b696-0215919f8923d790.js",
-      "static/chunks/684-b73c16874bfc7cf3.js",
-      "static/chunks/main-app-9884b53645b656ed.js",
-      "static/chunks/app/(app)/admin/leads/page-21ff9833155e19d1.js"
-    ],
     "/(app)/admin/pos/page": [
       "static/chunks/webpack-90063832a35b8ba0.js",
       "static/chunks/4bd1b696-0215919f8923d790.js",
@@ -200,6 +193,13 @@
       "static/chunks/main-app-9884b53645b656ed.js",
       "static/chunks/926-108a2eb3c76e3b57.js",
       "static/chunks/app/(app)/admin/users/page-035c68afe43a0ad6.js"
+    ],
+    "/(app)/admin/leads/page": [
+      "static/chunks/webpack-90063832a35b8ba0.js",
+      "static/chunks/4bd1b696-0215919f8923d790.js",
+      "static/chunks/684-b73c16874bfc7cf3.js",
+      "static/chunks/main-app-9884b53645b656ed.js",
+      "static/chunks/app/(app)/admin/leads/page-21ff9833155e19d1.js"
     ]
   }
 }
