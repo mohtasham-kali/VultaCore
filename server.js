@@ -98,7 +98,7 @@ const server = http.createServer((req, res) => {
     proxyRequest(req, res, targetPort);
 });
 
-server.listen(masterPort, '0.0.0.0', () => {
+server.listen(masterPort, () => {
     log(`✨ Master Proxy listening on port ${masterPort}`);
     // Spawn engines AFTER we are already listening
     bootEngines();
