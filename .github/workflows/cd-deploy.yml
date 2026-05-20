@@ -59,13 +59,16 @@ jobs:
             # 2. Install root dependencies (http-proxy etc.)
             npm install --omit=dev
 
-            # 3. Kill any stale server process holding port 3000
-            fuser -k 3000/tcp 2>/dev/null || true
+            # 3. Signal Passenger to restart the app
+            #    Passenger watches tmp/restart.txt — touching it triggers a graceful reload
+            mkdir -p tmp
+            touch tmp/restart.txt
+            echo "✅ Passenger restart signal sent"
 
-            # 4. Restart the master proxy in the background
+            # 4. Tail the log briefly so CI output shows startup result
+            sleep 5
             mkdir -p logs
-            nohup node server.js > logs/server.log 2>&1 &
-            echo "✅ server.js restarted (PID $!)"
+            tail -n 30 logs/server.log 2>/dev/null || echo "(no log yet — first boot)"
 
   deploy-api:
     name: Deploy Backend API
