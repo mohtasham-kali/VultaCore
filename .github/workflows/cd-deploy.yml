@@ -42,32 +42,38 @@ jobs:
           git pull --rebase origin main
           git push origin main
 
-      - name: 🔍 Diagnose Hostinger Server State
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.HOSTINGER_SSH_HOST }}
-          port: ${{ secrets.HOSTINGER_SSH_PORT }}
-          username: ${{ secrets.HOSTINGER_SSH_USER }}
-          password: ${{ secrets.HOSTINGER_SSH_PASS }}
-          script: |
+      - name: 🔍 Diagnose and Commit Hostinger Logs
+        run: |
+          sudo apt-get update && sudo apt-get install -y sshpass
+          echo "${{ secrets.HOSTINGER_SSH_PASS }}" > ssh_pass.txt
+          chmod 600 ssh_pass.txt
+          
+          sshpass -f ssh_pass.txt ssh -o StrictHostKeyChecking=no ${{ secrets.HOSTINGER_SSH_USER }}@${{ secrets.HOSTINGER_SSH_HOST }} -p ${{ secrets.HOSTINGER_SSH_PORT }} > diag.txt << 'EOF'
             echo "=== NODE VERSION ==="
             node --version 2>&1 || echo "node not found in PATH"
-            which node 2>&1 || echo "node not in which"
-
             echo "=== APP DIR CONTENTS ==="
             ls -la ~/domains/vultacore.techprogression.com/nodejs/ 2>/dev/null || echo "dir missing"
-
             echo "=== HTTP-PROXY MODULE ==="
             ls ~/domains/vultacore.techprogression.com/nodejs/node_modules/http-proxy 2>/dev/null && echo "FOUND" || echo "MISSING"
-
-            echo "=== HOSTINGER PASSENGER LOGS ==="
-            find ~/logs -name "*.log" 2>/dev/null | head -10
-            tail -n 40 ~/logs/vultacore.techprogression.com/error.log 2>/dev/null || echo "(no error.log)"
-            tail -n 40 ~/logs/passenger.log 2>/dev/null || echo "(no passenger.log)"
-
-            echo "=== TRY MANUAL NODE START (5s test) ==="
+            echo "=== HOSTINGER ERROR.LOG ==="
+            tail -n 100 ~/logs/vultacore.techprogression.com/error.log 2>/dev/null || echo "(no error.log)"
+            echo "=== HOSTINGER PASSENGER.LOG ==="
+            tail -n 100 ~/logs/passenger.log 2>/dev/null || echo "(no passenger.log)"
+            echo "=== HOSTINGER SERVER.LOG ==="
+            tail -n 100 ~/domains/vultacore.techprogression.com/nodejs/logs/server.log 2>/dev/null || echo "(no server.log)"
+            echo "=== STARTUP TEST ==="
             cd ~/domains/vultacore.techprogression.com/nodejs
-            timeout 5 node app.js 2>&1 || true
+            timeout 5 node app.js 2>&1 || echo "Test complete or crashed"
+          EOF
+          
+          rm ssh_pass.txt
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add diag.txt
+          git commit -m "ci: commit diagnostic logs [skip ci]" || echo "No changes to commit"
+          git pull --rebase origin main
+          git push origin main
 
       - name: Deploy to Hostinger via SSH
         uses: appleboy/ssh-action@v1.0.3
