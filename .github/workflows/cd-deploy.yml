@@ -51,23 +51,23 @@ jobs:
           password: ${{ secrets.HOSTINGER_SSH_PASS }}
           script: |
             echo "=== NODE VERSION ==="
-            node --version || echo "node not found"
+            node --version 2>&1 || echo "node not found in PATH"
+            which node 2>&1 || echo "node not in which"
 
-            echo "=== RUNNING NODE PROCESSES ==="
-            ps aux | grep node | grep -v grep || echo "none"
+            echo "=== APP DIR CONTENTS ==="
+            ls -la ~/domains/vultacore.techprogression.com/nodejs/ 2>/dev/null || echo "dir missing"
 
-            echo "=== APP DIRECTORY ==="
-            ls ~/domains/vultacore.techprogression.com/nodejs/ 2>/dev/null || echo "dir missing"
+            echo "=== HTTP-PROXY MODULE ==="
+            ls ~/domains/vultacore.techprogression.com/nodejs/node_modules/http-proxy 2>/dev/null && echo "FOUND" || echo "MISSING"
 
-            echo "=== http-proxy INSTALLED? ==="
-            ls ~/domains/vultacore.techprogression.com/nodejs/node_modules/http-proxy 2>/dev/null && echo "YES" || echo "NO — npm install needed"
+            echo "=== HOSTINGER PASSENGER LOGS ==="
+            find ~/logs -name "*.log" 2>/dev/null | head -10
+            tail -n 40 ~/logs/vultacore.techprogression.com/error.log 2>/dev/null || echo "(no error.log)"
+            tail -n 40 ~/logs/passenger.log 2>/dev/null || echo "(no passenger.log)"
 
-            echo "=== LAST 50 LINES OF SERVER LOG ==="
-            tail -n 50 ~/domains/vultacore.techprogression.com/nodejs/logs/server.log 2>/dev/null || echo "(no log file)"
-
-            echo "=== PASSENGER ERROR LOG (if exists) ==="
-            find ~/logs -name "*.log" 2>/dev/null | head -5
-            find ~/logs -name "*.log" 2>/dev/null | xargs tail -n 20 2>/dev/null || echo "(no passenger logs found)"
+            echo "=== TRY MANUAL NODE START (5s test) ==="
+            cd ~/domains/vultacore.techprogression.com/nodejs
+            timeout 5 node app.js 2>&1 || true
 
       - name: Deploy to Hostinger via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -83,19 +83,22 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
-            # 2. Install root dependencies (http-proxy etc.)
-            npm install --omit=dev
+            # 2. Install root dependencies properly
+            npm install --omit=dev 2>&1 | tail -5
 
-            # 3. Signal Passenger to restart the app
-            #    Passenger watches tmp/restart.txt — touching it triggers a graceful reload
-            mkdir -p tmp
-            touch tmp/restart.txt
-            echo "✅ Passenger restart signal sent"
+            # 3. Restart via Passenger CLI (Hostinger's actual mechanism)
+            #    Try multiple methods in order of preference
+            if command -v passenger-config &>/dev/null; then
+              passenger-config restart-app ~/domains/vultacore.techprogression.com/nodejs && echo "✅ passenger-config restart done"
+            elif command -v passenger &>/dev/null; then
+              passenger restart-app ~/domains/vultacore.techprogression.com/nodejs && echo "✅ passenger restart done"
+            else
+              # Fallback: touch the restart file
+              mkdir -p tmp && touch tmp/restart.txt && echo "✅ restart.txt touched"
+            fi
 
-            # 4. Tail the log briefly so CI output shows startup result
-            sleep 5
-            mkdir -p logs
-            tail -n 30 logs/server.log 2>/dev/null || echo "(no log yet — first boot)"
+            echo "Deploy complete at $(date)"
+
 
   deploy-api:
     name: Deploy Backend API
