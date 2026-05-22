@@ -110,6 +110,17 @@ server.on('error', (err) => {
 });
 
 // ─── Engine Spawner ──────────────────────────────────────────────────────────
+const runningChildren = [];
+
+function killChildren() {
+    runningChildren.forEach(child => {
+        try { child.kill('SIGKILL'); } catch (_) {}
+    });
+}
+process.on('exit', killChildren);
+process.on('SIGINT', () => { killChildren(); process.exit(0); });
+process.on('SIGTERM', () => { killChildren(); process.exit(0); });
+
 function freePort(port) {
     try { execSync(`fuser -k ${port}/tcp`, { stdio: 'ignore' }); } catch (_) {}
 }
@@ -128,6 +139,7 @@ function startEngine(name, filePath, args, port, cwd, delay = 0) {
             cwd  : cwd || rootDir,
             shell: false
         });
+        runningChildren.push(child);
 
         child.stdout.on('data', d => log(`[${name}] ${d.toString().trim()}`));
         child.stderr.on('data', d => log(`[${name}] ${d.toString().trim()}`));
