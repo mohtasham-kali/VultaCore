@@ -23,6 +23,14 @@
       "csp": null
     }
   },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/mohtasham-kali/VultaCore/releases/latest/download/updater.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXkKZWdnd2RUZXN0aW5nS2V5UGFpcjEyMzQ1Njc4OTA="
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",
