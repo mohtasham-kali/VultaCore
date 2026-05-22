@@ -11,7 +11,7 @@ const downloadOptions = [
     color: "text-blue-400",
     bgColor: "bg-blue-500/10",
     borderColor: "border-blue-500/20",
-    url: "https://github.com/mohtasham-kali/VultaCore/releases/download/v2.1.0/desktop-app_2.1.0_x64-setup.exe",
+    url: "https://github.com/mohtasham-kali/VultaCore/releases/latest",
     description: "Installable executable for Windows 10/11 with full hardware acceleration."
   },
   {
@@ -22,7 +22,7 @@ const downloadOptions = [
     color: "text-orange-400",
     bgColor: "bg-orange-500/10",
     borderColor: "border-orange-500/20",
-    url: "https://github.com/mohtasham-kali/VultaCore/releases/download/v2.1.0/desktop-app_2.1.0_amd64.AppImage",
+    url: "https://github.com/mohtasham-kali/VultaCore/releases/latest",
     description: "Portable AppImage for all distributions. No installation required."
   },
   {
@@ -33,7 +33,7 @@ const downloadOptions = [
     color: "text-purple-400",
     bgColor: "bg-purple-500/10",
     borderColor: "border-purple-500/20",
-    url: "https://github.com/mohtasham-kali/VultaCore/releases/download/v2.1.0/desktop-app_2.1.0_aarch64.dmg",
+    url: "https://github.com/mohtasham-kali/VultaCore/releases/latest",
     description: "Universal disk image for Apple Silicon (M1/M2/M3) and Intel Macs."
   }
 ];
