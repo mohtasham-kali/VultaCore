@@ -17,7 +17,7 @@
   "/(app)/profile/page": "/profile",
   "/(app)/settings/page": "/settings",
   "/(app)/admin/leads/page": "/admin/leads",
-  "/(app)/admin/pos/page": "/admin/pos",
   "/(app)/admin/page": "/admin",
+  "/(app)/admin/pos/page": "/admin/pos",
   "/(app)/admin/users/page": "/admin/users"
 }
