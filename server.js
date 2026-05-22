@@ -31,11 +31,11 @@ log('Master Proxy Booting...');
 // ─── Built-in HTTP Proxy ────────────────────────────────────────────────────
 function proxyRequest(req, res, targetPort) {
     const options = {
-        hostname : 'localhost',
+        hostname : '127.0.0.1',
         port     : targetPort,
         path     : req.url,
         method   : req.method,
-        headers  : { ...req.headers, host: `localhost:${targetPort}` }
+        headers  : { ...req.headers, host: `127.0.0.1:${targetPort}` }
     };
 
     const proxyReq = http.request(options, (proxyRes) => {
