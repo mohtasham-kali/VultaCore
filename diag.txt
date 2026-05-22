@@ -12,8 +12,8 @@
    HHHHHHHH           HHHHHHHH
        HHHH               HHHH
 
-[0mWelcome back! The time now is 02:19 UTC
-Server load: 23.91, 23.35, 21.44
+[0mWelcome back! The time now is 14:56 UTC
+Server load: 23.10, 23.76, 23.10
 
 Link to hPanel: 
 https://hpanel.hostinger.com/ 
@@ -22,42 +22,42 @@ https://hpanel.hostinger.com/
 -bash: line 2: node: command not found
 node not found in PATH
 === APP DIR CONTENTS ===
-total 1304
-drwxr-xr-x  15 u879979656 o1009032720   4096 May 20 02:17 .
-drwxr-xr-x   4 u879979656 o1009032720   4096 May  9 14:15 ..
-drwxr-xr-x   3 u879979656 o1009032720   4096 May 20 02:15 ai-services
-drwxr-xr-x   4 u879979656 o1009032720   4096 May 20 02:15 analytics-engine
--rw-r--r--   1 u879979656 o1009032720    267 May 20 02:15 app.js
-drwxr-xr-x   6 u879979656 o1009032720   4096 May 20 02:17 backend-api
--rw-r--r--   1 u879979656 o1009032720   2434 May 20 02:15 build-all.sh
--rw-r--r--   1 u879979656 o1009032720 385118 May 20 02:19 console.log
--rw-r--r--   1 u879979656 o1009032720   1706 May 20 02:15 debug.js
-drwxr-xr-x   6 u879979656 o1009032720   4096 May 20 02:15 desktop-app
--rw-r--r--   1 u879979656 o1009032720   3122 May 20 02:15 diag.txt
--rw-r--r--   1 u879979656 o1009032720   1416 May 20 02:15 docker-compose.yml
--rw-r--r--   1 u879979656 o1009032720    567 May 20 02:15 error_info.html
-drwxr-xr-x   8 u879979656 o1009032720   4096 May 20 02:15 .git
-drwxr-xr-x   3 u879979656 o1009032720   4096 May 20 02:15 .github
--rw-r--r--   1 u879979656 o1009032720    272 May 20 02:15 .gitignore
--rw-r--r--   1 u879979656 o1009032720    433 May 20 02:15 hostinger-test.html
--rw-r--r--   1 u879979656 o1009032720   1088 May 20 02:15 implementation_plan.md
--rw-r--r--   1 u879979656 o1009032720    309 May 20 02:15 index.html
-drwxr-xr-x   2 u879979656 o1009032720   4096 May 20 02:15 k8s
-drwxr-xr-x   7 u879979656 o1009032720   4096 May 20 02:15 mobile-app
-drwxr-xr-x 705 u879979656 o1009032720  20480 May 20 02:16 node_modules
-drwxr-xr-x   6 u879979656 o1009032720   4096 May 20 02:15 out
--rw-r--r--   1 u879979656 o1009032720    954 May 20 02:15 package.json
--rw-r--r--   1 u879979656 o1009032720 624547 May 20 02:16 package-lock.json
--rw-r--r--   1 u879979656 o1009032720   2870 May 20 02:15 README.md
--rw-r--r--   1 u879979656 o1009032720    598 May 20 02:15 render.yaml
--rw-r--r--   1 u879979656 o1009032720  90112 May 20 02:15 saas.sqlite
--rw-r--r--   1 u879979656 o1009032720   6628 May 20 02:15 server.js
--rw-r--r--   1 u879979656 o1009032720    855 May 20 02:15 setup.js
--rw-r--r--   1 u879979656 o1009032720      0 May 20 02:17 stderr.log
--rw-r--r--   1 u879979656 o1009032720   1701 May 20 02:15 test_bots.js
-drwxr-xr-x   2 u879979656 o1009032720   4096 May 20 02:17 tmp
-drwxr-xr-x   2 u879979656 o1009032720   4096 May 20 02:15 .vscode
-drwxr-xr-x   8 u879979656 o1009032720   4096 May 20 02:15 web-dashboard
+total 53248
+drwxr-xr-x  15 u879979656 o1009032720     4096 May 20 02:33 .
+drwxr-xr-x   4 u879979656 o1009032720     4096 May  9 14:15 ..
+drwxr-xr-x   3 u879979656 o1009032720     4096 May 20 02:31 ai-services
+drwxr-xr-x   4 u879979656 o1009032720     4096 May 20 02:31 analytics-engine
+-rw-r--r--   1 u879979656 o1009032720      267 May 20 02:31 app.js
+drwxr-xr-x   6 u879979656 o1009032720     4096 May 20 02:33 backend-api
+-rw-r--r--   1 u879979656 o1009032720     2434 May 20 02:31 build-all.sh
+-rw-r--r--   1 u879979656 o1009032720 53574296 May 22 14:56 console.log
+-rw-r--r--   1 u879979656 o1009032720     1706 May 20 02:31 debug.js
+drwxr-xr-x   6 u879979656 o1009032720     4096 May 20 02:31 desktop-app
+-rw-r--r--   1 u879979656 o1009032720     3391 May 20 02:31 diag.txt
+-rw-r--r--   1 u879979656 o1009032720     1416 May 20 02:31 docker-compose.yml
+-rw-r--r--   1 u879979656 o1009032720      567 May 20 02:31 error_info.html
+drwxr-xr-x   8 u879979656 o1009032720     4096 May 20 02:31 .git
+drwxr-xr-x   3 u879979656 o1009032720     4096 May 20 02:31 .github
+-rw-r--r--   1 u879979656 o1009032720      272 May 20 02:31 .gitignore
+-rw-r--r--   1 u879979656 o1009032720      433 May 20 02:31 hostinger-test.html
+-rw-r--r--   1 u879979656 o1009032720     1088 May 20 02:31 implementation_plan.md
+-rw-r--r--   1 u879979656 o1009032720      309 May 20 02:31 index.html
+drwxr-xr-x   2 u879979656 o1009032720     4096 May 20 02:31 k8s
+drwxr-xr-x   7 u879979656 o1009032720     4096 May 20 02:31 mobile-app
+drwxr-xr-x 705 u879979656 o1009032720    20480 May 20 02:33 node_modules
+drwxr-xr-x   6 u879979656 o1009032720     4096 May 20 02:31 out
+-rw-r--r--   1 u879979656 o1009032720      954 May 20 02:31 package.json
+-rw-r--r--   1 u879979656 o1009032720   624547 May 20 02:33 package-lock.json
+-rw-r--r--   1 u879979656 o1009032720     2870 May 20 02:31 README.md
+-rw-r--r--   1 u879979656 o1009032720      598 May 20 02:31 render.yaml
+-rw-r--r--   1 u879979656 o1009032720    90112 May 20 02:31 saas.sqlite
+-rw-r--r--   1 u879979656 o1009032720     6628 May 20 02:31 server.js
+-rw-r--r--   1 u879979656 o1009032720      855 May 20 02:31 setup.js
+-rw-r--r--   1 u879979656 o1009032720        0 May 20 02:33 stderr.log
+-rw-r--r--   1 u879979656 o1009032720     1701 May 20 02:31 test_bots.js
+drwxr-xr-x   2 u879979656 o1009032720     4096 May 20 02:33 tmp
+drwxr-xr-x   2 u879979656 o1009032720     4096 May 20 02:31 .vscode
+drwxr-xr-x   8 u879979656 o1009032720     4096 May 20 02:31 web-dashboard
 === HTTP-PROXY MODULE ===
 CHANGELOG.md
 codecov.yml
