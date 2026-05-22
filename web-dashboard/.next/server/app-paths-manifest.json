@@ -17,7 +17,7 @@
   "/(app)/profile/page": "app/(app)/profile/page.js",
   "/(app)/settings/page": "app/(app)/settings/page.js",
   "/(app)/admin/leads/page": "app/(app)/admin/leads/page.js",
-  "/(app)/admin/pos/page": "app/(app)/admin/pos/page.js",
   "/(app)/admin/page": "app/(app)/admin/page.js",
+  "/(app)/admin/pos/page": "app/(app)/admin/pos/page.js",
   "/(app)/admin/users/page": "app/(app)/admin/users/page.js"
 }
