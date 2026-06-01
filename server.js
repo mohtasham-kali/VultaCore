@@ -16,6 +16,7 @@ const masterPort = process.env.PORT || 3000;
 // Child ports — assigned dynamically on boot to prevent Zombie process EADDRINUSE errors
 let BACK_PORT = null;
 let DASH_PORT = null;
+let AI_PORT   = null;
 
 function findFreePort() {
     return new Promise((resolve, reject) => {
@@ -143,17 +144,17 @@ function freePort(port) {
     try { execSync(`fuser -k ${port}/tcp`, { stdio: 'ignore' }); } catch (_) {}
 }
 
-function startEngine(name, filePath, args, port, cwd, delay = 0) {
+function startEngine(name, execBin, execArgs, port, cwd, envExtra = {}, delay = 0) {
     setTimeout(() => {
-        if (!fs.existsSync(filePath)) {
-            log(`❌ ${name}: entry not found → ${filePath}`);
+        if (!fs.existsSync(execBin)) {
+            log(`❌ ${name}: executable not found → ${execBin}`);
             return;
         }
         freePort(port);
         log(`📡 Spawning ${name} on port ${port}...`);
 
-        const child = spawn(process.execPath, args, {
-            env  : { ...process.env, PORT: String(port), NODE_ENV: 'production' },
+        const child = spawn(execBin, execArgs, {
+            env  : { ...process.env, PORT: String(port), NODE_ENV: 'production', ...envExtra },
             cwd  : cwd || rootDir,
             shell: false
         });
@@ -163,7 +164,7 @@ function startEngine(name, filePath, args, port, cwd, delay = 0) {
         child.stderr.on('data', d => log(`[${name}] ${d.toString().trim()}`));
         child.on('exit', code => {
             log(`⚠️  ${name} exited (${code}) — restarting in 3 s…`);
-            setTimeout(() => startEngine(name, filePath, args, port, cwd), 3000);
+            setTimeout(() => startEngine(name, execBin, execArgs, port, cwd, envExtra), 3000);
         });
     }, delay);
 }
@@ -172,16 +173,22 @@ async function bootEngines() {
     try {
         BACK_PORT = await findFreePort();
         DASH_PORT = await findFreePort();
-        log(`Dynamically allocated ports: Backend=${BACK_PORT}, Dashboard=${DASH_PORT}`);
+        AI_PORT   = await findFreePort();
+        log(`Dynamically allocated ports: Backend=${BACK_PORT}, Dashboard=${DASH_PORT}, AI=${AI_PORT}`);
     } catch (e) {
         log(`❌ Failed to allocate ports: ${e.message}`);
         return;
     }
 
+    // ── AI Engine (FastAPI) ────────────────────────────────────────────────
+    const aiBin = path.join(rootDir, 'ai-services', 'venv', 'bin', 'uvicorn');
+    const aiArgs = ['main:app', '--port', String(AI_PORT)];
+    startEngine('AI Engine', aiBin, aiArgs, AI_PORT, path.join(rootDir, 'ai-services'), {}, 0);
+
     // ── Backend (NestJS dist) ─────────────────────────────────────────────
     const backendEntry = path.join(rootDir, 'backend-api', 'dist', 'main.js');
-    startEngine('Backend', backendEntry, [backendEntry], BACK_PORT,
-                path.join(rootDir, 'backend-api'), 0);
+    startEngine('Backend', process.execPath, [backendEntry], BACK_PORT,
+                path.join(rootDir, 'backend-api'), { AI_SERVICE_URL: `http://127.0.0.1:${AI_PORT}` }, 0);
 
     // ── Dashboard (Next.js standalone) ───────────────────────────────────
     const standaloneA = path.join(rootDir, 'web-dashboard', '.next', 'standalone', 'web-dashboard', 'server.js');
@@ -203,5 +210,5 @@ async function bootEngines() {
         dashArgs  = [nextBin, 'start'];
     }
 
-    startEngine('Dashboard', dashEntry, dashArgs, DASH_PORT, dashCwd, 5000);
+    startEngine('Dashboard', process.execPath, dashArgs, DASH_PORT, dashCwd, {}, 5000);
 }
