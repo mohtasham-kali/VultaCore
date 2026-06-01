@@ -1,4 +1,4 @@
-// File: /home/runner/work/VultaCore/VultaCore/web-dashboard/src/app/(app)/bots/general/page.tsx
+// File: /home/hacker/Documents/SaaS 2.0/tri-stack/web-dashboard/src/app/(app)/bots/general/page.tsx
 import * as entry from '../../../../../../src/app/(app)/bots/general/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 
