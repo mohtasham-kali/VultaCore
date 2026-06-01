@@ -20,6 +20,16 @@ export class BotsController {
     return this.botsService.executeBot(id, prompt, userId, context);
   }
 
+  @Get(':id/history')
+  getHistory(
+    @Param('id') id: string,
+    @Query('userId') userId: string,
+  ) {
+    if (!userId) {
+      return [];
+    }
+    return this.botsService.getHistory(id, userId);
+  }
 
   @Post('seed')
   seed() {

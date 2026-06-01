@@ -12,6 +12,8 @@ import { ForumModule } from './forum/forum.module';
 import { BotsModule } from './bots/bots.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { ChatModule } from './chat/chat.module';
+import { SettingsModule } from './settings/settings.module';
 
 import * as fs from 'fs';
 
@@ -42,6 +44,8 @@ const staticModuleOptions = fs.existsSync(join(process.cwd(), 'out'))
     AnalyticsModule,
     NotificationsModule,
     ...staticModuleOptions,
+    ChatModule,
+    SettingsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

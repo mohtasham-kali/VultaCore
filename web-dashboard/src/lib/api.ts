@@ -44,6 +44,11 @@ export async function executeBot(id: string, prompt: string, userId: string, con
 }
 
 
+export async function fetchBotHistory(botId: string, userId: string) {
+  const res = await fetch(`${API_BASE_URL}/bots/${botId}/history?userId=${userId}`, { cache: 'no-store' });
+  return res.json();
+}
+
 export async function fetchAnalytics(userId: string) {
   const res = await fetch(`${API_BASE_URL}/analytics/${userId}`, { cache: 'no-store' });
   return res.json();

@@ -2,7 +2,7 @@
 
 import { Bot, Sparkles, Play, Terminal, Upload, File, X as CloseIcon } from "lucide-react";
 import { useEffect, useState, useRef } from "react";
-import { fetchBots, executeBot } from "@/lib/api";
+import { fetchBots, executeBot, fetchBotHistory } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 
 interface BotItem {
@@ -26,7 +26,8 @@ export default function GeneralBotsPage() {
   const [userPrompt, setUserPrompt] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [executing, setExecuting] = useState<string | null>(null);
-  const [result, setResult] = useState<BotResult | null>(null);
+  const [chatHistory, setChatHistory] = useState<{id?: string, role: string, content: string}[]>([]);
+  const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -43,10 +44,37 @@ export default function GeneralBotsPage() {
     loadBots();
   }, []);
 
+  // Load conversation history when a bot is selected
+  useEffect(() => {
+    async function loadHistory() {
+      if (selectedBot && user?.id) {
+        try {
+          const history = await fetchBotHistory(selectedBot.id, user.id);
+          setChatHistory(history);
+        } catch (e) {
+          console.error("Failed to load history", e);
+        }
+      } else {
+        setChatHistory([]);
+      }
+    }
+    loadHistory();
+  }, [selectedBot, user?.id]);
+
+  // Auto-scroll chat to bottom
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatHistory, executing]);
+
   const handleLaunch = async () => {
     if (!selectedBot || !userPrompt.trim() || !user?.id) return;
     setExecuting(selectedBot.id);
-    setResult(null);
+    
+    // Optimistically add user prompt to UI
+    const currentPrompt = userPrompt;
+    setChatHistory(prev => [...prev, { role: 'user', content: currentPrompt }]);
+    setUserPrompt(""); // Clear input area
+    
     try {
       let fileContext = "";
       if (selectedFile) {
@@ -56,10 +84,16 @@ export default function GeneralBotsPage() {
           reader.readAsText(selectedFile);
         });
       }
-      const data = await executeBot(selectedBot.id, userPrompt, user.id, fileContext);
-      setResult({ ...data, forBot: selectedBot.name });
+      const data = await executeBot(selectedBot.id, currentPrompt, user.id, fileContext);
+      
+      // Add response to UI
+      setChatHistory(prev => [...prev, { 
+        role: 'assistant', 
+        content: data.response || JSON.stringify(data)
+      }]);
     } catch (e) {
       console.error(e);
+      setChatHistory(prev => [...prev, { role: 'assistant', content: "Error: Failed to fetch response." }]);
     } finally {
       setExecuting(null);
     }
@@ -73,7 +107,7 @@ export default function GeneralBotsPage() {
 
   const clearSelection = () => {
     setSelectedBot(null);
-    setResult(null);
+    setChatHistory([]);
     setSelectedFile(null);
     setUserPrompt("");
   };
@@ -110,7 +144,7 @@ export default function GeneralBotsPage() {
                   {items.map((bot: BotItem, i: number) => (
                     <button 
                       key={i} 
-                      onClick={() => { setSelectedBot(bot); setResult(null); setSelectedFile(null); }}
+                      onClick={() => { setSelectedBot(bot); setSelectedFile(null); }}
                       className={`p-3 rounded-xl border text-left transition-all group relative overflow-hidden ${
                         selectedBot?.id === bot.id 
                           ? 'bg-blue-600/10 border-blue-500/50 shadow-lg shadow-blue-500/10' 
@@ -177,92 +211,91 @@ export default function GeneralBotsPage() {
                   </button>
                 </div>
 
-                <div className="flex-1 space-y-6">
-                  {/* Custom Prompt Area */}
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Input Task / Code</label>
-                      <div className="flex items-center gap-4">
-                        {selectedBot.name !== 'Text to Code' && (
-                          <button 
-                            onClick={() => fileInputRef.current?.click()}
-                            className="text-[10px] font-bold text-blue-400 hover:text-blue-300 flex items-center gap-1.5 transition-colors uppercase tracking-widest bg-blue-500/5 px-2.5 py-1 rounded-md border border-blue-500/20"
-                          >
-                            <Upload className="w-3 h-3" />
-                            Upload Context
-                          </button>
-                        )}
-                        <span className="text-[10px] text-slate-600 font-mono">MD SUPPORTED</span>
+                <div className="flex-1 flex flex-col h-full space-y-6">
+                  {/* Chat History Area */}
+                  <div className="flex-1 overflow-y-auto space-y-4 pr-2 max-h-[400px]">
+                    {chatHistory.length === 0 ? (
+                      <div className="h-full flex flex-col items-center justify-center text-center p-8 opacity-50">
+                        <Terminal className="w-12 h-12 text-slate-600 mb-4" />
+                        <h4 className="text-slate-400 font-bold">Lab Environment Ready</h4>
+                        <p className="text-slate-500 text-sm mt-1">Start by describing your task below.</p>
                       </div>
-                      <input 
-                        type="file"
-                        className="hidden"
-                        ref={fileInputRef}
-                        onChange={handleFileChange}
-                      />
-                    </div>
-                    
-                    <div className="relative group/textarea">
-                      <textarea 
-                        value={userPrompt}
-                        onChange={(e) => setUserPrompt(e.target.value)}
-                        placeholder="Describe the task or paste the code snippet you want the bot to analyze..."
-                        className="w-full h-40 bg-slate-950/50 border border-white/10 rounded-xl p-4 text-slate-300 font-mono text-sm outline-none focus:border-blue-500/50 transition-all resize-none placeholder:text-slate-700"
-                      />
-                      
-                      {/* File Attachment Feedback */}
-                      {selectedFile && (
-                        <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between bg-slate-950/90 border border-emerald-500/30 rounded-lg px-4 py-2 animate-in slide-in-from-bottom-2 duration-300">
-                          <div className="flex items-center gap-3 overflow-hidden">
-                            <div className="p-1.5 rounded-md bg-emerald-500/10">
-                              <File className="w-3.5 h-3.5 text-emerald-400" />
+                    ) : (
+                      chatHistory.map((msg, i) => (
+                        <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                          <div className={`max-w-[85%] rounded-2xl p-4 ${
+                            msg.role === 'user' 
+                              ? 'bg-blue-600/20 border border-blue-500/30 text-blue-100 rounded-tr-sm' 
+                              : 'bg-slate-800/50 border border-white/5 text-slate-300 rounded-tl-sm'
+                          }`}>
+                            {msg.role === 'assistant' && (
+                              <div className="flex items-center gap-2 mb-2 text-blue-400">
+                                <Bot className="w-4 h-4" />
+                                <span className="text-[10px] uppercase font-bold tracking-wider">{selectedBot.name}</span>
+                              </div>
+                            )}
+                            <div className="prose prose-sm prose-invert max-w-none font-mono text-sm whitespace-pre-wrap">
+                              {msg.content}
                             </div>
-                            <span className="text-xs text-slate-300 truncate font-mono">{selectedFile.name}</span>
                           </div>
-                          <button 
-                            onClick={() => setSelectedFile(null)}
-                            className="p-1 text-slate-500 hover:text-red-400 transition-colors"
-                          >
-                            <CloseIcon className="w-4 h-4" />
-                          </button>
                         </div>
-                      )}
-                    </div>
-
-                    <button 
-                      onClick={handleLaunch}
-                      disabled={!userPrompt.trim() || !!executing}
-                      className="w-full py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold text-sm shadow-xl shadow-blue-500/20 hover:scale-[1.01] transition-all disabled:opacity-50 disabled:grayscale flex items-center justify-center gap-3"
-                    >
-                      <Play className="w-4 h-4 fill-current" />
-                      EXECUTE AGENT
-                    </button>
+                      ))
+                    )}
+                    <div ref={chatEndRef} />
                   </div>
 
-                  {/* Result Panel (Inline now) */}
-                  {result && (
-                    <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-6 animate-in slide-in-from-bottom-4 duration-500">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-2 text-blue-400">
-                          <Terminal className="w-4 h-4" />
-                          <span className="font-bold uppercase tracking-wider text-[10px]">Response Received</span>
-                        </div>
-                        <div className="flex gap-2">
-                          <span className="text-[9px] bg-slate-900/50 px-2 py-1 rounded text-slate-500 border border-white/5 uppercase font-mono">
-                            {result.processing_time}s
-                          </span>
-                          <span className="text-[9px] bg-slate-900/50 px-2 py-1 rounded text-slate-500 border border-white/5 uppercase font-mono">
-                            CONF: {Math.round(result.confidence * 100)}%
-                          </span>
-                        </div>
-                      </div>
-                      <div className="prose prose-invert max-w-none">
-                        <p className="text-slate-200 text-sm leading-relaxed font-mono whitespace-pre-line">
-                          {result.response}
-                        </p>
-                      </div>
+                  {/* Input Mechanism */}
+                  <div className="space-y-4 pt-4 border-t border-white/5 bg-slate-900/50">
+                    <div className="flex flex-col gap-2">
+                       <div className="flex items-center justify-between">
+                          <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Prompt Sequence</label>
+                          <div className="flex items-center gap-3">
+                            <span className="text-[9px] text-slate-600 font-mono hidden sm:inline-block">MD SUPPORTED</span>
+                            {selectedBot.name !== 'Text to Code' && (
+                              <button 
+                                onClick={() => fileInputRef.current?.click()}
+                                className="text-[10px] font-bold text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors bg-blue-500/10 px-2 py-1 rounded border border-blue-500/20"
+                              >
+                                <Upload className="w-3 h-3" /> <span className="hidden sm:inline">Attach Code</span>
+                              </button>
+                            )}
+                          </div>
+                       </div>
+                       
+                       <input type="file" className="hidden" ref={fileInputRef} onChange={handleFileChange} />
+                       
+                       <div className="relative flex items-end gap-2 bg-slate-950/50 border border-white/10 rounded-xl p-2 focus-within:border-blue-500/50 transition-colors shadow-inner">
+                          <div className="flex-1 min-h-[50px] relative">
+                             {selectedFile && (
+                                <div className="absolute top-2 left-2 flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 rounded py-1 px-2 z-10 animate-in fade-in duration-200 text-xs">
+                                  <File className="w-3 h-3 text-emerald-400" />
+                                  <span className="text-slate-300 truncate max-w-[120px]">{selectedFile.name}</span>
+                                  <CloseIcon className="w-3 h-3 text-slate-400 hover:text-red-400 cursor-pointer ml-1" onClick={() => setSelectedFile(null)} />
+                                </div>
+                             )}
+                             <textarea 
+                                value={userPrompt}
+                                onChange={(e) => setUserPrompt(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault();
+                                    handleLaunch();
+                                  }
+                                }}
+                                placeholder={selectedFile ? "\n\n\nAdd instructions..." : "Type your command... (Enter to send, Shift+Enter for new line)"}
+                                className="w-full h-[80px] bg-transparent text-slate-300 font-mono text-sm outline-none resize-none px-2 py-2 placeholder:text-slate-600 custom-scrollbar"
+                             />
+                          </div>
+                          <button 
+                            onClick={handleLaunch}
+                            disabled={!userPrompt.trim() || !!executing}
+                            className="bg-blue-600 hover:bg-blue-500 text-white p-3 rounded-lg flex items-center justify-center shrink-0 transition-colors disabled:opacity-50 shadow-md shadow-blue-500/20"
+                          >
+                            <Play className="w-5 h-5 fill-current ml-0.5" />
+                          </button>
+                       </div>
                     </div>
-                  )}
+                  </div>
                 </div>
               </div>
             )}
