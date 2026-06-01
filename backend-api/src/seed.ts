@@ -19,6 +19,7 @@ async function bootstrap() {
     email: 'alice@example.com',
     password: 'password123',
     points: 1250,
+    isAdmin: true,
   });
   
   // Create AI Bot User

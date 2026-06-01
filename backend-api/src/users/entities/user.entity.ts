@@ -26,6 +26,9 @@ export class User {
   @Column({ default: false })
   isBot: boolean;
 
+  @Column({ default: false })
+  isAdmin: boolean;
+
   @ManyToOne(() => Plan, (plan) => plan.users)
   plan: Plan;
 

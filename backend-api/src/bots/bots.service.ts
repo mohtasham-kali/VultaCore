@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Bot } from './entities/bot.entity';
+import { ConversationMessage } from './entities/conversation-message.entity';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 
@@ -10,6 +11,8 @@ export class BotsService {
   constructor(
     @InjectRepository(Bot)
     private botsRepository: Repository<Bot>,
+    @InjectRepository(ConversationMessage)
+    private conversationRepository: Repository<ConversationMessage>,
     private readonly httpService: HttpService,
   ) {}
 
@@ -24,6 +27,24 @@ export class BotsService {
     const bot = await this.botsRepository.findOneBy({ id });
     if (!bot) return { error: 'Bot not found' };
 
+    // Fetch conversation memory (last 10 messages)
+    const history = await this.conversationRepository.find({
+      where: { botId: id, userId },
+      order: { createdAt: 'DESC' },
+      take: 10,
+    });
+    
+    // Sort ascending for chronological context
+    const orderedHistory = history.reverse();
+    let memoryContext = '';
+    if (orderedHistory.length > 0) {
+      memoryContext = 'Conversation History:\n' + orderedHistory.map(msg => 
+        `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`
+      ).join('\n') + '\n\n';
+    }
+    
+    const finalContext = memoryContext + (context ? `User Context/File:\n${context}` : '');
+
     bot.status = 'working';
     await this.botsRepository.save(bot);
 
@@ -36,12 +57,28 @@ export class BotsService {
 
           bot_type: bot.type,
           bot_name: bot.name,
-          context: context || null
+          context: finalContext || null
         }),
       );
 
       bot.status = 'completed';
       await this.botsRepository.save(bot);
+
+      // Save user prompt
+      await this.conversationRepository.save({
+        userId,
+        botId: id,
+        role: 'user',
+        content: prompt,
+      });
+
+      // Save assistant response
+      await this.conversationRepository.save({
+        userId,
+        botId: id,
+        role: 'assistant',
+        content: response.data.response || JSON.stringify(response.data),
+      });
 
       return response.data;
     } catch (error) {
@@ -54,6 +91,15 @@ export class BotsService {
       return { error: 'AI Service communication failed: ' + (error.message || 'Unknown error') };
     }
 
+  }
+
+  async getHistory(botId: string, userId: string): Promise<ConversationMessage[]> {
+    const history = await this.conversationRepository.find({
+      where: { botId, userId },
+      order: { createdAt: 'ASC' },
+      take: 50,
+    });
+    return history;
   }
 
   async updateStatus(id: string, status: 'idle' | 'working' | 'completed'): Promise<Bot | null> {
