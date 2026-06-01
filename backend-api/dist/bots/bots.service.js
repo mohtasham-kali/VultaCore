@@ -54,7 +54,8 @@ let BotsService = class BotsService {
         await this.botsRepository.save(bot);
         try {
             console.log(`Executing bot ${bot.name} for user ${userId}...`);
-            const response = await (0, rxjs_1.firstValueFrom)(this.httpService.post('http://localhost:8000/execute', {
+            const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
+            const response = await (0, rxjs_1.firstValueFrom)(this.httpService.post(`${aiServiceUrl}/execute`, {
                 prompt,
                 user_id: userId,
                 bot_type: bot.type,
@@ -80,11 +81,17 @@ let BotsService = class BotsService {
         catch (error) {
             bot.status = 'idle';
             await this.botsRepository.save(bot);
-            console.error(`AI Service Error (${bot.name}):`, error.message);
+            const debugMsg = error?.response?.data?.detail
+                || error?.response?.data?.error
+                || error?.message
+                || error?.code
+                || JSON.stringify(error)
+                || 'Unknown connection or parsing fallback error';
+            console.error(`AI Service Error (${bot.name}):`, debugMsg);
             if (error.response) {
                 console.error('Response data:', error.response.data);
             }
-            return { error: 'AI Service communication failed: ' + (error.message || 'Unknown error') };
+            return { error: `AI Service communication failed: ${debugMsg}` };
         }
     }
     async getHistory(botId, userId) {

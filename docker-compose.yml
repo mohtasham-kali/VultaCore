@@ -13,6 +13,7 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL:-/data/saas.sqlite}
+      AI_SERVICE_URL: http://ai:8000
     volumes:
       - api-data:/data
     healthcheck:

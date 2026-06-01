@@ -50,8 +50,9 @@ export class BotsService {
 
     try {
       console.log(`Executing bot ${bot.name} for user ${userId}...`);
+      const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
       const response = await firstValueFrom(
-        this.httpService.post('http://localhost:8000/execute', {
+        this.httpService.post(`${aiServiceUrl}/execute`, {
           prompt,
           user_id: userId,
 
@@ -81,14 +82,22 @@ export class BotsService {
       });
 
       return response.data;
-    } catch (error) {
+    } catch (error: any) {
       bot.status = 'idle';
       await this.botsRepository.save(bot);
-      console.error(`AI Service Error (${bot.name}):`, error.message);
+      
+      const debugMsg = error?.response?.data?.detail 
+        || error?.response?.data?.error 
+        || error?.message 
+        || error?.code 
+        || JSON.stringify(error)
+        || 'Unknown connection or parsing fallback error';
+        
+      console.error(`AI Service Error (${bot.name}):`, debugMsg);
       if (error.response) {
         console.error('Response data:', error.response.data);
       }
-      return { error: 'AI Service communication failed: ' + (error.message || 'Unknown error') };
+      return { error: `AI Service communication failed: ${debugMsg}` };
     }
 
   }
