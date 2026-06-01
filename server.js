@@ -13,9 +13,21 @@ const fs    = require('fs');
 const rootDir    = __dirname;
 const masterPort = process.env.PORT || 3000;
 
-// Child ports — fixed so freePort works across restarts
-const BACK_PORT = process.env.BACK_PORT || 41000;
-const DASH_PORT = process.env.DASH_PORT || 42000;
+// Child ports — assigned dynamically on boot to prevent Zombie process EADDRINUSE errors
+let BACK_PORT = null;
+let DASH_PORT = null;
+
+function findFreePort() {
+    return new Promise((resolve, reject) => {
+        const net = require('net');
+        const srv = net.createServer();
+        srv.listen(0, '127.0.0.1', () => {
+            const port = srv.address().port;
+            srv.close((err) => err ? reject(err) : resolve(port));
+        });
+        srv.on('error', reject);
+    });
+}
 
 let bootLogs = [];
 
@@ -94,6 +106,10 @@ function tryServeStatic(req, res) {
 const server = http.createServer((req, res) => {
     if (tryServeStatic(req, res)) return;
 
+    if (!BACK_PORT || !DASH_PORT) {
+        return sendBooting(res);
+    }
+
     const targetPort = req.url.startsWith('/api') ? BACK_PORT : DASH_PORT;
     proxyRequest(req, res, targetPort);
 });
@@ -101,7 +117,9 @@ const server = http.createServer((req, res) => {
 server.listen(masterPort, () => {
     log(`✨ Master Proxy listening on port ${masterPort}`);
     // Spawn engines AFTER we are already listening
-    bootEngines();
+    bootEngines().catch(err => {
+        log(`❌ Extent failure in bootEngines: ${err.message}`);
+    });
 });
 
 server.on('error', (err) => {
@@ -150,7 +168,16 @@ function startEngine(name, filePath, args, port, cwd, delay = 0) {
     }, delay);
 }
 
-function bootEngines() {
+async function bootEngines() {
+    try {
+        BACK_PORT = await findFreePort();
+        DASH_PORT = await findFreePort();
+        log(`Dynamically allocated ports: Backend=${BACK_PORT}, Dashboard=${DASH_PORT}`);
+    } catch (e) {
+        log(`❌ Failed to allocate ports: ${e.message}`);
+        return;
+    }
+
     // ── Backend (NestJS dist) ─────────────────────────────────────────────
     const backendEntry = path.join(rootDir, 'backend-api', 'dist', 'main.js');
     startEngine('Backend', backendEntry, [backendEntry], BACK_PORT,

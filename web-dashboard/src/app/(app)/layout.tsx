@@ -17,12 +17,18 @@ export default function AppLayout({
   useEffect(() => {
     if (authLoading) return;
 
-    fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/settings`)
-      .then(res => res.json())
+    fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api'}/settings`)
+      .then(res => {
+        if (!res.ok) throw new Error('Failed to fetch settings');
+        return res.json();
+      })
       .then(settings => {
         if (settings.maintenanceMode === 'true') {
-          fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/users`)
-            .then(res => res.json())
+          fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api'}/users`)
+            .then(res => {
+              if (!res.ok) throw new Error('Failed to fetch users');
+              return res.json();
+            })
             .then(users => {
               const dbUser = users.find((u: any) => u.email === user?.email);
               if (!dbUser || !dbUser.isAdmin) {
