@@ -4,6 +4,6 @@ export declare class BotsController {
     constructor(botsService: BotsService);
     findAll(type?: 'general' | 'cyber'): Promise<import("./entities/bot.entity").Bot[]>;
     execute(id: string, prompt: string, userId: string, context?: string): Promise<any>;
-    getHistory(id: string, userId: string): Promise<import("./entities/conversation-message.entity").ConversationMessage[]> | never[];
+    getHistory(id: string, userId: string): never[] | Promise<import("./entities/conversation-message.entity").ConversationMessage[]>;
     seed(): Promise<void>;
 }
