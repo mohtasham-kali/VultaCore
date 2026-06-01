@@ -1,1 +1,1 @@
-self.__NEXT_FONT_MANIFEST='{"pages":{},"app":{"/home/runner/work/VultaCore/VultaCore/web-dashboard/src/app/layout":["static/media/22a5144ee8d83bca-s.p.woff2","static/media/f5271587012faf78-s.p.woff2"]},"appUsingSizeAdjust":true,"pagesUsingSizeAdjust":false}';
+self.__NEXT_FONT_MANIFEST="{\"pages\":{},\"app\":{\"/home/hacker/Documents/SaaS 2.0/tri-stack/web-dashboard/src/app/layout\":[\"static/media/22a5144ee8d83bca-s.p.woff2\",\"static/media/f5271587012faf78-s.p.woff2\"]},\"appUsingSizeAdjust\":true,\"pagesUsingSizeAdjust\":false}"

@@ -65,7 +65,7 @@ export default function Home() {
               desc: "Deploy specialized bots for code and security.",
               gradient: "from-emerald-500/20 to-teal-500/20",
               border: "group-hover:border-emerald-500/50",
-              href: "/bots"
+              href: "/bots/general"
             },
             {
               title: "Analytics",
