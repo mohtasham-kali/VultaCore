@@ -10,8 +10,11 @@ export default function AdminSettingsPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/settings`)
-      .then(res => res.json())
+    fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api'}/settings`)
+      .then(res => {
+        if (!res.ok) throw new Error('Failed to load settings');
+        return res.json();
+      })
       .then(data => {
         if (data.maintenanceMode === 'true') setMaintenanceMode(true);
         setLoading(false);
@@ -25,7 +28,7 @@ export default function AdminSettingsPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/settings`, {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api'}/settings`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ maintenanceMode: maintenanceMode.toString() }),
