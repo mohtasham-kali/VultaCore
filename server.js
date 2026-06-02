@@ -146,7 +146,9 @@ function freePort(port) {
 
 function startEngine(name, execBin, execArgs, port, cwd, envExtra = {}, delay = 0) {
     setTimeout(() => {
-        if (!fs.existsSync(execBin)) {
+        // Only stat-check absolute/relative paths; bare commands (e.g. 'python3') are resolved by the shell
+        const isBareCommand = !execBin.includes('/');
+        if (!isBareCommand && !fs.existsSync(execBin)) {
             log(`❌ ${name}: executable not found → ${execBin}`);
             return;
         }
@@ -181,8 +183,24 @@ async function bootEngines() {
     }
 
     // ── AI Engine (FastAPI) ────────────────────────────────────────────────
-    const aiBin = path.join(rootDir, 'ai-services', 'venv', 'bin', 'uvicorn');
-    const aiArgs = ['main:app', '--host', '127.0.0.1', '--port', String(AI_PORT)];
+    // Resolve uvicorn binary: prefer venv → system uvicorn → python3 -m uvicorn
+    const venvUvicorn   = path.join(rootDir, 'ai-services', 'venv', 'bin', 'uvicorn');
+    const venvPython    = path.join(rootDir, 'ai-services', 'venv', 'bin', 'python3');
+    let aiBin, aiArgs;
+    if (fs.existsSync(venvUvicorn)) {
+        aiBin  = venvUvicorn;
+        aiArgs = ['main:app', '--host', '127.0.0.1', '--port', String(AI_PORT)];
+        log('AI Engine: using venv uvicorn');
+    } else if (fs.existsSync(venvPython)) {
+        aiBin  = venvPython;
+        aiArgs = ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(AI_PORT)];
+        log('AI Engine: using venv python -m uvicorn');
+    } else {
+        // Fall back to system python3; uvicorn must be installed globally
+        aiBin  = 'python3';
+        aiArgs = ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(AI_PORT)];
+        log('⚠️  AI Engine: venv not found — falling back to system python3 -m uvicorn');
+    }
     startEngine('AI Engine', aiBin, aiArgs, AI_PORT, path.join(rootDir, 'ai-services'), {}, 0);
 
     // ── Backend (NestJS dist) ─────────────────────────────────────────────
