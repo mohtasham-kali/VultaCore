@@ -190,25 +190,42 @@ function startEngine(name, execBin, execArgs, port, cwd, envExtra = {}, delay = 
 
 // Resolve python3 absolute path at boot time so we can log clearly if missing
 function resolvePython() {
-    // 1. Prefer the venv we install during CD
-    const venvUvicorn = path.join(rootDir, 'ai-services', 'venv', 'bin', 'uvicorn');
+    // 1. Prefer the venv's python directly (avoids shebang issues of venv/bin/uvicorn)
     const venvPython  = path.join(rootDir, 'ai-services', 'venv', 'bin', 'python3');
-    if (fs.existsSync(venvUvicorn)) {
-        log('AI Engine: resolved → venv/bin/uvicorn');
-        return { bin: venvUvicorn, args: (port) => ['main:app', '--host', '127.0.0.1', '--port', String(port)] };
-    }
+    
+    // Note: fs.existsSync on a symlink returns false if the target is missing.
+    // This perfectly catches broken symlinks copied from GitHub Actions.
     if (fs.existsSync(venvPython)) {
         log('AI Engine: resolved → venv/bin/python3 -m uvicorn');
-        return { bin: venvPython, args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)] };
+        return { 
+            bin: venvPython, 
+            args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
+            env: {}
+        };
     }
 
-    // 2. Try to find system python3 via `which`
+    // 2. Try to find system python3 via `which` and point PYTHONPATH to our copied venv
     for (const cmd of ['python3', 'python']) {
         try {
             const p = execSync(`which ${cmd}`, { encoding: 'utf8' }).trim();
             if (p) {
-                log(`AI Engine: resolved → ${p} (system, shell=true)`);
-                return { bin: p, args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)] };
+                log(`AI Engine: resolved → ${p} (system, with PYTHONPATH fallback)`);
+                // Find dynamic python3.x folder inside venv/lib to inject PYTHONPATH
+                const libDir = path.join(rootDir, 'ai-services', 'venv', 'lib');
+                let sitePackages = '';
+                if (fs.existsSync(libDir)) {
+                    const pyDirs = fs.readdirSync(libDir).filter(d => d.startsWith('python'));
+                    if (pyDirs.length > 0) {
+                        sitePackages = path.join(libDir, pyDirs[0], 'site-packages');
+                    }
+                }
+                const envExtra = sitePackages ? { PYTHONPATH: sitePackages } : {};
+                
+                return { 
+                    bin: p, 
+                    args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
+                    env: envExtra
+                };
             }
         } catch (_) {}
     }
@@ -237,7 +254,7 @@ async function bootEngines() {
             pythonResolved.args(AI_PORT),
             AI_PORT,
             path.join(rootDir, 'ai-services'),
-            {},
+            pythonResolved.env || {},
             0
         );
     } else {
