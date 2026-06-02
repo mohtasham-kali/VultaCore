@@ -100,7 +100,17 @@ jobs:
             # 3. Install root dependencies properly (swallowing errors if npm is missing on SSH)
             npm install --omit=dev 2>&1 | tail -5 || echo "npm install bypassed due to missing path"
 
-            # 4. Restart via Passenger CLI (Hostinger's actual mechanism)
+            # 4. Set up Python venv for AI service (creates venv if missing, always syncs deps)
+            echo "Setting up Python AI service venv..."
+            cd ~/domains/vultacore.techprogression.com/nodejs/ai-services
+            if [ ! -f "venv/bin/python3" ]; then
+              python3 -m venv venv && echo "✅ venv created"
+            fi
+            venv/bin/pip install --quiet --upgrade pip
+            venv/bin/pip install --quiet -r requirements.txt && echo "✅ AI deps installed"
+            cd ~/domains/vultacore.techprogression.com/nodejs
+
+            # 5. Restart via Passenger CLI (Hostinger's actual mechanism)
             #    Try multiple methods in order of preference
             if command -v passenger-config &>/dev/null; then
               passenger-config restart-app ~/domains/vultacore.techprogression.com/nodejs && echo "✅ passenger-config restart done"
