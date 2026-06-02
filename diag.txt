@@ -12,8 +12,8 @@
    HHHHHHHH           HHHHHHHH
        HHHH               HHHH
 
-[0mWelcome back! The time now is 23:37 UTC
-Server load: 17.91, 19.12, 18.38
+[0mWelcome back! The time now is 21:51 UTC
+Server load: 16.63, 15.73, 17.37
 
 Link to hPanel: 
 https://hpanel.hostinger.com/ 
@@ -22,34 +22,43 @@ https://hpanel.hostinger.com/
 -bash: line 2: node: command not found
 node not found in PATH
 === APP DIR CONTENTS ===
-total 804
-drwxr-xr-x  11 u879979656 o1009032720   4096 Jun  1 23:37 .
-drwxr-xr-x   4 u879979656 o1009032720   4096 May  9 14:15 ..
-drwxr-xr-x   3 u879979656 o1009032720   4096 Jun  1 21:48 ai-services
-drwxr-xr-x   6 u879979656 o1009032720   4096 Jun  1 23:22 backend-api
--rw-r--r--   1 u879979656 o1009032720   2434 Jun  1 21:49 build-all.sh
--rw-r--r--   1 u879979656 o1009032720   2512 Jun  1 21:49 diag.txt
--rw-r--r--   1 u879979656 o1009032720   1416 Jun  1 21:49 docker-compose.yml
-drwxr-xr-x   3 u879979656 o1009032720   4096 Jun  1 21:48 .github
--rw-r--r--   1 u879979656 o1009032720    272 Jun  1 21:48 .gitignore
--rw-r--r--   1 u879979656 o1009032720    433 Jun  1 21:49 hostinger-test.html
--rw-r--r--   1 u879979656 o1009032720    309 Jun  1 21:49 index.html
-drwxr-xr-x   2 u879979656 o1009032720   4096 Jun  1 21:49 k8s
-drwxr-xr-x   7 u879979656 o1009032720   4096 Jun  1 21:49 mobile-app
-drwxr-xr-x 106 u879979656 o1009032720  24576 Jun  1 23:37 node_modules
--rw-r--r--   1 u879979656 o1009032720   1069 Jun  1 21:49 package.json
--rw-r--r--   1 u879979656 o1009032720 657257 Jun  1 21:50 package-lock.json
--rw-r--r--   1 u879979656 o1009032720   2870 Jun  1 21:48 README.md
--rw-r--r--   1 u879979656 o1009032720    598 Jun  1 21:49 render.yaml
--rw-r--r--   1 u879979656 o1009032720    855 Jun  1 21:49 setup.js
--rw-r--r--   1 u879979656 o1009032720      0 Jun  1 21:50 stderr.log
--rw-r--r--   1 u879979656 o1009032720   1701 Jun  1 21:49 test_bots.js
-drwxr-xr-x   2 u879979656 o1009032720   4096 Jun  1 21:50 tmp
-drwxr-xr-x   2 u879979656 o1009032720   4096 Jun  1 21:48 .vscode
-drwxr-xr-x   8 u879979656 o1009032720   4096 Jun  1 21:49 web-dashboard
+total 932
+drwxr-xr-x 14 u879979656 o1009032720   4096 Jun  2 21:51 .
+drwxr-xr-x  4 u879979656 o1009032720   4096 May  9 14:15 ..
+drwxr-xr-x  3 u879979656 o1009032720   4096 Jun  2 21:50 ai-services
+drwxr-xr-x  4 u879979656 o1009032720   4096 Jun  2 21:50 analytics-engine
+-rw-r--r--  1 u879979656 o1009032720    267 Jun  2 21:50 app.js
+drwxr-xr-x  6 u879979656 o1009032720   4096 Jun  2 21:50 backend-api
+-rw-r--r--  1 u879979656 o1009032720   2434 Jun  2 21:50 build-all.sh
+-rw-r--r--  1 u879979656 o1009032720   1706 Jun  2 21:50 debug.js
+drwx------  2 u879979656 o1009032720   4096 Jun  2 21:51 desktop-app
+-rw-r--r--  1 u879979656 o1009032720   2512 Jun  2 21:50 diag.txt
+-rw-r--r--  1 u879979656 o1009032720   1453 Jun  2 21:50 docker-compose.yml
+-rw-r--r--  1 u879979656 o1009032720    567 Jun  2 21:50 error_info.html
+drwxr-xr-x  8 u879979656 o1009032720   4096 Jun  2 21:50 .git
+drwxr-xr-x  3 u879979656 o1009032720   4096 Jun  2 21:50 .github
+-rw-r--r--  1 u879979656 o1009032720    272 Jun  2 21:50 .gitignore
+-rw-r--r--  1 u879979656 o1009032720    433 Jun  2 21:50 hostinger-test.html
+-rw-r--r--  1 u879979656 o1009032720   1088 Jun  2 21:50 implementation_plan.md
+-rw-r--r--  1 u879979656 o1009032720    309 Jun  2 21:50 index.html
+drwx------  2 u879979656 o1009032720   4096 Jun  2 21:51 k8s
+drwx------  2 u879979656 o1009032720   4096 Jun  2 21:51 mobile-app
+drwx------  2 u879979656 o1009032720   4096 Jun  2 21:51 node_modules
+drwx------  2 u879979656 o1009032720   4096 Jun  2 21:51 out
+-rw-r--r--  1 u879979656 o1009032720   1069 Jun  2 21:50 package.json
+-rw-r--r--  1 u879979656 o1009032720 657257 Jun  2 21:51 package-lock.json
+-rw-r--r--  1 u879979656 o1009032720   2870 Jun  2 21:50 README.md
+-rw-r--r--  1 u879979656 o1009032720    598 Jun  2 21:50 render.yaml
+-rw-r--r--  1 u879979656 o1009032720  90112 Jun  2 21:50 saas.sqlite
+-rw-r--r--  1 u879979656 o1009032720   9447 Jun  2 21:50 server.js
+-rw-r--r--  1 u879979656 o1009032720    855 Jun  2 21:50 setup.js
+-rw-r--r--  1 u879979656 o1009032720   1701 Jun  2 21:50 test_bots.js
+drwxr-xr-x  2 u879979656 o1009032720   4096 Jun  2 21:50 .vscode
+drwx------  2 u879979656 o1009032720   4096 Jun  2 21:51 web-dashboard
 === HTTP-PROXY MODULE ===
 MISSING
 === HOSTINGER STDERR.LOG (NODE APP CRASH) ===
+(no stderr.log)
 === HOSTINGER SERVER.LOG ===
 (no server.log)
 === STARTUP TEST ===
