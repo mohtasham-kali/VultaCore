@@ -26,6 +26,10 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Wipe stale .next build from git cache
+        run: |
+          git rm -r --cached web-dashboard/.next/ 2>/dev/null || true
+
       - name: Install & Build Next.js
         working-directory: web-dashboard
         run: |

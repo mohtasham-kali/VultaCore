@@ -182,7 +182,7 @@ async function bootEngines() {
 
     // ── AI Engine (FastAPI) ────────────────────────────────────────────────
     const aiBin = path.join(rootDir, 'ai-services', 'venv', 'bin', 'uvicorn');
-    const aiArgs = ['main:app', '--port', String(AI_PORT)];
+    const aiArgs = ['main:app', '--host', '127.0.0.1', '--port', String(AI_PORT)];
     startEngine('AI Engine', aiBin, aiArgs, AI_PORT, path.join(rootDir, 'ai-services'), {}, 0);
 
     // ── Backend (NestJS dist) ─────────────────────────────────────────────
