@@ -5,6 +5,7 @@ import { MobileHeader } from "@/components/layout/MobileHeader";
 import { Header } from "@/components/layout/Header";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
+import { API_BASE_URL } from "@/lib/constants";
 
 export default function AppLayout({
   children,
@@ -17,14 +18,14 @@ export default function AppLayout({
   useEffect(() => {
     if (authLoading) return;
 
-    fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api'}/settings`)
+    fetch(`${API_BASE_URL}/settings`)
       .then(res => {
         if (!res.ok) throw new Error('Failed to fetch settings');
         return res.json();
       })
       .then(settings => {
         if (settings.maintenanceMode === 'true') {
-          fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api'}/users`)
+          fetch(`${API_BASE_URL}/users`)
             .then(res => {
               if (!res.ok) throw new Error('Failed to fetch users');
               return res.json();
