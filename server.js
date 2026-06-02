@@ -190,41 +190,70 @@ function startEngine(name, execBin, execArgs, port, cwd, envExtra = {}, delay = 
 
 // Resolve python3 absolute path at boot time so we can log clearly if missing
 function resolvePython() {
-    // 1. Prefer the venv's python directly (avoids shebang issues of venv/bin/uvicorn)
-    const venvPython  = path.join(rootDir, 'ai-services', 'venv', 'bin', 'python3');
-    
-    // Note: fs.existsSync on a symlink returns false if the target is missing.
-    // This perfectly catches broken symlinks copied from GitHub Actions.
-    if (fs.existsSync(venvPython)) {
-        log('AI Engine: resolved → venv/bin/python3 -m uvicorn');
-        return { 
-            bin: venvPython, 
-            args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
-            env: {}
-        };
+    const aiDir = path.join(rootDir, 'ai-services');
+    const venvDir = path.join(aiDir, 'venv');
+    const venvLibDir = path.join(venvDir, 'lib');
+
+    // 1. Check if a valid venv exists (by checking lib/ dir which pip always creates)
+    //    We avoid checking venv/bin/python3 symlink directly because it may be broken
+    //    when transferred across machines (e.g., GitHub Actions → Hostinger).
+    if (fs.existsSync(venvLibDir)) {
+        try {
+            // Find the python3.x subdirectory dynamically
+            const pyDirs = fs.readdirSync(venvLibDir).filter(d => d.startsWith('python'));
+            if (pyDirs.length > 0) {
+                const sitePackages = path.join(venvLibDir, pyDirs[0], 'site-packages');
+                if (fs.existsSync(sitePackages)) {
+                    // Find working python binary: prefer venv python, fall back to system
+                    const candidates = [
+                        path.join(venvDir, 'bin', 'python3'),
+                        path.join(venvDir, 'bin', 'python'),
+                    ];
+                    for (const bin of candidates) {
+                        // Test if the binary is actually executable (not a broken symlink)
+                        try {
+                            const { execFileSync } = require('child_process');
+                            execFileSync(bin, ['--version'], { stdio: 'ignore' });
+                            log(`AI Engine: resolved → venv python (${path.basename(bin)}) with site-packages`);
+                            return {
+                                bin,
+                                args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
+                                env: { PYTHONPATH: sitePackages }
+                            };
+                        } catch (_) {}
+                    }
+                    // venv binaries broken — fall back to system python with PYTHONPATH
+                    log(`AI Engine: venv binaries broken, using system python with PYTHONPATH=${sitePackages}`);
+                    for (const cmd of ['python3', 'python']) {
+                        try {
+                            const p = execSync(`which ${cmd}`, { encoding: 'utf8' }).trim();
+                            if (p) {
+                                log(`AI Engine: resolved → ${p} (system) + PYTHONPATH`);
+                                return {
+                                    bin: p,
+                                    args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
+                                    env: { PYTHONPATH: sitePackages }
+                                };
+                            }
+                        } catch (_) {}
+                    }
+                }
+            }
+        } catch (e) {
+            log(`AI Engine: venv scan error: ${e.message}`);
+        }
     }
 
-    // 2. Try to find system python3 via `which` and point PYTHONPATH to our copied venv
+    // 2. No venv at all — try system python3 (no guarantee uvicorn is installed)
     for (const cmd of ['python3', 'python']) {
         try {
             const p = execSync(`which ${cmd}`, { encoding: 'utf8' }).trim();
             if (p) {
-                log(`AI Engine: resolved → ${p} (system, with PYTHONPATH fallback)`);
-                // Find dynamic python3.x folder inside venv/lib to inject PYTHONPATH
-                const libDir = path.join(rootDir, 'ai-services', 'venv', 'lib');
-                let sitePackages = '';
-                if (fs.existsSync(libDir)) {
-                    const pyDirs = fs.readdirSync(libDir).filter(d => d.startsWith('python'));
-                    if (pyDirs.length > 0) {
-                        sitePackages = path.join(libDir, pyDirs[0], 'site-packages');
-                    }
-                }
-                const envExtra = sitePackages ? { PYTHONPATH: sitePackages } : {};
-                
-                return { 
-                    bin: p, 
+                log(`AI Engine: resolved → ${p} (system, no venv — uvicorn must be installed globally)`);
+                return {
+                    bin: p,
                     args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
-                    env: envExtra
+                    env: {}
                 };
             }
         } catch (_) {}
