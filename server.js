@@ -172,7 +172,7 @@ function startEngine(name, execBin, execArgs, port, cwd, envExtra = {}, delay = 
         const child = spawn(execBin, execArgs, {
             env  : { ...process.env, PORT: String(port), NODE_ENV: 'production', ...envExtra },
             cwd  : cwd || rootDir,
-            shell: true   // shell:true ensures PATH resolution works in Passenger's env
+            shell: false
         });
         runningChildren.push(child);
 
