@@ -103,8 +103,22 @@ function tryServeStatic(req, res) {
     return false;
 }
 
-// ─── Master HTTP Server (binds IMMEDIATELY so Passenger is happy) ───────────
+// ─── /logs diagnostic route ─────────────────────────────────────────────────
 const server = http.createServer((req, res) => {
+    // Diagnostic endpoints — always available
+    if (req.url === '/logs' || req.url === '/_logs') {
+        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+        return res.end(bootLogs.join('\n'));
+    }
+    if (req.url === '/health') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({
+            status: 'up',
+            ports : { backend: BACK_PORT, dashboard: DASH_PORT, ai: AI_PORT },
+            uptime: process.uptime()
+        }));
+    }
+
     if (tryServeStatic(req, res)) return;
 
     if (!BACK_PORT || !DASH_PORT) {
@@ -146,29 +160,61 @@ function freePort(port) {
 
 function startEngine(name, execBin, execArgs, port, cwd, envExtra = {}, delay = 0) {
     setTimeout(() => {
-        // Only stat-check absolute/relative paths; bare commands (e.g. 'python3') are resolved by the shell
-        const isBareCommand = !execBin.includes('/');
-        if (!isBareCommand && !fs.existsSync(execBin)) {
+        // Only stat-check absolute paths — bare commands are resolved by the OS
+        const isAbsPath = execBin.startsWith('/');
+        if (isAbsPath && !fs.existsSync(execBin)) {
             log(`❌ ${name}: executable not found → ${execBin}`);
             return;
         }
         freePort(port);
-        log(`📡 Spawning ${name} on port ${port}...`);
+        log(`📡 Spawning ${name} on port ${port} [${execBin}]...`);
 
         const child = spawn(execBin, execArgs, {
             env  : { ...process.env, PORT: String(port), NODE_ENV: 'production', ...envExtra },
             cwd  : cwd || rootDir,
-            shell: false
+            shell: true   // shell:true ensures PATH resolution works in Passenger's env
         });
         runningChildren.push(child);
 
         child.stdout.on('data', d => log(`[${name}] ${d.toString().trim()}`));
         child.stderr.on('data', d => log(`[${name}] ${d.toString().trim()}`));
+        child.on('error', err => {
+            log(`❌ [${name}] spawn error: ${err.message}`);
+        });
         child.on('exit', code => {
-            log(`⚠️  ${name} exited (${code}) — restarting in 3 s…`);
-            setTimeout(() => startEngine(name, execBin, execArgs, port, cwd, envExtra), 3000);
+            log(`⚠️  ${name} exited (${code}) — restarting in 5 s…`);
+            setTimeout(() => startEngine(name, execBin, execArgs, port, cwd, envExtra), 5000);
         });
     }, delay);
+}
+
+// Resolve python3 absolute path at boot time so we can log clearly if missing
+function resolvePython() {
+    // 1. Prefer the venv we install during CD
+    const venvUvicorn = path.join(rootDir, 'ai-services', 'venv', 'bin', 'uvicorn');
+    const venvPython  = path.join(rootDir, 'ai-services', 'venv', 'bin', 'python3');
+    if (fs.existsSync(venvUvicorn)) {
+        log('AI Engine: resolved → venv/bin/uvicorn');
+        return { bin: venvUvicorn, args: (port) => ['main:app', '--host', '127.0.0.1', '--port', String(port)] };
+    }
+    if (fs.existsSync(venvPython)) {
+        log('AI Engine: resolved → venv/bin/python3 -m uvicorn');
+        return { bin: venvPython, args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)] };
+    }
+
+    // 2. Try to find system python3 via `which`
+    for (const cmd of ['python3', 'python']) {
+        try {
+            const p = execSync(`which ${cmd}`, { encoding: 'utf8' }).trim();
+            if (p) {
+                log(`AI Engine: resolved → ${p} (system, shell=true)`);
+                return { bin: p, args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)] };
+            }
+        } catch (_) {}
+    }
+
+    log('❌ AI Engine: no python3/python found anywhere — AI bots will be unavailable');
+    return null;
 }
 
 async function bootEngines() {
@@ -183,25 +229,20 @@ async function bootEngines() {
     }
 
     // ── AI Engine (FastAPI) ────────────────────────────────────────────────
-    // Resolve uvicorn binary: prefer venv → system uvicorn → python3 -m uvicorn
-    const venvUvicorn   = path.join(rootDir, 'ai-services', 'venv', 'bin', 'uvicorn');
-    const venvPython    = path.join(rootDir, 'ai-services', 'venv', 'bin', 'python3');
-    let aiBin, aiArgs;
-    if (fs.existsSync(venvUvicorn)) {
-        aiBin  = venvUvicorn;
-        aiArgs = ['main:app', '--host', '127.0.0.1', '--port', String(AI_PORT)];
-        log('AI Engine: using venv uvicorn');
-    } else if (fs.existsSync(venvPython)) {
-        aiBin  = venvPython;
-        aiArgs = ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(AI_PORT)];
-        log('AI Engine: using venv python -m uvicorn');
+    const pythonResolved = resolvePython();
+    if (pythonResolved) {
+        startEngine(
+            'AI Engine',
+            pythonResolved.bin,
+            pythonResolved.args(AI_PORT),
+            AI_PORT,
+            path.join(rootDir, 'ai-services'),
+            {},
+            0
+        );
     } else {
-        // Fall back to system python3; uvicorn must be installed globally
-        aiBin  = 'python3';
-        aiArgs = ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(AI_PORT)];
-        log('⚠️  AI Engine: venv not found — falling back to system python3 -m uvicorn');
+        log('⚠️  Skipping AI Engine — visit /logs to see diagnostics. Check python3 is installed on the host.');
     }
-    startEngine('AI Engine', aiBin, aiArgs, AI_PORT, path.join(rootDir, 'ai-services'), {}, 0);
 
     // ── Backend (NestJS dist) ─────────────────────────────────────────────
     const backendEntry = path.join(rootDir, 'backend-api', 'dist', 'main.js');
@@ -230,3 +271,5 @@ async function bootEngines() {
 
     startEngine('Dashboard', process.execPath, dashArgs, DASH_PORT, dashCwd, {}, 5000);
 }
+
+
