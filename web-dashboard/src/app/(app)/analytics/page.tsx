@@ -56,11 +56,15 @@ export default function AnalyticsPage() {
     loadStats();
   }, [user?.id]);
 
-  const chartData = stats ? [
-    { name: 'Engagement', value: stats.engagement_score, color: '#10b981' },
-    { name: 'Points', value: Math.min(stats.total_points / 10, 100), color: '#8b5cf6' },
-    { name: 'Remaining', value: 100 - stats.engagement_score, color: '#334155' },
-  ] : [];
+  const chartData = stats?.temporalData || [
+    { name: 'Mon', value: 0 },
+    { name: 'Tue', value: 0 },
+    { name: 'Wed', value: 0 },
+    { name: 'Thu', value: 0 },
+    { name: 'Fri', value: 0 },
+    { name: 'Sat', value: 0 },
+    { name: 'Sun', value: 0 },
+  ];
 
   const renderChart = () => {
     switch (chartType) {
@@ -74,11 +78,7 @@ export default function AnalyticsPage() {
               contentStyle={{ backgroundColor: '#0f172a', borderColor: 'rgba(255,255,255,0.1)', color: 'white' }}
               itemStyle={{ color: 'white' }}
             />
-            <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-              {chartData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.color} />
-              ))}
-            </Bar>
+            <Bar dataKey="value" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
           </BarChart>
         );
       case "line":
@@ -95,27 +95,18 @@ export default function AnalyticsPage() {
           </LineChart>
         );
       default:
+        // Area or default line for generic temporal view
         return (
-          <PieChart>
-            <Pie
-              data={chartData}
-              cx="50%"
-              cy="50%"
-              innerRadius={80}
-              outerRadius={120}
-              paddingAngle={5}
-              dataKey="value"
-              stroke="none"
-            >
-              {chartData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.color} />
-              ))}
-            </Pie>
+          <LineChart data={chartData}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
+            <XAxis dataKey="name" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
+            <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
             <Tooltip 
               contentStyle={{ backgroundColor: '#0f172a', borderColor: 'rgba(255,255,255,0.1)', color: 'white' }}
               itemStyle={{ color: 'white' }}
             />
-          </PieChart>
+            <Line type="stepAfter" dataKey="value" stroke="#10b981" strokeWidth={3} dot={{ fill: '#10b981', r: 3 }} />
+          </LineChart>
         );
     }
   };
@@ -168,12 +159,7 @@ export default function AnalyticsPage() {
             </ResponsiveContainer>
           </div>
           <div className="flex justify-center gap-6 mt-[-20px]">
-            {chartData.map((item, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-                <span className="text-sm text-slate-400 font-medium">{item.name}</span>
-              </div>
-            ))}
+             {/* Legend removed for temporal chart */}
           </div>
         </div>
 

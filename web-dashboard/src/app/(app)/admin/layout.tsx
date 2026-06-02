@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 const NAV_ITEMS = [
   { name: "Overview", href: "/admin", icon: LayoutDashboard },
   { name: "Users", href: "/admin/users", icon: Users },
+  { name: "Subscriptions", href: "/admin/subscriptions", icon: Target },
   { name: "Sales Pipeline", href: "/admin/leads", icon: Target },
   { name: "Sales POS", href: "/admin/pos", icon: CreditCard },
   { name: "Platform Settings", href: "/admin/settings", icon: Settings },
