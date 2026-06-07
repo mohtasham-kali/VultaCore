@@ -33,6 +33,7 @@ interface AnalyticsStats {
   rank_estimate: string;
   engagement_score: number;
   activityLog?: ActivityLogEntry[];
+  temporalData?: { name: string; value: number }[];
 }
 
 export default function AnalyticsPage() {
