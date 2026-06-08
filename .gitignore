@@ -3,12 +3,14 @@ node_modules/
 /dist/
 !backend-api/dist/
 
-# Allow Next.js standalone output and static chunks
+# Ignore all Next.js build output and cache
 .next/
-!web-dashboard/.next/standalone/
-!web-dashboard/.next/static/
+
+# Ignore runtime and build artifacts
+server.log
+error_log.txt
+*.sqlite
 
 .env
 .env.local
-error_log.txt
 web-dashboard/public/downloads/
