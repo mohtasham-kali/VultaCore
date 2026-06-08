@@ -21,7 +21,7 @@ DESKTOP_DIR="$SCRIPT_DIR/desktop-app"
 # ── 1. Build the Next.js web dashboard (static export) ──────
 echo "▶  [1/3] Building Web Dashboard..."
 cd "$WEB_DIR"
-npm run build
+STATIC_EXPORT=true npm run build
 echo "✓  Web Dashboard built → $WEB_DIR/out"
 echo ""
 

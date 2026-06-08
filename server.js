@@ -194,6 +194,20 @@ function resolvePython() {
     const venvDir = path.join(aiDir, 'venv');
     const venvLibDir = path.join(venvDir, 'lib');
 
+    if (!fs.existsSync(venvDir)) {
+        log(`AI Engine: venv missing, attempting auto-setup via python3 -m venv...`);
+        try {
+            const { execSync } = require('child_process');
+            execSync(`python3 -m venv venv`, { cwd: aiDir, stdio: 'pipe' });
+            log(`AI Engine: venv created, installing requirements...`);
+            const pipBin = path.join(venvDir, 'bin', 'pip');
+            execSync(`${pipBin} install -r requirements.txt`, { cwd: aiDir, stdio: 'pipe' });
+            log(`AI Engine: requirements installed successfully.`);
+        } catch (err) {
+            log(`AI Engine: Auto-setup failed: ${err.stderr ? err.stderr.toString() : err.message}`);
+        }
+    }
+
     // 1. Check if a valid venv exists (by checking lib/ dir which pip always creates)
     //    We avoid checking venv/bin/python3 symlink directly because it may be broken
     //    when transferred across machines (e.g., GitHub Actions → Hostinger).
