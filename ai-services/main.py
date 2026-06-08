@@ -98,13 +98,13 @@ async def execute_bot(request: BotRequest):
             response_text = await call_openrouter(f"You are an expert coder. Write code for: {full_prompt}", "anthropic/claude-3-haiku")
             engine_meta = "Claude-3-Haiku (OpenRouter)"
         elif bot_name == "Bug Fixer":
-            # Use Mistral (Mixtral 8x7B) for bug fixing logic
-            response_text = await call_openrouter(f"You are a debugging expert. Fix the bugs in this: {full_prompt}", "mistralai/mixtral-8x7b-instruct")
-            engine_meta = "Mixtral-8x7B (OpenRouter)"
+            # Use Llama 3 on OpenRouter for bug fixing
+            response_text = await call_openrouter(f"You are a debugging expert. Fix the bugs in this: {full_prompt}", "meta-llama/llama-3-8b-instruct")
+            engine_meta = "Llama-3-8B (OpenRouter)"
         elif bot_name == "Error Explainer":
-            # Use Gemini Pro for complex explanations
-            response_text = await call_gemini(f"Explain this error in detail: {full_prompt}", "gemini-pro-latest")
-            engine_meta = "Gemini-Pro-Latest"
+            # Use Gemini Flash for stability and quota
+            response_text = await call_gemini(f"Explain this error in detail: {full_prompt}", "gemini-flash-latest")
+            engine_meta = "Gemini-Flash-Latest"
         else:
             # Use Gemini Flash for general tasks
             response_text = await call_gemini(f"Analyze/Process this task: {full_prompt}", "gemini-flash-latest")
@@ -123,4 +123,5 @@ async def execute_bot(request: BotRequest):
     )
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
