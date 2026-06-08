@@ -1,0 +1,55 @@
+name: Release Multi-Platform App
+on:
+  push:
+    branches: [ main ] # Triggers the build when you push to the main branch
+
+jobs:
+  publish:
+    strategy:
+      fail-fast: false
+      matrix:
+        # This matrix spawns 3 separate virtual environments simultaneously
+        include:
+          - platform: 'macos-latest'
+            args: ''
+          - platform: 'ubuntu-22.04' # Linux build server
+            args: ''
+          - platform: 'windows-latest' # Windows build server (.exe)
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      # Linux requires specific system dependencies to compile Tauri [1]
+      - name: install Linux dependencies (Ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: install frontend dependencies
+        # Assuming desktop-app is where the package.json for the front-end is located?
+        # Actually the user script just says `npm install`. The workflow runs in project root.
+        # Let's use `npm install` per instructions. And maybe we need to cd into desktop-app for the build, but the user script uses `tauri-apps/tauri-action` which might have a different config or just run in root. Let's stick exactly to the provided user code.
+        run: npm install
+
+      - name: Build and Publish Application
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: app-v__VERSION__ # Automatically names the release version
+          releaseName: 'App v__VERSION__'
+          releaseBody: 'See the assets below for Windows, macOS, and Linux installers.'
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
