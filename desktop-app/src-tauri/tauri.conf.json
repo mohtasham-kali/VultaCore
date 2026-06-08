@@ -34,7 +34,7 @@
       "endpoints": [
         "https://github.com/mohtasham-kali/VultaCore/releases/latest/download/updater.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXkKZWdnd2RUZXN0aW5nS2V5UGFpcjEyMzQ1Njc4OTA="
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDRBNTE4MzMxQTlCQzdENTgKUldSWWZieXBNWU5SU29oazhxTXNOK3B5RmVQempMSCtJRFJtNGpWQzVLK0ZkdFViZUZoS3ZWWDUK"
     }
   },
   "bundle": {
