@@ -45,6 +45,13 @@ jobs:
         with:
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
+      - name: Build Web Dashboard
+        run: |
+          npm install
+          rm -rf .next/
+          STATIC_EXPORT=true npm run build
+        working-directory: web-dashboard
+
       - name: Install Frontend Dependencies
         run: npm install
         working-directory: desktop-app

@@ -56,7 +56,9 @@ jobs:
         working-directory: web-dashboard
 
       - name: Build web-dashboard (Next.js static export for Tauri)
-        run: npm run build
+        run: |
+          rm -rf .next/
+          STATIC_EXPORT=true npm run build
         working-directory: web-dashboard
 
       - name: Install desktop-app dependencies
