@@ -6,6 +6,8 @@ import { Loader2, X, Camera } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import Image from "next/image";
 
+import { createPortal } from "react-dom";
+
 interface EditProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -14,6 +16,7 @@ interface EditProfileModalProps {
 export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
   const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [mounted, setMounted] = useState(false);
   
   const [fullName, setFullName] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
@@ -22,13 +25,17 @@ export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
     if (user) {
       setFullName(user.user_metadata?.full_name || "");
       setAvatarUrl(user.user_metadata?.avatar_url || "");
     }
   }, [user, isOpen]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     try {
@@ -105,7 +112,7 @@ export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
     }
   };
 
-  return (
+  const modalContent = (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden relative">
         
@@ -189,4 +196,6 @@ export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }
