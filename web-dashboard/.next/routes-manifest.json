@@ -1,0 +1,194 @@
+{
+  "version": 3,
+  "pages404": true,
+  "caseSensitive": false,
+  "basePath": "",
+  "redirects": [
+    {
+      "source": "/:file((?!\\.well-known(?:/.*)?)(?:[^/]+/)*[^/]+\\.\\w+)/",
+      "destination": "/:file",
+      "internal": true,
+      "missing": [
+        {
+          "type": "header",
+          "key": "x-nextjs-data"
+        }
+      ],
+      "statusCode": 308,
+      "regex": "^(?:/((?!\\.well-known(?:/.*)?)(?:[^/]+/)*[^/]+\\.\\w+))/$"
+    },
+    {
+      "source": "/:notfile((?!\\.well-known(?:/.*)?)(?:[^/]+/)*[^/\\.]+)",
+      "destination": "/:notfile/",
+      "internal": true,
+      "statusCode": 308,
+      "regex": "^(?:/((?!\\.well-known(?:/.*)?)(?:[^/]+/)*[^/\\.]+))$"
+    }
+  ],
+  "headers": [],
+  "dynamicRoutes": [],
+  "staticRoutes": [
+    {
+      "page": "/",
+      "regex": "^/(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/(?:/)?$"
+    },
+    {
+      "page": "/_not-found",
+      "regex": "^/_not\\-found(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/_not\\-found(?:/)?$"
+    },
+    {
+      "page": "/admin",
+      "regex": "^/admin(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin(?:/)?$"
+    },
+    {
+      "page": "/admin/leads",
+      "regex": "^/admin/leads(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/leads(?:/)?$"
+    },
+    {
+      "page": "/admin/pos",
+      "regex": "^/admin/pos(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/pos(?:/)?$"
+    },
+    {
+      "page": "/admin/settings",
+      "regex": "^/admin/settings(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/settings(?:/)?$"
+    },
+    {
+      "page": "/admin/subscriptions",
+      "regex": "^/admin/subscriptions(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/subscriptions(?:/)?$"
+    },
+    {
+      "page": "/admin/users",
+      "regex": "^/admin/users(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/users(?:/)?$"
+    },
+    {
+      "page": "/analytics",
+      "regex": "^/analytics(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/analytics(?:/)?$"
+    },
+    {
+      "page": "/apple-icon.png",
+      "regex": "^/apple\\-icon\\.png(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/apple\\-icon\\.png(?:/)?$"
+    },
+    {
+      "page": "/auth",
+      "regex": "^/auth(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/auth(?:/)?$"
+    },
+    {
+      "page": "/bots/cyber",
+      "regex": "^/bots/cyber(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/bots/cyber(?:/)?$"
+    },
+    {
+      "page": "/bots/general",
+      "regex": "^/bots/general(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/bots/general(?:/)?$"
+    },
+    {
+      "page": "/download",
+      "regex": "^/download(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/download(?:/)?$"
+    },
+    {
+      "page": "/enterprise-contact",
+      "regex": "^/enterprise\\-contact(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/enterprise\\-contact(?:/)?$"
+    },
+    {
+      "page": "/favicon.ico",
+      "regex": "^/favicon\\.ico(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/favicon\\.ico(?:/)?$"
+    },
+    {
+      "page": "/forum/cyber",
+      "regex": "^/forum/cyber(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/forum/cyber(?:/)?$"
+    },
+    {
+      "page": "/forum/dev",
+      "regex": "^/forum/dev(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/forum/dev(?:/)?$"
+    },
+    {
+      "page": "/forum/post",
+      "regex": "^/forum/post(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/forum/post(?:/)?$"
+    },
+    {
+      "page": "/icon.png",
+      "regex": "^/icon\\.png(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/icon\\.png(?:/)?$"
+    },
+    {
+      "page": "/maintenance",
+      "regex": "^/maintenance(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/maintenance(?:/)?$"
+    },
+    {
+      "page": "/pricing",
+      "regex": "^/pricing(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/pricing(?:/)?$"
+    },
+    {
+      "page": "/profile",
+      "regex": "^/profile(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/profile(?:/)?$"
+    },
+    {
+      "page": "/settings",
+      "regex": "^/settings(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/settings(?:/)?$"
+    }
+  ],
+  "dataRoutes": [],
+  "rsc": {
+    "header": "RSC",
+    "varyHeader": "RSC, Next-Router-State-Tree, Next-Router-Prefetch, Next-Router-Segment-Prefetch",
+    "prefetchHeader": "Next-Router-Prefetch",
+    "didPostponeHeader": "x-nextjs-postponed",
+    "contentTypeHeader": "text/x-component",
+    "suffix": ".rsc",
+    "prefetchSuffix": ".prefetch.rsc",
+    "prefetchSegmentHeader": "Next-Router-Segment-Prefetch",
+    "prefetchSegmentSuffix": ".segment.rsc",
+    "prefetchSegmentDirSuffix": ".segments"
+  },
+  "rewriteHeaders": {
+    "pathHeader": "x-nextjs-rewritten-path",
+    "queryHeader": "x-nextjs-rewritten-query"
+  },
+  "rewrites": []
+}
