@@ -1,0 +1,20 @@
+{
+  "../node_modules/@capacitor/app/dist/esm/index.js -> ./web": {
+    "id": 13441,
+    "files": [
+      "static/chunks/822.9e4f31e395eacb01.js"
+    ]
+  },
+  "app/(app)/analytics/page.tsx -> recharts": {
+    "id": 77210,
+    "files": [
+      "static/chunks/210.161d4b8506df9e7e.js"
+    ]
+  },
+  "context/AuthContext.tsx -> @capacitor/app": {
+    "id": 28931,
+    "files": [
+      "static/chunks/931.e9dfd988595ecb74.js"
+    ]
+  }
+}
