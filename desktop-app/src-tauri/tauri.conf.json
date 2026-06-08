@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.vultacore.app",
   "build": {
+    "devUrl": "http://localhost:3000",
     "frontendDist": "../../web-dashboard/out"
   },
   "app": {
