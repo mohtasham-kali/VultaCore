@@ -1,20 +1,14 @@
 {
   "../node_modules/@capacitor/app/dist/esm/index.js -> ./web": {
-    "id": 13441,
+    "id": "../node_modules/@capacitor/app/dist/esm/index.js -> ./web",
     "files": [
-      "static/chunks/822.9e4f31e395eacb01.js"
-    ]
-  },
-  "app/(app)/analytics/page.tsx -> recharts": {
-    "id": 77210,
-    "files": [
-      "static/chunks/210.161d4b8506df9e7e.js"
+      "static/chunks/_app-pages-browser_node_modules_capacitor_app_dist_esm_web_js.js"
     ]
   },
   "context/AuthContext.tsx -> @capacitor/app": {
-    "id": 28931,
+    "id": "context/AuthContext.tsx -> @capacitor/app",
     "files": [
-      "static/chunks/931.e9dfd988595ecb74.js"
+      "static/chunks/_app-pages-browser_node_modules_capacitor_app_dist_esm_index_js.js"
     ]
   }
 }

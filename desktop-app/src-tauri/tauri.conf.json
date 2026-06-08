@@ -25,6 +25,11 @@
     }
   },
   "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["vultacore"]
+      }
+    },
     "updater": {
       "endpoints": [
         "https://github.com/mohtasham-kali/VultaCore/releases/latest/download/updater.json"
