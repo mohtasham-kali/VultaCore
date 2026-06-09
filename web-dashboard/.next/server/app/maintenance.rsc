@@ -1,0 +1,61 @@
+1:"$Sreact.fragment"
+3:I[59576,["339","static/chunks/d28dc9c7-f2fb5272f68fab05.js","584","static/chunks/584-2308aaef6243df2d.js","177","static/chunks/app/layout-13739db96da696dd.js"],"AuthProvider"]
+4:I[38992,["339","static/chunks/d28dc9c7-f2fb5272f68fab05.js","584","static/chunks/584-2308aaef6243df2d.js","177","static/chunks/app/layout-13739db96da696dd.js"],"SettingsProvider"]
+5:"$Sreact.suspense"
+6:I[56273,["339","static/chunks/d28dc9c7-f2fb5272f68fab05.js","584","static/chunks/584-2308aaef6243df2d.js","177","static/chunks/app/layout-13739db96da696dd.js"],"NavigationEvents"]
+7:I[87555,[],""]
+8:I[31295,[],""]
+9:I[6874,["339","static/chunks/d28dc9c7-f2fb5272f68fab05.js","926","static/chunks/926-8aa37db2d9b41438.js","584","static/chunks/584-2308aaef6243df2d.js","874","static/chunks/874-b3e5115590751b55.js","682","static/chunks/682-b166501e2ef62e72.js","91","static/chunks/91-bd4656cc7db2d723.js","974","static/chunks/app/page-e9c07ca856a219ce.js"],""]
+a:I[60636,["339","static/chunks/d28dc9c7-f2fb5272f68fab05.js","584","static/chunks/584-2308aaef6243df2d.js","177","static/chunks/app/layout-13739db96da696dd.js"],"Analytics"]
+b:I[90894,[],"ClientPageRoot"]
+c:I[92168,["494","static/chunks/app/maintenance/page-471948e968d46cf6.js"],"default"]
+f:I[59665,[],"OutletBoundary"]
+12:I[74911,[],"AsyncMetadataOutlet"]
+14:I[59665,[],"ViewportBoundary"]
+16:I[59665,[],"MetadataBoundary"]
+18:I[26614,[],""]
+:HL["/_next/static/media/22a5144ee8d83bca-s.p.woff2","font",{"crossOrigin":"","type":"font/woff2"}]
+:HL["/_next/static/media/7d4881bb7e1bf84d-s.p.woff2","font",{"crossOrigin":"","type":"font/woff2"}]
+:HL["/_next/static/css/97a9fb08585f7be4.css","style"]
+2:T58f,
+              (function() {
+                // Total suppression of MetaMask extension noise
+                const suppress = (msg) => msg && typeof msg === 'string' && (msg.includes('MetaMask') || msg.includes('nkbihfbeogaeaoehlefnkodbefgpgknn'));
+                
+                const _error = console.error;
+                console.error = function(...args) {
+                  if (suppress(args[0]) || suppress(args[1])) return;
+                  _error.apply(console, args);
+                };
+
+                const _warn = console.warn;
+                console.warn = function(...args) {
+                  if (suppress(args[0]) || suppress(args[1])) return;
+                  _warn.apply(console, args);
+                };
+
+                window.addEventListener('unhandledrejection', (event) => {
+                  const reason = event.reason;
+                  if (reason && (suppress(reason.message) || suppress(reason.stack) || suppress(reason))) {
+                    event.stopImmediatePropagation();
+                    event.preventDefault();
+                  }
+                }, true);
+
+                window.addEventListener('error', (event) => {
+                  if (suppress(event.message) || suppress(event.filename)) {
+                    event.stopImmediatePropagation();
+                    event.preventDefault();
+                  }
+                }, true);
+              })();
+            0:{"P":null,"b":"Kv8Eo-Uc3BbRksZh3iMmK","p":"","c":["","maintenance",""],"i":false,"f":[[["",{"children":["maintenance",{"children":["__PAGE__",{}]}]},"$undefined","$undefined",true],["",["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/97a9fb08585f7be4.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]],["$","html",null,{"lang":"en","suppressHydrationWarning":true,"children":[["$","head",null,{"children":["$","script",null,{"dangerouslySetInnerHTML":{"__html":"$2"}}]}],["$","body",null,{"className":"__variable_246ccd __variable_c29908 antialiased","children":["$","$L3",null,{"children":["$","$L4",null,{"children":[["$","$5",null,{"fallback":null,"children":["$","$L6",null,{}]}],["$","$L7",null,{"parallelRouterKey":"children","error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L8",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":[["$","div",null,{"className":"min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-4","children":[["$","h1",null,{"className":"text-6xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-blue-400","children":"404"}],["$","p",null,{"className":"text-slate-400 text-xl mb-8","children":"Page Not Found"}],["$","$L9",null,{"href":"/","className":"px-6 py-2 rounded-full border border-white/20 hover:bg-white/10 transition-colors","children":"Return Home"}]]}],[]],"forbidden":"$undefined","unauthorized":"$undefined"}],["$","$La",null,{}]]}]}]}]]}]]}],{"children":["maintenance",["$","$1","c",{"children":[null,["$","$L7",null,{"parallelRouterKey":"children","error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L8",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","forbidden":"$undefined","unauthorized":"$undefined"}]]}],{"children":["__PAGE__",["$","$1","c",{"children":[["$","$Lb",null,{"Component":"$c","searchParams":{},"params":{},"promises":["$@d","$@e"]}],null,["$","$Lf",null,{"children":["$L10","$L11",["$","$L12",null,{"promise":"$@13"}]]}]]}],{},null,false]},null,false]},null,false],["$","$1","h",{"children":[null,["$","$1","PMbOka4K6KuPaDW8MByjXv",{"children":[["$","$L14",null,{"children":"$L15"}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],["$","$L16",null,{"children":"$L17"}]]}],false]],"m":"$undefined","G":["$18","$undefined"],"s":false,"S":true}
+19:I[74911,[],"AsyncMetadata"]
+d:{}
+e:{}
+17:["$","div",null,{"hidden":true,"children":["$","$5",null,{"fallback":null,"children":["$","$L19",null,{"promise":"$@1a"}]}]}]
+11:null
+15:[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]
+10:null
+13:{"metadata":[["$","title","0",{"children":"VultaCore"}],["$","meta","1",{"name":"description","content":"Advanced Developer & Cybersecurity Dashboard"}],["$","link","2",{"rel":"shortcut icon","href":"/favicon.ico"}],["$","link","3",{"rel":"icon","href":"/favicon.ico","type":"image/x-icon","sizes":"32x32"}],["$","link","4",{"rel":"icon","href":"/favicon.ico"}],["$","link","5",{"rel":"apple-touch-icon","href":"/apple-touch-icon.png"}]],"error":null,"digest":"$undefined"}
+1a:{"metadata":"$13:metadata","error":null,"digest":"$undefined"}
