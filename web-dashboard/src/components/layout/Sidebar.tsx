@@ -14,6 +14,7 @@ import {
   LogOut, 
   LayoutDashboard,
   Download,
+  CreditCard,
   X
 } from "lucide-react";
 
@@ -46,10 +47,10 @@ const menuItems = [
   {
     category: "Account",
     items: [
+      { name: "Subscription", icon: CreditCard, href: "/subscription" },
       { name: "Settings", icon: Settings, href: "/settings" },
       { name: "Downloads", icon: Download, href: "/download" },
       { name: "Profile", icon: User, href: "/profile" },
-
     ]
   }
 ];
