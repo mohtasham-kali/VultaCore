@@ -66,8 +66,10 @@ export default function CyberBotsPage() {
   }, [chatHistory, executing]);
 
   const handleLaunch = async () => {
-    if (!selectedBot || !userPrompt.trim() || !user?.id) return;
+    if (!selectedBot || !userPrompt.trim()) return;
     setExecuting(selectedBot.id);
+    
+    const currentUserId = user?.id || 'anonymous';
     
     // Optimistically add user prompt to UI
     const currentPrompt = userPrompt;
@@ -83,7 +85,7 @@ export default function CyberBotsPage() {
           reader.readAsText(selectedFile);
         });
       }
-      const data = await executeBot(selectedBot.id, currentPrompt, user.id, fileContext);
+      const data = await executeBot(selectedBot.id, currentPrompt, currentUserId, fileContext);
       
       // Add response to UI
       setChatHistory(prev => [...prev, { 

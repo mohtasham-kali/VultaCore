@@ -11,6 +11,7 @@ export declare class Post {
     likes: number;
     commentsCount: number;
     isResolved: boolean;
+    aiResponded: boolean;
     comments: Comment[];
     createdAt: Date;
 }

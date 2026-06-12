@@ -89,8 +89,10 @@ export default function GeneralBotsPage() {
   }, [chatHistory, executing]);
 
   const handleLaunch = async () => {
-    if (!selectedBot || !userPrompt.trim() || !user?.id) return;
+    if (!selectedBot || !userPrompt.trim()) return;
     setExecuting(selectedBot.id);
+    
+    const currentUserId = user?.id || 'anonymous';
     
     // Optimistically add user prompt to UI
     const currentPrompt = userPrompt;
@@ -119,7 +121,7 @@ export default function GeneralBotsPage() {
         setOfflineProgress(null);
       } else {
         // Execute online via Python microservice backend
-        const data = await executeBot(selectedBot.id, currentPrompt, user.id, fileContext);
+        const data = await executeBot(selectedBot.id, currentPrompt, currentUserId, fileContext);
         responseText = data.response || JSON.stringify(data);
       }
       
@@ -137,7 +139,13 @@ export default function GeneralBotsPage() {
           errorMessage += "\n\nTip: You must run this at least once while connected to the internet to download the AI model to your device.";
         }
         if (isOfflineMode && e.message.toLowerCase().includes("gpu")) {
-          errorMessage += "\n\nTip: Your browser/desktop environment may not support WebGPU, which is required for local offline inference.";
+          errorMessage += "\n\nHow to enable WebGPU on Intel Skylake / HD Graphics 530 (Linux):\n" +
+            "Intel Gen9 integrated GPUs are blocklisted by Chrome for WebGPU by default on Linux.\n" +
+            "To bypass this and run WebLLM:\n" +
+            "1. Close all Chrome windows completely.\n" +
+            "2. Launch Chrome from your terminal with these exact override flags:\n" +
+            "   google-chrome --enable-unsafe-webgpu --use-vulkan --enable-features=Vulkan,VulkanFromANGLE\n" +
+            "3. Go to chrome://settings/system and verify 'Use graphics acceleration when available' is turned ON.";
         }
       }
       setChatHistory(prev => [...prev, { role: 'assistant', content: errorMessage }]);
@@ -267,7 +275,7 @@ export default function GeneralBotsPage() {
                           : 'bg-slate-800 text-slate-500 hover:text-slate-300'
                       }`}
                     >
-                      {isOfflineMode ? 'Offline Mode (Local GPU)' : 'Online Mode'}
+                      {isOfflineMode ? 'Offline Mode: ON (Local GPU)' : 'Offline Mode: OFF (Click to Enable)'}
                     </button>
                   </div>
                   <button 

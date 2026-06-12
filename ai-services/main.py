@@ -9,17 +9,19 @@ from dotenv import load_dotenv
 
 # SDKs
 import google.generativeai as genai
-from groq import Groq
-from openai import OpenAI
+from groq import AsyncGroq
+from openai import AsyncOpenAI
 
 load_dotenv()
 
 # Configure Clients
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-openrouter_client = OpenAI(
+groq_client = AsyncGroq(api_key=os.getenv("GROQ_API_KEY"), timeout=15.0, max_retries=0)
+openrouter_client = AsyncOpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=os.getenv("OPENROUTER_API_KEY"),
+    timeout=15.0,
+    max_retries=0,
 )
 
 app = FastAPI(title="VultaCore AI Engine", version="2.0")
@@ -41,14 +43,14 @@ class BotResponse(BaseModel):
 async def call_gemini(prompt: str, model_name: str = "gemini-flash-latest"):
     try:
         model = genai.GenerativeModel(model_name)
-        response = model.generate_content(prompt)
+        response = await model.generate_content_async(prompt)
         return response.text
     except Exception as e:
         return f"Gemini Error: {str(e)}"
 
 async def call_groq(prompt: str, model_name: str = "llama-3.3-70b-versatile"):
     try:
-        chat_completion = groq_client.chat.completions.create(
+        chat_completion = await groq_client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
             model=model_name,
         )
@@ -58,7 +60,7 @@ async def call_groq(prompt: str, model_name: str = "llama-3.3-70b-versatile"):
 
 async def call_openrouter(prompt: str, model: str = "anthropic/claude-3-haiku"):
     try:
-        response = openrouter_client.chat.completions.create(
+        response = await openrouter_client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": prompt}],
             extra_headers={
@@ -111,7 +113,11 @@ async def execute_bot(request: BotRequest):
             engine_meta = "Gemini-Flash-Latest"
             
     except Exception as e:
-        response_text = f"Processing Error: {str(e)}"
+        error_msg = str(e).lower()
+        if "connection error" in error_msg or "name or service not known" in error_msg or "network is unreachable" in error_msg:
+            response_text = f"Network Connection Error: The Python microservice cannot reach the cloud API ({bot_name}). Please ensure your computer is connected to the internet, or enable Offline Mode (Local GPU) in the app if you wish to run locally."
+        else:
+            response_text = f"Processing Error: {str(e)}"
         engine_meta = "Error Fallback"
 
     return BotResponse(
