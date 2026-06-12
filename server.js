@@ -188,29 +188,63 @@ function startEngine(name, execBin, execArgs, port, cwd, envExtra = {}, delay = 
     }, delay);
 }
 
+function findSystemPython() {
+    const cmds = [
+        'python3',
+        'python',
+        '/usr/bin/python3',
+        '/usr/local/bin/python3',
+        '/bin/python3',
+        '/usr/bin/python',
+        '/opt/alt/python311/bin/python3',
+        '/opt/alt/python310/bin/python3',
+        '/opt/alt/python39/bin/python3'
+    ];
+    for (const cmd of cmds) {
+        try {
+            const { execSync } = require('child_process');
+            // Check if command is an absolute path or exists in PATH
+            let p = cmd;
+            if (!cmd.startsWith('/')) {
+                p = execSync(`which ${cmd} 2>/dev/null`, { encoding: 'utf8' }).trim();
+            }
+            if (p && fs.existsSync(p)) {
+                // Verify it actually runs and is python 3 (optional but good)
+                execSync(`${p} --version`, { stdio: 'ignore' });
+                return p;
+            }
+        } catch (_) {}
+    }
+    return null;
+}
+
 // Resolve python3 absolute path at boot time so we can log clearly if missing
 function resolvePython() {
     const aiDir = path.join(rootDir, 'ai-services');
     const venvDir = path.join(aiDir, 'venv');
     const venvLibDir = path.join(venvDir, 'lib');
 
+    const sysPython = findSystemPython();
+
     if (!fs.existsSync(venvDir)) {
-        log(`AI Engine: venv missing, attempting auto-setup via python3 -m venv...`);
-        try {
-            const { execSync } = require('child_process');
-            execSync(`python3 -m venv venv`, { cwd: aiDir, stdio: 'pipe' });
-            log(`AI Engine: venv created, installing requirements...`);
-            const pipBin = path.join(venvDir, 'bin', 'pip');
-            execSync(`${pipBin} install -r requirements.txt`, { cwd: aiDir, stdio: 'pipe' });
-            log(`AI Engine: requirements installed successfully.`);
-        } catch (err) {
-            log(`AI Engine: Auto-setup failed: ${err.stderr ? err.stderr.toString() : err.message}`);
+        if (!sysPython) {
+            log(`❌ AI Engine: No system python found to create venv.`);
+        } else {
+            log(`AI Engine: venv missing, attempting auto-setup via ${sysPython} -m venv...`);
+            try {
+                const { execSync } = require('child_process');
+                execSync(`${sysPython} -m venv venv`, { cwd: aiDir, stdio: 'pipe' });
+                log(`AI Engine: venv created, installing requirements...`);
+                const pipBin = path.join(venvDir, 'bin', 'pip');
+                execSync(`${pipBin} install -r requirements.txt`, { cwd: aiDir, stdio: 'pipe' });
+                log(`AI Engine: requirements installed successfully.`);
+            } catch (err) {
+                log(`AI Engine: Auto-setup failed: ${err.stderr ? err.stderr.toString() : err.message}`);
+            }
         }
     }
 
     // 1. Check if a valid venv exists (by checking lib/ dir which pip always creates)
-    //    We avoid checking venv/bin/python3 symlink directly because it may be broken
-    //    when transferred across machines (e.g., GitHub Actions → Hostinger).
     if (fs.existsSync(venvLibDir)) {
         try {
             // Find the python3.x subdirectory dynamically
@@ -224,7 +258,6 @@ function resolvePython() {
                         path.join(venvDir, 'bin', 'python'),
                     ];
                     for (const bin of candidates) {
-                        // Test if the binary is actually executable (not a broken symlink)
                         try {
                             const { execFileSync } = require('child_process');
                             execFileSync(bin, ['--version'], { stdio: 'ignore' });
@@ -237,19 +270,13 @@ function resolvePython() {
                         } catch (_) {}
                     }
                     // venv binaries broken — fall back to system python with PYTHONPATH
-                    log(`AI Engine: venv binaries broken, using system python with PYTHONPATH=${sitePackages}`);
-                    for (const cmd of ['python3', 'python']) {
-                        try {
-                            const p = execSync(`which ${cmd}`, { encoding: 'utf8' }).trim();
-                            if (p) {
-                                log(`AI Engine: resolved → ${p} (system) + PYTHONPATH`);
-                                return {
-                                    bin: p,
-                                    args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
-                                    env: { PYTHONPATH: sitePackages }
-                                };
-                            }
-                        } catch (_) {}
+                    if (sysPython) {
+                        log(`AI Engine: venv binaries broken, using system python (${sysPython}) with PYTHONPATH=${sitePackages}`);
+                        return {
+                            bin: sysPython,
+                            args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
+                            env: { PYTHONPATH: sitePackages }
+                        };
                     }
                 }
             }
@@ -259,18 +286,13 @@ function resolvePython() {
     }
 
     // 2. No venv at all — try system python3 (no guarantee uvicorn is installed)
-    for (const cmd of ['python3', 'python']) {
-        try {
-            const p = execSync(`which ${cmd}`, { encoding: 'utf8' }).trim();
-            if (p) {
-                log(`AI Engine: resolved → ${p} (system, no venv — uvicorn must be installed globally)`);
-                return {
-                    bin: p,
-                    args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
-                    env: {}
-                };
-            }
-        } catch (_) {}
+    if (sysPython) {
+        log(`AI Engine: resolved → ${sysPython} (system, no venv — uvicorn must be installed globally)`);
+        return {
+            bin: sysPython,
+            args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
+            env: {}
+        };
     }
 
     log('❌ AI Engine: no python3/python found anywhere — AI bots will be unavailable');
