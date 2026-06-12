@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ScheduleModule } from '@nestjs/schedule';
 import { join } from 'path';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ConfigModule } from '@nestjs/config';
@@ -44,6 +45,7 @@ const staticModuleOptions = fs.existsSync(join(process.cwd(), 'out'))
     AnalyticsModule,
     NotificationsModule,
     ...staticModuleOptions,
+    ScheduleModule.forRoot(),
     ChatModule,
     SettingsModule,
   ],
