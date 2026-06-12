@@ -4,6 +4,7 @@ import { Bot, Sparkles, Play, Terminal, Upload, File, X as CloseIcon } from "luc
 import { useEffect, useState, useRef } from "react";
 import { fetchBots, executeBot, fetchBotHistory } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { generateLocalResponse, LocalAIProgress } from "@/lib/local-ai";
 
 interface BotItem {
   id: string;
@@ -27,8 +28,29 @@ export default function GeneralBotsPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [executing, setExecuting] = useState<string | null>(null);
   const [chatHistory, setChatHistory] = useState<{id?: string, role: string, content: string}[]>([]);
+  const [isOfflineMode, setIsOfflineMode] = useState(false);
+  const [offlineProgress, setOfflineProgress] = useState<LocalAIProgress | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-detect offline status
+  useEffect(() => {
+    const handleOffline = () => setIsOfflineMode(true);
+    const handleOnline = () => setIsOfflineMode(false);
+    
+    if (typeof window !== 'undefined') {
+      setIsOfflineMode(!navigator.onLine);
+      window.addEventListener('offline', handleOffline);
+      window.addEventListener('online', handleOnline);
+    }
+    
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('offline', handleOffline);
+        window.removeEventListener('online', handleOnline);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     async function loadBots() {
@@ -84,18 +106,44 @@ export default function GeneralBotsPage() {
           reader.readAsText(selectedFile);
         });
       }
-      const data = await executeBot(selectedBot.id, currentPrompt, user.id, fileContext);
+
+      let responseText = "";
+
+      if (isOfflineMode) {
+        // Execute fully offline using device GPU/memory via WebLLM
+        responseText = await generateLocalResponse(
+          currentPrompt, 
+          fileContext,
+          (progress) => setOfflineProgress(progress)
+        );
+        setOfflineProgress(null);
+      } else {
+        // Execute online via Python microservice backend
+        const data = await executeBot(selectedBot.id, currentPrompt, user.id, fileContext);
+        responseText = data.response || JSON.stringify(data);
+      }
       
       // Add response to UI
       setChatHistory(prev => [...prev, { 
         role: 'assistant', 
-        content: data.response || JSON.stringify(data)
+        content: responseText
       }]);
-    } catch (e) {
-      console.error(e);
-      setChatHistory(prev => [...prev, { role: 'assistant', content: "Error: Failed to fetch response." }]);
+    } catch (e: any) {
+      console.error("Bot execution failed:", e);
+      let errorMessage = "Error: Failed to fetch response.";
+      if (e && e.message) {
+        errorMessage += `\n\nDetails: ${e.message}`;
+        if (isOfflineMode && e.message.toLowerCase().includes("fetch")) {
+          errorMessage += "\n\nTip: You must run this at least once while connected to the internet to download the AI model to your device.";
+        }
+        if (isOfflineMode && e.message.toLowerCase().includes("gpu")) {
+          errorMessage += "\n\nTip: Your browser/desktop environment may not support WebGPU, which is required for local offline inference.";
+        }
+      }
+      setChatHistory(prev => [...prev, { role: 'assistant', content: errorMessage }]);
     } finally {
       setExecuting(null);
+      setOfflineProgress(null);
     }
   };
 
@@ -182,8 +230,16 @@ export default function GeneralBotsPage() {
                   <Bot className="w-8 h-8 text-blue-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
                 </div>
                 <div className="text-center">
-                  <p className="text-blue-400 font-bold uppercase tracking-widest text-xs mb-1">AI Inference in Progress</p>
-                  <p className="text-slate-500 text-[10px]">Processing tokens through Python Microservice</p>
+                  <p className="text-blue-400 font-bold uppercase tracking-widest text-xs mb-1">
+                    {isOfflineMode ? 'Local AI Inference' : 'AI Inference in Progress'}
+                  </p>
+                  <p className="text-slate-500 text-[10px] max-w-[200px] mx-auto">
+                    {isOfflineMode && offlineProgress 
+                      ? offlineProgress.text
+                      : isOfflineMode 
+                        ? 'Processing tokens via Local GPU/Memory' 
+                        : 'Processing tokens through Python Microservice'}
+                  </p>
                 </div>
               </div>
             )}
@@ -202,6 +258,17 @@ export default function GeneralBotsPage() {
                   <div className="flex items-center gap-3">
                     <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                     <span className="text-xs font-mono text-slate-400">READY: {selectedBot.name}</span>
+                    
+                    <button 
+                      onClick={() => setIsOfflineMode(!isOfflineMode)}
+                      className={`ml-4 px-2 py-1 rounded text-[10px] font-bold tracking-wider uppercase transition-colors ${
+                        isOfflineMode 
+                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/50' 
+                          : 'bg-slate-800 text-slate-500 hover:text-slate-300'
+                      }`}
+                    >
+                      {isOfflineMode ? 'Offline Mode (Local GPU)' : 'Online Mode'}
+                    </button>
                   </div>
                   <button 
                     onClick={clearSelection}

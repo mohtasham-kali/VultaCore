@@ -34,6 +34,9 @@ export class Post {
   @Column({ default: false })
   isResolved: boolean;
 
+  @Column({ default: false })
+  aiResponded: boolean;
+
   @OneToMany(() => Comment, (comment) => comment.post)
   comments: Comment[];
 
