@@ -24,6 +24,7 @@ let Post = class Post {
     likes;
     commentsCount;
     isResolved;
+    aiResponded;
     comments;
     createdAt;
 };
@@ -68,6 +69,10 @@ __decorate([
     (0, typeorm_1.Column)({ default: false }),
     __metadata("design:type", Boolean)
 ], Post.prototype, "isResolved", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ default: false }),
+    __metadata("design:type", Boolean)
+], Post.prototype, "aiResponded", void 0);
 __decorate([
     (0, typeorm_1.OneToMany)(() => comment_entity_1.Comment, (comment) => comment.post),
     __metadata("design:type", Array)

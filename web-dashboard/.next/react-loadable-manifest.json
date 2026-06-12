@@ -2,37 +2,37 @@
   "../node_modules/@capacitor/app/dist/esm/index.js -> ./web": {
     "id": 13441,
     "files": [
-      "static/chunks/822.9e4f31e395eacb01.js"
+      "static/chunks/3441.22978deef1719741.js"
     ]
   },
   "app/(app)/analytics/page.tsx -> recharts": {
     "id": 77210,
     "files": [
-      "static/chunks/210.161d4b8506df9e7e.js"
+      "static/chunks/7210.463b0e0c91ba74e2.js"
     ]
   },
   "app/auth/page.tsx -> @tauri-apps/api/event": {
     "id": 9845,
     "files": [
-      "static/chunks/845.d00bb165b1bbc231.js"
+      "static/chunks/9845.f5d36225c7ee20f6.js"
     ]
   },
   "app/auth/page.tsx -> @tauri-apps/plugin-deep-link": {
     "id": 16473,
     "files": [
-      "static/chunks/473.7a1acf63d96503d5.js"
+      "static/chunks/6473.230c34bd4688c6a2.js"
     ]
   },
   "app/auth/page.tsx -> @tauri-apps/plugin-opener": {
     "id": 14223,
     "files": [
-      "static/chunks/223.85e586acffa063bb.js"
+      "static/chunks/4223.1d684147c6b32273.js"
     ]
   },
   "context/AuthContext.tsx -> @capacitor/app": {
     "id": 28931,
     "files": [
-      "static/chunks/931.e9dfd988595ecb74.js"
+      "static/chunks/8931.276728109a8d5fbb.js"
     ]
   }
 }

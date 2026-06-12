@@ -41,6 +41,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppModule = void 0;
 const common_1 = require("@nestjs/common");
+const schedule_1 = require("@nestjs/schedule");
 const path_1 = require("path");
 const serve_static_1 = require("@nestjs/serve-static");
 const config_1 = require("@nestjs/config");
@@ -87,6 +88,7 @@ exports.AppModule = AppModule = __decorate([
             analytics_module_1.AnalyticsModule,
             notifications_module_1.NotificationsModule,
             ...staticModuleOptions,
+            schedule_1.ScheduleModule.forRoot(),
             chat_module_1.ChatModule,
             settings_module_1.SettingsModule,
         ],
