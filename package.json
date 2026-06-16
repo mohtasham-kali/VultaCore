@@ -3,6 +3,13 @@
   "version": "1.0.0",
   "description": "Unified VultaCore Platform",
   "main": "server.js",
+  "workspaces": [
+    "web-dashboard",
+    "backend-api",
+    "ai-services",
+    "analytics-engine",
+    "desktop-app"
+  ],
   "scripts": {
     "start": "node server.js",
     "build": "echo 'No build required'"
