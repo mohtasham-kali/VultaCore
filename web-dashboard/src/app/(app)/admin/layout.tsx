@@ -9,7 +9,8 @@ import {
   Shield, 
   LayoutDashboard, 
   ArrowLeft,
-  CreditCard
+  CreditCard,
+  Activity
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +21,7 @@ const NAV_ITEMS = [
   { name: "Sales Pipeline", href: "/admin/leads", icon: Target },
   { name: "Sales POS", href: "/admin/pos", icon: CreditCard },
   { name: "Platform Settings", href: "/admin/settings", icon: Settings },
+  { name: "System Health", href: "/admin/system-health", icon: Activity },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
