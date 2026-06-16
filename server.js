@@ -154,6 +154,28 @@ process.on('exit', killChildren);
 process.on('SIGINT', () => { killChildren(); process.exit(0); });
 process.on('SIGTERM', () => { killChildren(); process.exit(0); });
 
+/**
+ * Kill leftover zombie child processes from previous crashed runs.
+ * Hostinger shared hosting has a tight per-user process limit; stale
+ * node/python procs from a previous boot exhaust those slots, causing
+ * EAGAIN when we try to spawn the backend/dashboard on restart.
+ */
+function killZombieChildren() {
+    const targets = [
+        path.join(rootDir, 'backend-api', 'dist', 'main.js'),
+        path.join(rootDir, 'web-dashboard', '.next', 'standalone', 'server.js'),
+        path.join(rootDir, 'web-dashboard', '.next', 'standalone', 'web-dashboard', 'server.js'),
+        'uvicorn',
+    ];
+    for (const target of targets) {
+        try {
+            // pkill -f matches against the full command line
+            execSync(`pkill -f "${target}" 2>/dev/null || true`, { shell: true, stdio: 'ignore' });
+        } catch (_) {}
+    }
+    log('🧹 Zombie cleanup done — cleared stale child processes.');
+}
+
 function freePort(port) {
     try { execSync(`fuser -k ${port}/tcp`, { stdio: 'ignore' }); } catch (_) {}
 }
@@ -300,6 +322,8 @@ function resolvePython() {
 }
 
 async function bootEngines() {
+    killZombieChildren();
+
     try {
         BACK_PORT = await findFreePort();
         DASH_PORT = await findFreePort();
