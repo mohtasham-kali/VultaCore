@@ -444,6 +444,21 @@ function resolvePython() {
             if (pyDirs.length > 0) {
                 const sitePackages = path.join(venvLibDir, pyDirs[0], 'site-packages');
                 if (fs.existsSync(sitePackages)) {
+                    
+                    // Verify critical packages are installed (like uvicorn)
+                    if (!fs.existsSync(path.join(sitePackages, 'uvicorn'))) {
+                        log(`AI Engine: uvicorn missing in venv. Attempting pip install...`);
+                        try {
+                            const pipBin = path.join(venvDir, 'bin', 'pip');
+                            const { execSync } = require('child_process');
+                            execSync(`${pipBin} install -r requirements.txt`, { cwd: aiDir, stdio: 'pipe' });
+                            log(`AI Engine: missing requirements installed.`);
+                        } catch (err) {
+                            log(`❌ AI Engine: pip install failed: ${err.stderr ? err.stderr.toString() : err.message}`);
+                            return null; // Don't try to boot if missing uvicorn
+                        }
+                    }
+
                     // Find working python binary: prefer venv python, fall back to system
                     const candidates = [
                         path.join(venvDir, 'bin', 'python3'),
