@@ -543,7 +543,8 @@ async function bootEngines() {
     // ── Dashboard (Next.js standalone) ───────────────────────────────────
     const standaloneA = path.join(rootDir, 'web-dashboard', '.next', 'standalone', 'web-dashboard', 'server.js');
     const standaloneB = path.join(rootDir, 'web-dashboard', '.next', 'standalone', 'server.js');
-    const nextBin     = path.join(rootDir, 'web-dashboard', 'node_modules', 'next', 'dist', 'bin', 'next');
+    const nextBinLocal = path.join(rootDir, 'web-dashboard', 'node_modules', 'next', 'dist', 'bin', 'next');
+    const nextBinRoot  = path.join(rootDir, 'node_modules', 'next', 'dist', 'bin', 'next');
 
     let dashEntry, dashCwd, dashArgs;
     if (fs.existsSync(standaloneA)) {
@@ -555,9 +556,9 @@ async function bootEngines() {
         dashCwd   = path.dirname(standaloneB);
         dashArgs  = [standaloneB];
     } else {
-        dashEntry = nextBin;
+        dashEntry = fs.existsSync(nextBinLocal) ? nextBinLocal : nextBinRoot;
         dashCwd   = path.join(rootDir, 'web-dashboard');
-        dashArgs  = [nextBin, 'start'];
+        dashArgs  = [dashEntry, 'start'];
     }
 
     startEngine('Dashboard', process.execPath, dashArgs, DASH_PORT, dashCwd, {}, 5000);

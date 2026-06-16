@@ -16,13 +16,15 @@ load_dotenv()
 
 # Configure Clients
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-groq_client = AsyncGroq(api_key=os.getenv("GROQ_API_KEY"), timeout=15.0, max_retries=0)
+groq_api_key = os.getenv("GROQ_API_KEY", "")
+groq_client = AsyncGroq(api_key=groq_api_key, timeout=15.0, max_retries=0) if groq_api_key else None
+openrouter_api_key = os.getenv("OPENROUTER_API_KEY", "")
 openrouter_client = AsyncOpenAI(
     base_url="https://openrouter.ai/api/v1",
-    api_key=os.getenv("OPENROUTER_API_KEY"),
+    api_key=openrouter_api_key,
     timeout=15.0,
     max_retries=0,
-)
+) if openrouter_api_key else None
 
 app = FastAPI(title="VultaCore AI Engine", version="2.0")
 
