@@ -26,10 +26,20 @@
       "static/chunks/main-app.js",
       "static/chunks/app/(app)/bots/general/page.js"
     ],
-    "/_not-found/page": [
+    "/(app)/admin/layout": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/_not-found/page.js"
+      "static/chunks/app/(app)/admin/layout.js"
+    ],
+    "/(app)/admin/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/(app)/admin/page.js"
+    ],
+    "/auth/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/auth/page.js"
     ]
   }
 }
