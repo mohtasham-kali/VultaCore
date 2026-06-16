@@ -1,6 +1,5 @@
 {
   "/page": "app/page.js",
   "/auth/page": "app/auth/page.js",
-  "/(app)/bots/general/page": "app/(app)/bots/general/page.js",
-  "/(app)/admin/page": "app/(app)/admin/page.js"
+  "/(app)/bots/general/page": "app/(app)/bots/general/page.js"
 }
