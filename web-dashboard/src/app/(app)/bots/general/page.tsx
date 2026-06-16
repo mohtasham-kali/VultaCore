@@ -30,6 +30,7 @@ export default function GeneralBotsPage() {
   const [chatHistory, setChatHistory] = useState<{id?: string, role: string, content: string}[]>([]);
   const [isOfflineMode, setIsOfflineMode] = useState(false);
   const [offlineProgress, setOfflineProgress] = useState<LocalAIProgress | null>(null);
+  const [botsError, setBotsError] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -54,13 +55,23 @@ export default function GeneralBotsPage() {
 
   useEffect(() => {
     async function loadBots() {
+      setBotsError(null);
       try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 6000);
         const data = await fetchBots();
+        clearTimeout(timeout);
         if (Array.isArray(data)) {
           setBots(data.filter((b: BotItem) => b.type === 'general'));
+        } else {
+          setBotsError("Unexpected response from server.");
         }
-      } catch (e) {
-        console.error("Failed to load bots", e);
+      } catch (e: any) {
+        setBotsError(
+          e?.name === 'AbortError'
+            ? "Backend timed out — it may still be starting up. Try again in a moment."
+            : "Could not reach the backend API. The server may be offline."
+        );
       }
     }
     loadBots();
@@ -183,48 +194,66 @@ export default function GeneralBotsPage() {
         {/* Selection Sidebar */}
         <div className="lg:col-span-1 space-y-4">
           <div className="space-y-6">
-            {Object.entries(
-              bots.reduce((acc: Record<string, BotItem[]>, bot: BotItem) => {
-                const category = bot.category || 'Other';
-                if (!acc[category]) acc[category] = [];
-                acc[category].push(bot);
-                return acc;
-              }, {})
-            ).map(([category, items]: [string, BotItem[]]) => (
-              <div key={category} className="space-y-3">
-                <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] px-2 flex items-center gap-2">
-                  <span className="w-1 h-1 rounded-full bg-blue-500" />
-                  {category}
-                </h3>
-                <div className="grid grid-cols-1 gap-2">
-                  {items.map((bot: BotItem, i: number) => (
-                    <button 
-                      key={i} 
-                      onClick={() => { setSelectedBot(bot); setSelectedFile(null); }}
-                      className={`p-3 rounded-xl border text-left transition-all group relative overflow-hidden ${
-                        selectedBot?.id === bot.id 
-                          ? 'bg-blue-600/10 border-blue-500/50 shadow-lg shadow-blue-500/10' 
-                          : 'bg-slate-900/50 border-white/5 hover:border-white/20'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
-                          selectedBot?.id === bot.id ? 'bg-blue-500 text-white' : 'bg-slate-800 text-slate-400 group-hover:bg-slate-700'
-                        }`}>
-                          <Bot className="w-4 h-4" />
-                        </div>
-                        <div className="min-w-0">
-                          <h4 className={`font-bold text-xs truncate ${selectedBot?.id === bot.id ? 'text-blue-400' : 'text-slate-200'}`}>
-                            {bot.name}
-                          </h4>
-                          <p className="text-[9px] text-slate-500 uppercase tracking-tighter truncate">Latency: 120ms</p>
-                        </div>
-                      </div>
-                    </button>
-                  ))}
+            {botsError ? (
+              <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex flex-col gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-red-400 text-lg">⚠</span>
+                  <span className="text-red-400 font-bold text-sm">Backend Offline</span>
                 </div>
+                <p className="text-slate-400 text-xs leading-relaxed">{botsError}</p>
+                <button
+                  onClick={() => { setBotsError(null); setBots([]); fetchBots().then(d => { if (Array.isArray(d)) setBots(d.filter((b: BotItem) => b.type === 'general')); }).catch(() => setBotsError("Still unreachable.")); }}
+                  className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl transition-all"
+                >
+                  Retry
+                </button>
               </div>
-            ))}
+            ) : (
+              Object.entries(
+                bots.reduce((acc: Record<string, BotItem[]>, bot: BotItem) => {
+                  const category = bot.category || 'Other';
+                  if (!acc[category]) acc[category] = [];
+                  acc[category].push(bot);
+                  return acc;
+                }, {})
+              ).map(([category, items]: [string, BotItem[]]) => (
+                <div key={category} className="space-y-3">
+                  <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] px-2 flex items-center gap-2">
+                    <span className="w-1 h-1 rounded-full bg-blue-500" />
+                    {category}
+                  </h3>
+                  <div className="grid grid-cols-1 gap-2">
+                    {items.map((bot: BotItem, i: number) => (
+                      <button 
+                        key={i} 
+                        onClick={() => { setSelectedBot(bot); setSelectedFile(null); }}
+                        className={`p-3 rounded-xl border text-left transition-all group relative overflow-hidden ${
+                          selectedBot?.id === bot.id 
+                            ? 'bg-blue-600/10 border-blue-500/50 shadow-lg shadow-blue-500/10' 
+                            : 'bg-slate-900/50 border-white/5 hover:border-white/20'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+                            selectedBot?.id === bot.id ? 'bg-blue-500 text-white' : 'bg-slate-800 text-slate-400 group-hover:bg-slate-700'
+                          }`}>
+                            <Bot className="w-4 h-4" />
+                          </div>
+                          <div className="min-w-0">
+                            <h4 className={`font-bold text-xs truncate ${selectedBot?.id === bot.id ? 'text-blue-400' : 'text-slate-200'}`}>
+                              {bot.name}
+                            </h4>
+                            <p className="text-[9px] text-slate-500 uppercase tracking-tighter truncate">Latency: 120ms</p>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
           </div>
         </div>
 
