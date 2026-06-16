@@ -254,8 +254,6 @@ export default function GeneralBotsPage() {
             )}
           </div>
         </div>
-          </div>
-        </div>
 
         {/* Console / Lab Area */}
         <div className="lg:col-span-2 space-y-6">
