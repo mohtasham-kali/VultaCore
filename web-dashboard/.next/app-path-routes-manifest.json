@@ -1,0 +1,6 @@
+{
+  "/page": "/",
+  "/_not-found/page": "/_not-found",
+  "/auth/page": "/auth",
+  "/(app)/bots/general/page": "/bots/general"
+}
