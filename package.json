@@ -1,24 +1,11 @@
 {
   "name": "vultacore-platform",
   "version": "1.0.0",
+  "description": "Unified VultaCore Platform",
   "main": "server.js",
-  "description": "Unified VultaCore Platform Monorepo",
-  "private": true,
-  "workspaces": [
-    "web-dashboard",
-    "backend-api",
-    "desktop-app",
-    "mobile-app"
-  ],
   "scripts": {
-    "build": "npm run build -w web-dashboard",
-    "start": "node server.js"
-  },
-  "overrides": {
-    "glob": "^11.0.0",
-    "rimraf": "^6.0.1",
-    "inflight": "^1.0.6",
-    "tar": "^7.4.3"
+    "start": "node server.js",
+    "build": "echo 'No build required'"
   },
   "dependencies": {
     "@nestjs/axios": "^4.0.1",
