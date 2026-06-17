@@ -3,8 +3,10 @@ node_modules/
 /dist/
 !backend-api/dist/
 
-# Ignore all Next.js build output and cache
+# Ignore Next.js build output and cache but allow the web-dashboard production build to be deployed
 .next/
+!web-dashboard/.next/
+web-dashboard/.next/cache/
 
 # Ignore runtime and build artifacts
 server.log
