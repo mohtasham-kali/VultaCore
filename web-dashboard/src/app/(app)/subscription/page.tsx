@@ -138,7 +138,8 @@ export default function SubscriptionPage() {
     } catch (e: unknown) {
       const err = e as { userCancelled?: boolean };
       if (!err.userCancelled) {
-        alert("Error during checkout. Please try again.");
+        console.error("Checkout Error Details:", e);
+        alert(`Error during checkout: ${(e as Error).message || "Please try again."}`);
       }
       setIsUpgrading(false);
     }
