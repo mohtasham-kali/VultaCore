@@ -4,7 +4,10 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   try {
-    const app = await NestFactory.create(AppModule);
+    const app = await NestFactory.create(AppModule, {
+      // Capture raw body buffer — required for Lemon Squeezy webhook HMAC verification
+      rawBody: true,
+    });
     app.enableCors();
     app.setGlobalPrefix('api');
     const port = process.env.PORT || 3001;
