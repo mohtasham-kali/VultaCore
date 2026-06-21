@@ -13,18 +13,7 @@ export class BotsController {
   ) {}
 
   @Get()
-  async findAll(
-    @Query('type') type?: 'general' | 'cyber',
-    @Query('userId') userId?: string,
-  ) {
-    // Free plan: only general bots accessible
-    if (userId && type === 'cyber') {
-      const user = await this.usersService.findOne(userId);
-      const plan = resolvePlanTier(user?.rank ?? 'Free');
-      if (!plan.botTypes.includes('cyber')) {
-        return [];
-      }
-    }
+  findAll(@Query('type') type?: 'general' | 'cyber') {
     return this.botsService.findAll(type);
   }
 
