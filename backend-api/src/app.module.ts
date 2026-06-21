@@ -15,6 +15,8 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ChatModule } from './chat/chat.module';
 import { SettingsModule } from './settings/settings.module';
+import { BillingModule } from './billing/billing.module';
+import { EventsModule } from './events/events.module';
 
 import * as fs from 'fs';
 
@@ -48,6 +50,8 @@ const staticModuleOptions = fs.existsSync(join(process.cwd(), 'out'))
     ScheduleModule.forRoot(),
     ChatModule,
     SettingsModule,
+    BillingModule,
+    EventsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
