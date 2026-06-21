@@ -14,6 +14,7 @@ interface UsageEntry {
 @Injectable()
 export class PlanGuardService {
   private aiUsage = new Map<string, UsageEntry>();
+  private securityHubUsage = new Map<string, UsageEntry>();
 
   constructor(private readonly usersService: UsersService) {}
 
@@ -74,6 +75,47 @@ export class PlanGuardService {
   }
 
   /**
+   * Checks if a user has reached their daily Security Hub scan limit.
+   */
+  async checkSecurityHubLimit(userId: string): Promise<{
+    allowed: boolean;
+    remaining: number | 'unlimited';
+    limit: number | 'unlimited';
+    tier: string;
+  }> {
+    const user = await this.usersService.findOne(userId);
+    const rank = user?.rank ?? 'Free';
+    const plan = resolvePlanTier(rank);
+    const limit = plan.securityHubScansPerDay;
+
+    if (limit === 'unlimited') {
+      return { allowed: true, remaining: 'unlimited', limit: 'unlimited', tier: rank };
+    }
+
+    const today = this.todayDate();
+    const existing = this.securityHubUsage.get(userId);
+
+    if (!existing || existing.date !== today) {
+      this.securityHubUsage.set(userId, { count: 0, date: today });
+    }
+
+    const entry = this.securityHubUsage.get(userId)!;
+    const remaining = Math.max(0, limit - entry.count);
+
+    return { allowed: entry.count < limit, remaining, limit, tier: rank };
+  }
+
+  incrementSecurityHubUsage(userId: string): void {
+    const today = this.todayDate();
+    const existing = this.securityHubUsage.get(userId);
+    if (!existing || existing.date !== today) {
+      this.securityHubUsage.set(userId, { count: 1, date: today });
+    } else {
+      existing.count += 1;
+    }
+  }
+
+  /**
    * Returns the allowed AI models for a user's plan.
    */
   async getAllowedModels(userId: string): Promise<string[]> {
@@ -92,12 +134,12 @@ export class PlanGuardService {
   }
 
   /**
-   * Checks if a user can access the Security Hub (Premium+ only).
+   * Checks if a user can access the Security Hub (all plans, limited by quota).
    */
   async canAccessSecurityHub(userId: string): Promise<boolean> {
     const user = await this.usersService.findOne(userId);
     const plan = resolvePlanTier(user?.rank ?? 'Free');
-    return plan.securityHub;
+    return plan.securityHubScansPerDay === 'unlimited' || plan.securityHubScansPerDay > 0;
   }
 
   /**
