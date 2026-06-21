@@ -17,13 +17,11 @@ export class BotsController {
     @Query('type') type?: 'general' | 'cyber',
     @Query('userId') userId?: string,
   ) {
-    // If userId provided, filter bots by what their plan allows
-    if (userId) {
+    // Free plan: only general bots accessible
+    if (userId && type === 'cyber') {
       const user = await this.usersService.findOne(userId);
       const plan = resolvePlanTier(user?.rank ?? 'Free');
-
-      // Free plan: only general bots
-      if (!plan.securityHub && type === 'cyber' && plan.tier === 'Free') {
+      if (!plan.botTypes.includes('cyber')) {
         return [];
       }
     }

@@ -14,7 +14,8 @@ export interface PlanLimits {
   analyticsAccess: 'public' | 'personal' | 'advanced';
   apiAccess: boolean;
   forumPriority: boolean;
-  securityHub: boolean;
+  /** Security Hub scans allowed per day. 'unlimited' for Premium+ */
+  securityHubScansPerDay: number | 'unlimited';
   botTypes: ('general' | 'cyber' | 'all')[];
   maxBotsPerDay: number | 'unlimited';
   supportLevel: 'standard' | 'priority' | 'dedicated';
@@ -30,7 +31,7 @@ export const PLAN_LIMITS: Record<string, PlanLimits> = {
     analyticsAccess: 'public',
     apiAccess: false,
     forumPriority: false,
-    securityHub: false,
+    securityHubScansPerDay: 2,       // limited access
     botTypes: ['general'],
     maxBotsPerDay: 10,
     supportLevel: 'standard',
@@ -43,7 +44,7 @@ export const PLAN_LIMITS: Record<string, PlanLimits> = {
     analyticsAccess: 'personal',
     apiAccess: true,
     forumPriority: true,
-    securityHub: false,
+    securityHubScansPerDay: 20,      // moderate access
     botTypes: ['general', 'cyber'],
     maxBotsPerDay: 100,
     supportLevel: 'priority',
@@ -56,7 +57,7 @@ export const PLAN_LIMITS: Record<string, PlanLimits> = {
     analyticsAccess: 'advanced',
     apiAccess: true,
     forumPriority: true,
-    securityHub: true,
+    securityHubScansPerDay: 'unlimited',
     botTypes: ['general', 'cyber', 'all'],
     maxBotsPerDay: 'unlimited',
     supportLevel: 'priority',
@@ -69,13 +70,14 @@ export const PLAN_LIMITS: Record<string, PlanLimits> = {
     analyticsAccess: 'advanced',
     apiAccess: true,
     forumPriority: true,
-    securityHub: true,
+    securityHubScansPerDay: 'unlimited',
     botTypes: ['general', 'cyber', 'all'],
     maxBotsPerDay: 'unlimited',
     supportLevel: 'dedicated',
     whiteLabel: true,
   },
 };
+
 
 /**
  * Resolves user rank string (including legacy "Level X" format) to a plan tier.
