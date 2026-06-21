@@ -31,8 +31,8 @@ export const PLAN_LIMITS: Record<string, PlanLimits> = {
     analyticsAccess: 'public',
     apiAccess: false,
     forumPriority: false,
-    securityHubScansPerDay: 2,       // limited access
-    botTypes: ['general'],
+    securityHubScansPerDay: 10,      // raised from 2
+    botTypes: ['general', 'cyber'],  // cyber available but capped at maxBotsPerDay
     maxBotsPerDay: 10,
     supportLevel: 'standard',
     whiteLabel: false,
