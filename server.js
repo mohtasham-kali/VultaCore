@@ -418,24 +418,6 @@ function resolvePython() {
 
     const sysPython = findSystemPython();
 
-    if (!fs.existsSync(venvDir)) {
-        if (!sysPython) {
-            log(`❌ AI Engine: No system python found to create venv.`);
-        } else {
-            log(`AI Engine: venv missing, attempting auto-setup via ${sysPython} -m venv...`);
-            try {
-                const { execSync } = require('child_process');
-                execSync(`${sysPython} -m venv venv`, { cwd: aiDir, stdio: 'pipe' });
-                log(`AI Engine: venv created, installing requirements...`);
-                const pipBin = path.join(venvDir, 'bin', 'pip');
-                execSync(`${pipBin} install -r requirements.txt`, { cwd: aiDir, stdio: 'pipe' });
-                log(`AI Engine: requirements installed successfully.`);
-            } catch (err) {
-                log(`AI Engine: Auto-setup failed: ${err.stderr ? err.stderr.toString() : err.message}`);
-            }
-        }
-    }
-
     // 1. Check if a valid venv exists (by checking lib/ dir which pip always creates)
     if (fs.existsSync(venvLibDir)) {
         try {
@@ -447,43 +429,34 @@ function resolvePython() {
                     
                     // Verify critical packages are installed (like uvicorn)
                     if (!fs.existsSync(path.join(sitePackages, 'uvicorn'))) {
-                        log(`AI Engine: uvicorn missing in venv. Attempting pip install...`);
-                        try {
-                            const pipBin = path.join(venvDir, 'bin', 'pip');
-                            const { execSync } = require('child_process');
-                            execSync(`${pipBin} install -r requirements.txt`, { cwd: aiDir, stdio: 'pipe' });
-                            log(`AI Engine: missing requirements installed.`);
-                        } catch (err) {
-                            log(`❌ AI Engine: pip install failed: ${err.stderr ? err.stderr.toString() : err.message}`);
-                            return null; // Don't try to boot if missing uvicorn
+                        log(`AI Engine: uvicorn missing in venv site-packages. Skipping venv use.`);
+                    } else {
+                        // Find working python binary: prefer venv python, fall back to system
+                        const candidates = [
+                            path.join(venvDir, 'bin', 'python3'),
+                            path.join(venvDir, 'bin', 'python'),
+                        ];
+                        for (const bin of candidates) {
+                            try {
+                                const { execFileSync } = require('child_process');
+                                execFileSync(bin, ['--version'], { stdio: 'ignore' });
+                                log(`AI Engine: resolved → venv python (${path.basename(bin)}) with site-packages`);
+                                return {
+                                    bin,
+                                    args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
+                                    env: { PYTHONPATH: sitePackages }
+                                };
+                            } catch (_) {}
                         }
-                    }
-
-                    // Find working python binary: prefer venv python, fall back to system
-                    const candidates = [
-                        path.join(venvDir, 'bin', 'python3'),
-                        path.join(venvDir, 'bin', 'python'),
-                    ];
-                    for (const bin of candidates) {
-                        try {
-                            const { execFileSync } = require('child_process');
-                            execFileSync(bin, ['--version'], { stdio: 'ignore' });
-                            log(`AI Engine: resolved → venv python (${path.basename(bin)}) with site-packages`);
+                        // venv binaries broken — fall back to system python with PYTHONPATH
+                        if (sysPython) {
+                            log(`AI Engine: venv binaries broken, using system python (${sysPython}) with PYTHONPATH=${sitePackages}`);
                             return {
-                                bin,
+                                bin: sysPython,
                                 args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
                                 env: { PYTHONPATH: sitePackages }
                             };
-                        } catch (_) {}
-                    }
-                    // venv binaries broken — fall back to system python with PYTHONPATH
-                    if (sysPython) {
-                        log(`AI Engine: venv binaries broken, using system python (${sysPython}) with PYTHONPATH=${sitePackages}`);
-                        return {
-                            bin: sysPython,
-                            args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
-                            env: { PYTHONPATH: sitePackages }
-                        };
+                        }
                     }
                 }
             }
