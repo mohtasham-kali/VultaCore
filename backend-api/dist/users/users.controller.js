@@ -15,10 +15,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.UsersController = void 0;
 const common_1 = require("@nestjs/common");
 const users_service_1 = require("./users.service");
+const plan_guard_service_1 = require("../common/plan-guard.service");
 let UsersController = class UsersController {
     usersService;
-    constructor(usersService) {
+    planGuard;
+    constructor(usersService, planGuard) {
         this.usersService = usersService;
+        this.planGuard = planGuard;
     }
     findAll() {
         return this.usersService.findAll();
@@ -28,6 +31,9 @@ let UsersController = class UsersController {
     }
     updatePlan(id, plan) {
         return this.usersService.updatePlan(id, plan);
+    }
+    getPlanInfo(id) {
+        return this.planGuard.getPlanInfo(id);
     }
 };
 exports.UsersController = UsersController;
@@ -52,8 +58,16 @@ __decorate([
     __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", void 0)
 ], UsersController.prototype, "updatePlan", null);
+__decorate([
+    (0, common_1.Get)(':id/plan-info'),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], UsersController.prototype, "getPlanInfo", null);
 exports.UsersController = UsersController = __decorate([
     (0, common_1.Controller)('users'),
-    __metadata("design:paramtypes", [users_service_1.UsersService])
+    __metadata("design:paramtypes", [users_service_1.UsersService,
+        plan_guard_service_1.PlanGuardService])
 ], UsersController);
 //# sourceMappingURL=users.controller.js.map
