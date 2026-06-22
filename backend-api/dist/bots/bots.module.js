@@ -14,6 +14,8 @@ const bots_service_1 = require("./bots.service");
 const bots_controller_1 = require("./bots.controller");
 const bot_entity_1 = require("./entities/bot.entity");
 const conversation_message_entity_1 = require("./entities/conversation-message.entity");
+const common_module_1 = require("../common/common.module");
+const users_module_1 = require("../users/users.module");
 let BotsModule = class BotsModule {
 };
 exports.BotsModule = BotsModule;
@@ -22,6 +24,8 @@ exports.BotsModule = BotsModule = __decorate([
         imports: [
             typeorm_1.TypeOrmModule.forFeature([bot_entity_1.Bot, conversation_message_entity_1.ConversationMessage]),
             axios_1.HttpModule,
+            common_module_1.CommonModule,
+            users_module_1.UsersModule,
         ],
         providers: [bots_service_1.BotsService],
         controllers: [bots_controller_1.BotsController],

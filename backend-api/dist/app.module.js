@@ -57,6 +57,8 @@ const analytics_module_1 = require("./analytics/analytics.module");
 const notifications_module_1 = require("./notifications/notifications.module");
 const chat_module_1 = require("./chat/chat.module");
 const settings_module_1 = require("./settings/settings.module");
+const billing_module_1 = require("./billing/billing.module");
+const events_module_1 = require("./events/events.module");
 const fs = __importStar(require("fs"));
 const staticModuleOptions = fs.existsSync((0, path_1.join)(process.cwd(), 'out'))
     ? [serve_static_1.ServeStaticModule.forRoot({ rootPath: (0, path_1.join)(process.cwd(), 'out') })]
@@ -91,6 +93,8 @@ exports.AppModule = AppModule = __decorate([
             schedule_1.ScheduleModule.forRoot(),
             chat_module_1.ChatModule,
             settings_module_1.SettingsModule,
+            billing_module_1.BillingModule,
+            events_module_1.EventsModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [app_service_1.AppService],

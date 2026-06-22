@@ -15,15 +15,30 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.BotsController = void 0;
 const common_1 = require("@nestjs/common");
 const bots_service_1 = require("./bots.service");
+const plan_guard_service_1 = require("../common/plan-guard.service");
+const users_service_1 = require("../users/users.service");
 let BotsController = class BotsController {
     botsService;
-    constructor(botsService) {
+    planGuard;
+    usersService;
+    constructor(botsService, planGuard, usersService) {
         this.botsService = botsService;
+        this.planGuard = planGuard;
+        this.usersService = usersService;
     }
     findAll(type) {
         return this.botsService.findAll(type);
     }
-    execute(id, prompt, userId, context) {
+    async execute(id, prompt, userId, context) {
+        if (!userId) {
+            throw new common_1.ForbiddenException('userId is required to execute a bot.');
+        }
+        const limitCheck = await this.planGuard.checkAiChatLimit(userId);
+        if (!limitCheck.allowed) {
+            throw new common_1.ForbiddenException(`Daily AI chat limit reached (${limitCheck.limit} chats/day on ${limitCheck.tier} plan). ` +
+                `Upgrade your plan at /subscription to get more.`);
+        }
+        this.planGuard.incrementAiUsage(userId);
         return this.botsService.executeBot(id, prompt, userId, context);
     }
     getHistory(id, userId) {
@@ -52,7 +67,7 @@ __decorate([
     __param(3, (0, common_1.Body)('context')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, String, String, String]),
-    __metadata("design:returntype", void 0)
+    __metadata("design:returntype", Promise)
 ], BotsController.prototype, "execute", null);
 __decorate([
     (0, common_1.Get)(':id/history'),
@@ -70,6 +85,8 @@ __decorate([
 ], BotsController.prototype, "seed", null);
 exports.BotsController = BotsController = __decorate([
     (0, common_1.Controller)('bots'),
-    __metadata("design:paramtypes", [bots_service_1.BotsService])
+    __metadata("design:paramtypes", [bots_service_1.BotsService,
+        plan_guard_service_1.PlanGuardService,
+        users_service_1.UsersService])
 ], BotsController);
 //# sourceMappingURL=bots.controller.js.map
