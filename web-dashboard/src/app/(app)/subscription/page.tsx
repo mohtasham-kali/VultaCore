@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { Check, Loader2, Sparkles, Zap, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
@@ -77,7 +77,7 @@ const PAYMENT_METHODS = [
   { name: "Apple Pay", icon: "🍎" },
 ];
 
-export default function SubscriptionPage() {
+function SubscriptionPageClient() {
   const { user } = useAuth();
   const searchParams = useSearchParams();
   const [currentPlan, setCurrentPlan] = useState<string>("Free");
@@ -368,5 +368,18 @@ export default function SubscriptionPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function SubscriptionPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col items-center justify-center py-40 gap-4">
+        <Loader2 className="w-12 h-12 text-purple-500 animate-spin" />
+        <p className="text-slate-500 animate-pulse uppercase tracking-widest text-xs font-bold">Loading Subscription...</p>
+      </div>
+    }>
+      <SubscriptionPageClient />
+    </Suspense>
   );
 }

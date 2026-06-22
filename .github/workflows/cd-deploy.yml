@@ -104,6 +104,10 @@ jobs:
             # 4. Set up Python venv for AI service (creates venv if missing, always syncs deps)
             echo "Setting up Python AI service venv..."
             cd ~/domains/vultacore.techprogression.com/nodejs/ai-services
+            if [ -d "venv" ] && [ ! -f "venv/bin/pip" ]; then
+              echo "Detected corrupted venv (missing pip). Re-creating..."
+              rm -rf venv
+            fi
             if [ ! -f "venv/bin/python3" ]; then
               # Try multiple pythons, prefer newer cloudlinux ones
               for py in /opt/alt/python311/bin/python3 /opt/alt/python310/bin/python3 /opt/alt/python39/bin/python3 python3.11 python3.10 python3.9 python3; do
