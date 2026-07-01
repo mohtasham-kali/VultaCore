@@ -249,8 +249,9 @@ function SubscriptionPageClient() {
           const isLoading = upgradingPlan === plan.id;
 
           return (
-    <div
+            <div
               key={plan.id}
+
               className={cn(
                 "relative flex flex-col p-8 rounded-3xl border transition-all duration-500 overflow-hidden",
                 isCurrentPlan
@@ -268,12 +269,15 @@ function SubscriptionPageClient() {
                 />
               )}
 
-              {/* Popular badge */}
+              {/* Popular badge (never overlaps title/CTA) */}
               {plan.highlight && !isCurrentPlan && (
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-gradient-to-r from-purple-500 to-blue-500 text-white text-[10px] font-bold uppercase tracking-widest px-4 py-1.5 rounded-full shadow-lg flex items-center gap-1">
-                  <Sparkles className="w-3 h-3" /> Most Popular
+                <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
+                  <div className="bg-gradient-to-r from-purple-500 to-blue-500 text-white text-[10px] font-bold uppercase tracking-widest px-4 py-1.5 rounded-full shadow-lg flex items-center gap-1">
+                    <Sparkles className="w-3 h-3" /> Most Popular
+                  </div>
                 </div>
               )}
+
 
               {/* Plan info */}
               <div className="mb-8 relative z-10">
