@@ -147,7 +147,8 @@ function SubscriptionPageClient() {
       setUpgradingPlan(planId);
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
-      const res = await fetch(`${apiUrl}/billing/checkout`, {
+      const res = await fetch(`${apiUrl}/api/billing/checkout`, {
+
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
