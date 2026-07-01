@@ -249,7 +249,7 @@ function SubscriptionPageClient() {
           const isLoading = upgradingPlan === plan.id;
 
           return (
-            <div
+    <div
               key={plan.id}
               className={cn(
                 "relative flex flex-col p-8 rounded-3xl border transition-all duration-500 overflow-hidden",
@@ -262,6 +262,7 @@ function SubscriptionPageClient() {
             >
               {/* Active plan top bar */}
               {isCurrentPlan && (
+
                 <div
                   className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r ${plan.gradient}`}
                 />
