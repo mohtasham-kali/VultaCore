@@ -56,7 +56,7 @@ const PLANS = [
   {
     id: "enterprise",
     name: "Enterprise",
-    price: "Custom",
+    price: "179",
     description: "Custom solutions for teams",
     features: [
       "SLA Guarantees",
@@ -64,7 +64,7 @@ const PLANS = [
       "White-label Options",
       "24/7 Phone Support",
     ],
-    buttonText: "Contact Sales",
+    buttonText: "Get Enterprise",
     highlight: false,
     gradient: "from-emerald-500 to-teal-500",
   },
@@ -73,8 +73,6 @@ const PLANS = [
 const PAYMENT_METHODS = [
   { name: "Visa / Mastercard", icon: "💳" },
   { name: "PayPal", icon: "🅿️" },
-  { name: "Google Pay", icon: "G" },
-  { name: "Apple Pay", icon: "🍎" },
 ];
 
 function SubscriptionPageClient() {
