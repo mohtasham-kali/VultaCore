@@ -1,12 +1,14 @@
-# TODO
+# TODO - Billing + Hostinger build fixes
 
-## Billing upgrade-plan popup fix
-- [x] Locate frontend call to `/billing/checkout`.
-- [x] Identify NestJS global prefix `api` causing correct route to be `/api/billing/checkout`.
-- [x] Update `web-dashboard/src/app/(app)/subscription/page.tsx` to call `/api/billing/checkout`.
+## Billing (Lemon Squeezy)
+- [x] Fix frontend POST endpoint to match Nest global prefix: `/api/billing/checkout`.
+- [ ] Fix runtime env for backend so `LS_VARIANT_STANDARD` and `LS_VARIANT_PREMIUM` are present (requires setting env in running backend + restart).
+- [ ] Ensure Enterprise env var name matches backend expectation: `LS_VARIANT_ENTERPRISE` (not `LS_VARIANT_ENTERPISE`).
 
-## Hostinger build failure (WebGPU types)
-- [x] Fix TypeScript error in `web-dashboard/src/lib/local-ai.ts` for `navigator.gpu` (use type assertion fallback).
-- [ ] Re-run `next build` (web-dashboard) and verify build succeeds.
+## UI
+- [x] Prevent “Most Popular” badge overlap on subscription cards.
 
+## Hostinger/Next build blockers
+- [ ] Fix TypeScript error: missing types for `nprogress` (NavigationEvents.tsx).
+- [ ] Fix NextFontError: avoid failing to fetch “Geist Mono” during build (use `next/font/local` or remove remote fetch).
 
