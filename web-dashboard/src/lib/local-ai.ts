@@ -15,7 +15,8 @@ export interface LocalAIProgress {
 export async function initLocalEngine(
   onProgress?: (report: LocalAIProgress) => void
 ): Promise<MLCEngine> {
-  if (typeof navigator === 'undefined' || !navigator.gpu) {
+  if (typeof navigator === 'undefined' || !(navigator as { gpu?: unknown }).gpu) {
+
     throw new Error("WebGPU is not supported on this device/browser. Offline Local AI requires WebGPU. If you are using the Desktop app on Linux or macOS, the native webview may not support it yet. Please use Online Mode.");
   }
 
@@ -58,15 +59,19 @@ export async function generateLocalResponse(
 ): Promise<string> {
   const engine = await initLocalEngine(onProgress);
   
-  const messages = [];
+  const messages: Array<{ role: string; content: string }> = [];
+
   if (context) {
     messages.push({ role: 'system', content: `Context:\n${context}` });
   }
   messages.push({ role: 'user', content: prompt });
 
   const reply = await engine.chat.completions.create({
-    messages: messages as any,
+    // Engine SDK expects a loose message shape; keep typing permissive.
+    messages: messages as unknown as Parameters<MLCEngine['chat']['completions']['create']>[0]['messages'],
+
   });
+
 
   return reply.choices[0].message.content as string;
 }
