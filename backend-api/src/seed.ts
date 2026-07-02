@@ -21,7 +21,7 @@ async function bootstrap() {
     points: 1250,
     isAdmin: true,
   });
-  
+
   // Create AI Bot User
   await usersService.create({
     id: 'vultabot-uuid',
@@ -33,12 +33,16 @@ async function bootstrap() {
   });
 
   // Create Mock Posts
-  await forumService.createPost({
-    title: 'How to fix "TypeError: Cannot read property map of undefined" in React?',
-    content: `I'm getting this frustrating error in my React component when trying to render a list. The data comes from an API call...`,
-    type: 'dev',
-    tags: ['react', 'javascript'],
-  }, user);
+  await forumService.createPost(
+    {
+      title:
+        'How to fix "TypeError: Cannot read property map of undefined" in React?',
+      content: `I'm getting this frustrating error in my React component when trying to render a list. The data comes from an API call...`,
+      type: 'dev',
+      tags: ['react', 'javascript'],
+    },
+    user,
+  );
 
   // Create Mock Bots
   await botsService.create({

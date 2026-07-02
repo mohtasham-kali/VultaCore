@@ -47,7 +47,12 @@ let BotsService = class BotsService {
         const orderedHistory = history.reverse();
         let memoryContext = '';
         if (orderedHistory.length > 0) {
-            memoryContext = 'Conversation History:\n' + orderedHistory.map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`).join('\n') + '\n\n';
+            memoryContext =
+                'Conversation History:\n' +
+                    orderedHistory
+                        .map((msg) => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
+                        .join('\n') +
+                    '\n\n';
         }
         const finalContext = memoryContext + (context ? `User Context/File:\n${context}` : '');
         bot.status = 'working';
@@ -60,7 +65,7 @@ let BotsService = class BotsService {
                 user_id: userId,
                 bot_type: bot.type,
                 bot_name: bot.name,
-                context: finalContext || null
+                context: finalContext || null,
             }));
             bot.status = 'completed';
             await this.botsRepository.save(bot);
@@ -81,12 +86,12 @@ let BotsService = class BotsService {
         catch (error) {
             bot.status = 'idle';
             await this.botsRepository.save(bot);
-            const debugMsg = error?.response?.data?.detail
-                || error?.response?.data?.error
-                || error?.message
-                || error?.code
-                || JSON.stringify(error)
-                || 'Unknown connection or parsing fallback error';
+            const debugMsg = error?.response?.data?.detail ||
+                error?.response?.data?.error ||
+                error?.message ||
+                error?.code ||
+                JSON.stringify(error) ||
+                'Unknown connection or parsing fallback error';
             console.error(`AI Service Error (${bot.name}):`, debugMsg);
             if (error.response) {
                 console.error('Response data:', error.response.data);
@@ -116,15 +121,47 @@ let BotsService = class BotsService {
     }
     async seed() {
         const bots = [
-            { name: 'Text to Code', type: 'general', category: 'Code Tools', description: 'Convert natural language descriptions into executable code.' },
-            { name: 'Image to Code', type: 'general', category: 'Code Tools', description: 'Generate code from UI mockups or screenshots.' },
-            { name: 'Error Explainer', type: 'general', category: 'Analysis', description: 'Detailed explanation of compiler or runtime errors.' },
-            { name: 'Bug Fixer', type: 'general', category: 'Analysis', description: 'Identify and resolve logic bugs or syntax issues.' },
-            { name: 'Vulnerability Detection', type: 'cyber', category: 'Security Audit', description: 'Scan code for common security vulnerabilities (OWASP Top 10).' },
-            { name: 'Have I Been Pwned', type: 'cyber', category: 'Threat Intel', description: 'Check if credentials have been compromised in known data breaches.' },
+            {
+                name: 'Text to Code',
+                type: 'general',
+                category: 'Code Tools',
+                description: 'Convert natural language descriptions into executable code.',
+            },
+            {
+                name: 'Image to Code',
+                type: 'general',
+                category: 'Code Tools',
+                description: 'Generate code from UI mockups or screenshots.',
+            },
+            {
+                name: 'Error Explainer',
+                type: 'general',
+                category: 'Analysis',
+                description: 'Detailed explanation of compiler or runtime errors.',
+            },
+            {
+                name: 'Bug Fixer',
+                type: 'general',
+                category: 'Analysis',
+                description: 'Identify and resolve logic bugs or syntax issues.',
+            },
+            {
+                name: 'Vulnerability Detection',
+                type: 'cyber',
+                category: 'Security Audit',
+                description: 'Scan code for common security vulnerabilities (OWASP Top 10).',
+            },
+            {
+                name: 'Have I Been Pwned',
+                type: 'cyber',
+                category: 'Threat Intel',
+                description: 'Check if credentials have been compromised in known data breaches.',
+            },
         ];
         for (const botData of bots) {
-            const existing = await this.botsRepository.findOneBy({ name: botData.name });
+            const existing = await this.botsRepository.findOneBy({
+                name: botData.name,
+            });
             if (!existing) {
                 await this.create(botData);
             }

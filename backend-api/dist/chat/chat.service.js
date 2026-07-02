@@ -31,12 +31,14 @@ let ChatService = class ChatService {
         return this.chatMessageRepository.save(message);
     }
     async getMessagesByRoom(room, limit = 50) {
-        return this.chatMessageRepository.find({
+        return this.chatMessageRepository
+            .find({
             where: { room },
             order: { createdAt: 'DESC' },
             take: limit,
             relations: ['author'],
-        }).then(messages => messages.reverse());
+        })
+            .then((messages) => messages.reverse());
     }
 };
 exports.ChatService = ChatService;

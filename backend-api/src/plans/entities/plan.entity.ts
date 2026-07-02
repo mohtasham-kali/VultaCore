@@ -9,6 +9,11 @@ export class Plan {
   @Column()
   name: string;
 
+  // Lemon Squeezy variant id created automatically by Lemon Squeezy when admin adds the plan
+  // (stored so checkout + webhook can be mapped dynamically)
+  @Column()
+  variantId: string;
+
   @Column('decimal', { precision: 10, scale: 2 })
   price: number;
 

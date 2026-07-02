@@ -73,7 +73,7 @@ exports.AppModule = AppModule = __decorate([
                 isGlobal: true,
             }),
             typeorm_1.TypeOrmModule.forRoot({
-                type: (process.env.DATABASE_URL ? 'postgres' : 'sqlite'),
+                type: process.env.DATABASE_URL ? 'postgres' : 'sqlite',
                 url: process.env.DATABASE_URL,
                 database: process.env.DATABASE_URL ? undefined : 'saas.sqlite',
                 autoLoadEntities: true,

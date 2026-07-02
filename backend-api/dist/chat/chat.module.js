@@ -18,10 +18,7 @@ let ChatModule = class ChatModule {
 exports.ChatModule = ChatModule;
 exports.ChatModule = ChatModule = __decorate([
     (0, common_1.Module)({
-        imports: [
-            typeorm_1.TypeOrmModule.forFeature([chat_message_entity_1.ChatMessage]),
-            users_module_1.UsersModule,
-        ],
+        imports: [typeorm_1.TypeOrmModule.forFeature([chat_message_entity_1.ChatMessage]), users_module_1.UsersModule],
         providers: [chat_gateway_1.ChatGateway, chat_service_1.ChatService],
         exports: [chat_service_1.ChatService, chat_gateway_1.ChatGateway],
     })

@@ -19,13 +19,15 @@ export class AppController {
   @Post('webhooks/revenuecat')
   async handleRevenueCatWebhook(@Body() payload: any) {
     if (!payload?.event) return { status: 'ignored' };
-    
+
     // RevenueCat event payload structure
     const appUserId = payload.event.app_user_id;
     const type = payload.event.type; // INITIAL_PURCHASE, RENEWAL, etc
     const productId = payload.event.product_id;
 
-    console.log(`[RevenueCat Webhook] User ${appUserId} triggered ${type} for ${productId}`);
+    console.log(
+      `[RevenueCat Webhook] User ${appUserId} triggered ${type} for ${productId}`,
+    );
 
     if (type === 'INITIAL_PURCHASE' || type === 'RENEWAL') {
       let rank = 'Free';

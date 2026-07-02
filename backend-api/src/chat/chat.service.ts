@@ -11,7 +11,11 @@ export class ChatService {
     private readonly chatMessageRepository: Repository<ChatMessage>,
   ) {}
 
-  async saveMessage(room: string, content: string, author: User): Promise<ChatMessage> {
+  async saveMessage(
+    room: string,
+    content: string,
+    author: User,
+  ): Promise<ChatMessage> {
     const message = this.chatMessageRepository.create({
       room,
       content,
@@ -20,12 +24,17 @@ export class ChatService {
     return this.chatMessageRepository.save(message);
   }
 
-  async getMessagesByRoom(room: string, limit: number = 50): Promise<ChatMessage[]> {
-    return this.chatMessageRepository.find({
-      where: { room },
-      order: { createdAt: 'DESC' },
-      take: limit,
-      relations: ['author'],
-    }).then(messages => messages.reverse()); // Reverse to get chronological order
+  async getMessagesByRoom(
+    room: string,
+    limit: number = 50,
+  ): Promise<ChatMessage[]> {
+    return this.chatMessageRepository
+      .find({
+        where: { room },
+        order: { createdAt: 'DESC' },
+        take: limit,
+        relations: ['author'],
+      })
+      .then((messages) => messages.reverse()); // Reverse to get chronological order
   }
 }

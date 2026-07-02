@@ -1,7 +1,10 @@
 import { Request } from 'express';
 import { BillingService } from './billing.service';
+type RawBodyRequest = Request & {
+    rawBody?: Buffer;
+};
 interface CheckoutDto {
-    planName: string;
+    planId: string;
     userId: string;
     userEmail: string;
 }
@@ -12,7 +15,7 @@ export declare class BillingController {
     createCheckout(body: CheckoutDto): Promise<{
         checkoutUrl: string;
     }>;
-    handleWebhook(req: Request, signature: string): Promise<{
+    handleWebhook(req: RawBodyRequest, signature: string): Promise<{
         received: boolean;
     }>;
 }

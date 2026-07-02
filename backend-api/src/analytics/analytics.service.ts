@@ -29,19 +29,43 @@ export class AnalyticsService {
       take: 5,
     });
 
-    const postCount = await this.postRepository.count({ where: { author: { id: userId } } });
-    const commentCount = await this.commentRepository.count({ where: { author: { id: userId } } });
+    const postCount = await this.postRepository.count({
+      where: { author: { id: userId } },
+    });
+    const commentCount = await this.commentRepository.count({
+      where: { author: { id: userId } },
+    });
 
     // Combine recent actions for the UI
     const activityLog = [
-      ...recentPosts.map(p => ({ type: 'post', title: p.title, date: p.createdAt, points: 50 })),
-      ...recentComments.map(c => ({ type: 'comment', title: 'Comented on a post', date: c.createdAt, points: 10 })),
-    ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 8);
+      ...recentPosts.map((p) => ({
+        type: 'post',
+        title: p.title,
+        date: p.createdAt,
+        points: 50,
+      })),
+      ...recentComments.map((c) => ({
+        type: 'comment',
+        title: 'Comented on a post',
+        date: c.createdAt,
+        points: 10,
+      })),
+    ]
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 8);
 
     // Prepare actions for Rust engine
     const actions = [
-      ...Array(postCount).fill({ action_type: 'post_created', timestamp: Date.now(), points: 50 }),
-      ...Array(commentCount).fill({ action_type: 'comment_created', timestamp: Date.now(), points: 10 }),
+      ...Array(postCount).fill({
+        action_type: 'post_created',
+        timestamp: Date.now(),
+        points: 50,
+      }),
+      ...Array(commentCount).fill({
+        action_type: 'comment_created',
+        timestamp: Date.now(),
+        points: 10,
+      }),
     ];
 
     const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -49,9 +73,12 @@ export class AnalyticsService {
     // Generate basic temporal histogram backfilling history
     const temporalData = [...Array(7)].map((_, i) => {
       const dIndex = (today - 6 + i + 7) % 7;
-      return { 
-        name: days[dIndex], 
-        value: i === 6 ? postCount * 20 + commentCount * 5 : Math.floor(Math.random() * 50)
+      return {
+        name: days[dIndex],
+        value:
+          i === 6
+            ? postCount * 20 + commentCount * 5
+            : Math.floor(Math.random() * 50),
       };
     });
 
@@ -59,14 +86,23 @@ export class AnalyticsService {
       const response = await firstValueFrom(
         this.httpService.post('http://localhost:5000/calculate', {
           user_id: userId,
-          actions: actions.length > 0 ? actions : [{ action_type: 'session_start', timestamp: Date.now(), points: 5 }],
+          actions:
+            actions.length > 0
+              ? actions
+              : [
+                  {
+                    action_type: 'session_start',
+                    timestamp: Date.now(),
+                    points: 5,
+                  },
+                ],
         }),
       );
       return { ...response.data, activityLog, temporalData };
     } catch (error) {
       return {
         user_id: userId,
-        total_points: (postCount * 50) + (commentCount * 10),
+        total_points: postCount * 50 + commentCount * 10,
         rank_estimate: 'Syncing...',
         engagement_score: 0,
         activityLog,

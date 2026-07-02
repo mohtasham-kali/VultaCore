@@ -57,7 +57,7 @@ let ForumSchedulerService = ForumSchedulerService_1 = class ForumSchedulerServic
                 });
             }
             const bots = await this.botsService.findAll('general');
-            const aiBot = bots.find(b => b.name === 'Bug Scanner') || bots[0];
+            const aiBot = bots.find((b) => b.name === 'Bug Scanner') || bots[0];
             if (!aiBot) {
                 this.logger.error('No AI bots available to generate response.');
                 return;

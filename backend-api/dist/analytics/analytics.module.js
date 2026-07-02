@@ -19,10 +19,7 @@ let AnalyticsModule = class AnalyticsModule {
 exports.AnalyticsModule = AnalyticsModule;
 exports.AnalyticsModule = AnalyticsModule = __decorate([
     (0, common_1.Module)({
-        imports: [
-            axios_1.HttpModule,
-            typeorm_1.TypeOrmModule.forFeature([post_entity_1.Post, comment_entity_1.Comment]),
-        ],
+        imports: [axios_1.HttpModule, typeorm_1.TypeOrmModule.forFeature([post_entity_1.Post, comment_entity_1.Comment])],
         providers: [analytics_service_1.AnalyticsService],
         controllers: [analytics_controller_1.AnalyticsController],
         exports: [analytics_service_1.AnalyticsService],

@@ -50,10 +50,20 @@ async function bootstrap() {
         const botsService = app.get(BotsService);
         const existingBots = await botsService.findAll();
         if (existingBots.length === 0) {
-            console.log("Empty database detected. Running auto-seed...");
-            await botsService.create({ name: 'Bug Scanner', type: 'general', status: 'idle', description: 'Scans your codebase for bugs.' });
-            await botsService.create({ name: 'Vulnerability Finder', type: 'cyber', status: 'working', description: 'Searching for CVEs.' });
-            console.log("✅ Auto-seed successful!");
+            console.log('Empty database detected. Running auto-seed...');
+            await botsService.create({
+                name: 'Bug Scanner',
+                type: 'general',
+                status: 'idle',
+                description: 'Scans your codebase for bugs.',
+            });
+            await botsService.create({
+                name: 'Vulnerability Finder',
+                type: 'cyber',
+                status: 'working',
+                description: 'Searching for CVEs.',
+            });
+            console.log('✅ Auto-seed successful!');
         }
     }
     catch (error) {

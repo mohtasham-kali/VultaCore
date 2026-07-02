@@ -23,7 +23,12 @@ export class BotsService {
     return this.botsRepository.find();
   }
 
-  async executeBot(id: string, prompt: string, userId: string, context?: string): Promise<any> {
+  async executeBot(
+    id: string,
+    prompt: string,
+    userId: string,
+    context?: string,
+  ): Promise<any> {
     const bot = await this.botsRepository.findOneBy({ id });
     if (!bot) return { error: 'Bot not found' };
 
@@ -33,24 +38,32 @@ export class BotsService {
       order: { createdAt: 'DESC' },
       take: 10,
     });
-    
+
     // Sort ascending for chronological context
     const orderedHistory = history.reverse();
     let memoryContext = '';
     if (orderedHistory.length > 0) {
-      memoryContext = 'Conversation History:\n' + orderedHistory.map(msg => 
-        `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`
-      ).join('\n') + '\n\n';
+      memoryContext =
+        'Conversation History:\n' +
+        orderedHistory
+          .map(
+            (msg) =>
+              `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`,
+          )
+          .join('\n') +
+        '\n\n';
     }
-    
-    const finalContext = memoryContext + (context ? `User Context/File:\n${context}` : '');
+
+    const finalContext =
+      memoryContext + (context ? `User Context/File:\n${context}` : '');
 
     bot.status = 'working';
     await this.botsRepository.save(bot);
 
     try {
       console.log(`Executing bot ${bot.name} for user ${userId}...`);
-      const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
+      const aiServiceUrl =
+        process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
       const response = await firstValueFrom(
         this.httpService.post(`${aiServiceUrl}/execute`, {
           prompt,
@@ -58,7 +71,7 @@ export class BotsService {
 
           bot_type: bot.type,
           bot_name: bot.name,
-          context: finalContext || null
+          context: finalContext || null,
         }),
       );
 
@@ -85,24 +98,27 @@ export class BotsService {
     } catch (error: any) {
       bot.status = 'idle';
       await this.botsRepository.save(bot);
-      
-      const debugMsg = error?.response?.data?.detail 
-        || error?.response?.data?.error 
-        || error?.message 
-        || error?.code 
-        || JSON.stringify(error)
-        || 'Unknown connection or parsing fallback error';
-        
+
+      const debugMsg =
+        error?.response?.data?.detail ||
+        error?.response?.data?.error ||
+        error?.message ||
+        error?.code ||
+        JSON.stringify(error) ||
+        'Unknown connection or parsing fallback error';
+
       console.error(`AI Service Error (${bot.name}):`, debugMsg);
       if (error.response) {
         console.error('Response data:', error.response.data);
       }
       return { error: `AI Service communication failed: ${debugMsg}` };
     }
-
   }
 
-  async getHistory(botId: string, userId: string): Promise<ConversationMessage[]> {
+  async getHistory(
+    botId: string,
+    userId: string,
+  ): Promise<ConversationMessage[]> {
     const history = await this.conversationRepository.find({
       where: { botId, userId },
       order: { createdAt: 'ASC' },
@@ -111,7 +127,10 @@ export class BotsService {
     return history;
   }
 
-  async updateStatus(id: string, status: 'idle' | 'working' | 'completed'): Promise<Bot | null> {
+  async updateStatus(
+    id: string,
+    status: 'idle' | 'working' | 'completed',
+  ): Promise<Bot | null> {
     const bot = await this.botsRepository.findOneBy({ id });
     if (bot) {
       bot.status = status;
@@ -119,7 +138,7 @@ export class BotsService {
     }
     return null;
   }
-  
+
   create(botData: Partial<Bot>): Promise<Bot> {
     const bot = this.botsRepository.create(botData);
     return this.botsRepository.save(bot);
@@ -128,18 +147,53 @@ export class BotsService {
   async seed(): Promise<void> {
     const bots = [
       // General Bots
-      { name: 'Text to Code', type: 'general', category: 'Code Tools', description: 'Convert natural language descriptions into executable code.' },
-      { name: 'Image to Code', type: 'general', category: 'Code Tools', description: 'Generate code from UI mockups or screenshots.' },
-      { name: 'Error Explainer', type: 'general', category: 'Analysis', description: 'Detailed explanation of compiler or runtime errors.' },
-      { name: 'Bug Fixer', type: 'general', category: 'Analysis', description: 'Identify and resolve logic bugs or syntax issues.' },
-      
+      {
+        name: 'Text to Code',
+        type: 'general',
+        category: 'Code Tools',
+        description:
+          'Convert natural language descriptions into executable code.',
+      },
+      {
+        name: 'Image to Code',
+        type: 'general',
+        category: 'Code Tools',
+        description: 'Generate code from UI mockups or screenshots.',
+      },
+      {
+        name: 'Error Explainer',
+        type: 'general',
+        category: 'Analysis',
+        description: 'Detailed explanation of compiler or runtime errors.',
+      },
+      {
+        name: 'Bug Fixer',
+        type: 'general',
+        category: 'Analysis',
+        description: 'Identify and resolve logic bugs or syntax issues.',
+      },
+
       // Cyber Bots
-      { name: 'Vulnerability Detection', type: 'cyber', category: 'Security Audit', description: 'Scan code for common security vulnerabilities (OWASP Top 10).' },
-      { name: 'Have I Been Pwned', type: 'cyber', category: 'Threat Intel', description: 'Check if credentials have been compromised in known data breaches.' },
+      {
+        name: 'Vulnerability Detection',
+        type: 'cyber',
+        category: 'Security Audit',
+        description:
+          'Scan code for common security vulnerabilities (OWASP Top 10).',
+      },
+      {
+        name: 'Have I Been Pwned',
+        type: 'cyber',
+        category: 'Threat Intel',
+        description:
+          'Check if credentials have been compromised in known data breaches.',
+      },
     ];
 
     for (const botData of bots) {
-      const existing = await this.botsRepository.findOneBy({ name: botData.name });
+      const existing = await this.botsRepository.findOneBy({
+        name: botData.name,
+      });
       if (!existing) {
         await this.create(botData as any);
       }

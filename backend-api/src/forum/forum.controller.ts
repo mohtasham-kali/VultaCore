@@ -5,7 +5,6 @@ import { CreatePostDto } from './dto/create-post.dto';
 import { CreateCommentDto } from './dto/create-comment.dto';
 
 @Controller('forum')
-
 export class ForumController {
   constructor(
     private readonly forumService: ForumService,
@@ -13,7 +12,9 @@ export class ForumController {
   ) {}
 
   @Post()
-  async create(@Body() createPostDto: CreatePostDto & { userId: string, email?: string }) {
+  async create(
+    @Body() createPostDto: CreatePostDto & { userId: string; email?: string },
+  ) {
     const { userId, email, ...dto } = createPostDto;
     const author = await this.usersService.findOrCreateUser(userId, email);
     return this.forumService.createPost(dto, author);
@@ -37,7 +38,8 @@ export class ForumController {
   @Post(':id/comments')
   async createComment(
     @Param('id') id: string,
-    @Body() createCommentDto: CreateCommentDto & { userId: string, email?: string },
+    @Body()
+    createCommentDto: CreateCommentDto & { userId: string; email?: string },
   ) {
     const { userId, email, ...dto } = createCommentDto;
     const author = await this.usersService.findOrCreateUser(userId, email);
@@ -49,4 +51,3 @@ export class ForumController {
     return this.forumService.likeComment(commentId);
   }
 }
-

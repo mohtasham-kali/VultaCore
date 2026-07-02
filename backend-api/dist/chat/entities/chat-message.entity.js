@@ -37,7 +37,10 @@ __decorate([
     __metadata("design:type", Date)
 ], ChatMessage.prototype, "createdAt", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => user_entity_1.User, (user) => user.id, { eager: true, onDelete: 'CASCADE' }),
+    (0, typeorm_1.ManyToOne)(() => user_entity_1.User, (user) => user.id, {
+        eager: true,
+        onDelete: 'CASCADE',
+    }),
     (0, typeorm_1.JoinColumn)({ name: 'authorId' }),
     __metadata("design:type", user_entity_1.User)
 ], ChatMessage.prototype, "author", void 0);

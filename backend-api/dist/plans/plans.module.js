@@ -10,13 +10,17 @@ exports.PlansModule = void 0;
 const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const plan_entity_1 = require("./entities/plan.entity");
+const plans_controller_1 = require("./plans.controller");
+const plans_service_1 = require("./plans.service");
 let PlansModule = class PlansModule {
 };
 exports.PlansModule = PlansModule;
 exports.PlansModule = PlansModule = __decorate([
     (0, common_1.Module)({
         imports: [typeorm_1.TypeOrmModule.forFeature([plan_entity_1.Plan])],
-        exports: [typeorm_1.TypeOrmModule],
+        controllers: [plans_controller_1.PlansController],
+        providers: [plans_service_1.PlansService],
+        exports: [plans_service_1.PlansService, typeorm_1.TypeOrmModule],
     })
 ], PlansModule);
 //# sourceMappingURL=plans.module.js.map

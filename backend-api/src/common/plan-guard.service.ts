@@ -38,7 +38,12 @@ export class PlanGuardService {
     const limit = plan.aiChatsPerDay;
 
     if (limit === 'unlimited') {
-      return { allowed: true, remaining: 'unlimited', limit: 'unlimited', tier: rank };
+      return {
+        allowed: true,
+        remaining: 'unlimited',
+        limit: 'unlimited',
+        tier: rank,
+      };
     }
 
     const today = this.todayDate();
@@ -89,7 +94,12 @@ export class PlanGuardService {
     const limit = plan.securityHubScansPerDay;
 
     if (limit === 'unlimited') {
-      return { allowed: true, remaining: 'unlimited', limit: 'unlimited', tier: rank };
+      return {
+        allowed: true,
+        remaining: 'unlimited',
+        limit: 'unlimited',
+        tier: rank,
+      };
     }
 
     const today = this.todayDate();
@@ -139,7 +149,10 @@ export class PlanGuardService {
   async canAccessSecurityHub(userId: string): Promise<boolean> {
     const user = await this.usersService.findOne(userId);
     const plan = resolvePlanTier(user?.rank ?? 'Free');
-    return plan.securityHubScansPerDay === 'unlimited' || plan.securityHubScansPerDay > 0;
+    return (
+      plan.securityHubScansPerDay === 'unlimited' ||
+      plan.securityHubScansPerDay > 0
+    );
   }
 
   /**
