@@ -10,11 +10,7 @@ import { BotsModule } from '../bots/bots.module';
 import { ForumSchedulerService } from './forum.scheduler';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([Post, Comment]),
-    UsersModule,
-    BotsModule
-  ],
+  imports: [TypeOrmModule.forFeature([Post, Comment]), UsersModule, BotsModule],
 
   providers: [ForumService, ForumSchedulerService],
   controllers: [ForumController],

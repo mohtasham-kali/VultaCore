@@ -25,7 +25,8 @@ export class ForumService {
   }
 
   async findAllPosts(type?: 'dev' | 'cyber'): Promise<Post[]> {
-    const query = this.postRepository.createQueryBuilder('post')
+    const query = this.postRepository
+      .createQueryBuilder('post')
       .leftJoinAndSelect('post.author', 'author')
       .loadRelationCountAndMap('post.commentsCount', 'post.comments');
 
@@ -55,14 +56,18 @@ export class ForumService {
     return this.postRepository.save(post);
   }
 
-  async createComment(postId: string, createCommentDto: CreateCommentDto, author: User): Promise<Comment> {
+  async createComment(
+    postId: string,
+    createCommentDto: CreateCommentDto,
+    author: User,
+  ): Promise<Comment> {
     const post = await this.findOnePost(postId);
     const comment = this.commentRepository.create({
       ...createCommentDto,
       post,
       author,
     });
-    
+
     const savedComment = await this.commentRepository.save(comment);
 
     // Reward Logic: if human user replies within 15 minutes
@@ -77,7 +82,7 @@ export class ForumService {
       }
     }
 
-    return savedComment as any;
+    return savedComment;
   }
 
   async likeComment(commentId: string): Promise<Comment> {
@@ -91,7 +96,7 @@ export class ForumService {
     }
 
     comment.likes += 1;
-    
+
     // Reward for confirmation point (if not a bot)
     if (comment.author && !comment.author.isBot) {
       comment.author.points += 1;

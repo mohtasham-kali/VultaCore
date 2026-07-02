@@ -1,4 +1,10 @@
-import { IsString, IsNotEmpty, IsEnum, IsArray, IsOptional } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsEnum,
+  IsArray,
+  IsOptional,
+} from 'class-validator';
 
 export class CreatePostDto {
   @IsString()

@@ -13,7 +13,7 @@ export class SettingsController {
   @Patch()
   async updateSettings(@Body() updateSettingsDto: Record<string, string>) {
     const promises = Object.entries(updateSettingsDto).map(([key, value]) =>
-      this.settingsService.setValue(key, value.toString())
+      this.settingsService.setValue(key, value.toString()),
     );
     await Promise.all(promises);
     return this.settingsService.getAll();

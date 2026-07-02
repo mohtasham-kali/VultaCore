@@ -6,10 +6,7 @@ import { ChatMessage } from './entities/chat-message.entity';
 import { UsersModule } from '../users/users.module';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([ChatMessage]),
-    UsersModule,
-  ],
+  imports: [TypeOrmModule.forFeature([ChatMessage]), UsersModule],
   providers: [ChatGateway, ChatService],
   exports: [ChatService, ChatGateway],
 })

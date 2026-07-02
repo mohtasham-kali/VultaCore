@@ -13,12 +13,13 @@ const billing_service_1 = require("./billing.service");
 const billing_controller_1 = require("./billing.controller");
 const users_module_1 = require("../users/users.module");
 const events_module_1 = require("../events/events.module");
+const plans_module_1 = require("../plans/plans.module");
 let BillingModule = class BillingModule {
 };
 exports.BillingModule = BillingModule;
 exports.BillingModule = BillingModule = __decorate([
     (0, common_1.Module)({
-        imports: [axios_1.HttpModule, users_module_1.UsersModule, events_module_1.EventsModule],
+        imports: [axios_1.HttpModule, users_module_1.UsersModule, events_module_1.EventsModule, plans_module_1.PlansModule],
         controllers: [billing_controller_1.BillingController],
         providers: [billing_service_1.BillingService],
     })

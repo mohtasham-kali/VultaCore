@@ -57,7 +57,7 @@ let UsersService = class UsersService {
                 username: `user_${userId.slice(0, 4)}`,
                 email: `${userId}@vultacore.app`,
                 password: 'demo_password_placeholder',
-                rank: planName
+                rank: planName,
             });
         }
         else {

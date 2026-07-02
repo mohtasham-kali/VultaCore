@@ -6,7 +6,10 @@ import "nprogress/nprogress.css";
 import { usePathname, useSearchParams } from "next/navigation";
 
 // Configure NProgress
+// TS note: typed via @types/nprogress (installed in dev deps).
+// If you still get build-time TS errors, add a local declaration in a typings.d.ts.
 NProgress.configure({ showSpinner: false, speed: 500, minimum: 0.3 });
+
 
 export function NavigationEvents() {
   const pathname = usePathname();

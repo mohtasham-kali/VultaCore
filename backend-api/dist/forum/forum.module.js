@@ -21,11 +21,7 @@ let ForumModule = class ForumModule {
 exports.ForumModule = ForumModule;
 exports.ForumModule = ForumModule = __decorate([
     (0, common_1.Module)({
-        imports: [
-            typeorm_1.TypeOrmModule.forFeature([post_entity_1.Post, comment_entity_1.Comment]),
-            users_module_1.UsersModule,
-            bots_module_1.BotsModule
-        ],
+        imports: [typeorm_1.TypeOrmModule.forFeature([post_entity_1.Post, comment_entity_1.Comment]), users_module_1.UsersModule, bots_module_1.BotsModule],
         providers: [forum_service_1.ForumService, forum_scheduler_1.ForumSchedulerService],
         controllers: [forum_controller_1.ForumController],
         exports: [forum_service_1.ForumService],

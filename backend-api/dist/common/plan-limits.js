@@ -33,7 +33,11 @@ exports.PLAN_LIMITS = {
     Premium: {
         tier: 'Premium',
         aiChatsPerDay: 'unlimited',
-        aiModels: ['claude-3-5-sonnet-20241022', 'llama-3.3-70b-versatile', 'gemini-1.5-pro'],
+        aiModels: [
+            'claude-3-5-sonnet-20241022',
+            'llama-3.3-70b-versatile',
+            'gemini-1.5-pro',
+        ],
         analyticsAccess: 'advanced',
         apiAccess: true,
         forumPriority: true,
@@ -46,7 +50,11 @@ exports.PLAN_LIMITS = {
     Enterprise: {
         tier: 'Enterprise',
         aiChatsPerDay: 'unlimited',
-        aiModels: ['claude-3-5-sonnet-20241022', 'llama-3.3-70b-versatile', 'gemini-1.5-pro'],
+        aiModels: [
+            'claude-3-5-sonnet-20241022',
+            'llama-3.3-70b-versatile',
+            'gemini-1.5-pro',
+        ],
         analyticsAccess: 'advanced',
         apiAccess: true,
         forumPriority: true,

@@ -31,8 +31,8 @@ export const PLAN_LIMITS: Record<string, PlanLimits> = {
     analyticsAccess: 'public',
     apiAccess: false,
     forumPriority: false,
-    securityHubScansPerDay: 10,      // raised from 2
-    botTypes: ['general', 'cyber'],  // cyber available but capped at maxBotsPerDay
+    securityHubScansPerDay: 10, // raised from 2
+    botTypes: ['general', 'cyber'], // cyber available but capped at maxBotsPerDay
     maxBotsPerDay: 10,
     supportLevel: 'standard',
     whiteLabel: false,
@@ -44,7 +44,7 @@ export const PLAN_LIMITS: Record<string, PlanLimits> = {
     analyticsAccess: 'personal',
     apiAccess: true,
     forumPriority: true,
-    securityHubScansPerDay: 20,      // moderate access
+    securityHubScansPerDay: 20, // moderate access
     botTypes: ['general', 'cyber'],
     maxBotsPerDay: 100,
     supportLevel: 'priority',
@@ -53,7 +53,11 @@ export const PLAN_LIMITS: Record<string, PlanLimits> = {
   Premium: {
     tier: 'Premium',
     aiChatsPerDay: 'unlimited',
-    aiModels: ['claude-3-5-sonnet-20241022', 'llama-3.3-70b-versatile', 'gemini-1.5-pro'],
+    aiModels: [
+      'claude-3-5-sonnet-20241022',
+      'llama-3.3-70b-versatile',
+      'gemini-1.5-pro',
+    ],
     analyticsAccess: 'advanced',
     apiAccess: true,
     forumPriority: true,
@@ -66,7 +70,11 @@ export const PLAN_LIMITS: Record<string, PlanLimits> = {
   Enterprise: {
     tier: 'Enterprise',
     aiChatsPerDay: 'unlimited',
-    aiModels: ['claude-3-5-sonnet-20241022', 'llama-3.3-70b-versatile', 'gemini-1.5-pro'],
+    aiModels: [
+      'claude-3-5-sonnet-20241022',
+      'llama-3.3-70b-versatile',
+      'gemini-1.5-pro',
+    ],
     analyticsAccess: 'advanced',
     apiAccess: true,
     forumPriority: true,
@@ -77,7 +85,6 @@ export const PLAN_LIMITS: Record<string, PlanLimits> = {
     whiteLabel: true,
   },
 };
-
 
 /**
  * Resolves user rank string (including legacy "Level X" format) to a plan tier.

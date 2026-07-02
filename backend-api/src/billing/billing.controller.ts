@@ -10,8 +10,10 @@ import {
 import { Request } from 'express';
 import { BillingService } from './billing.service';
 
+type RawBodyRequest = Request & { rawBody?: Buffer };
+
 interface CheckoutDto {
-  planName: string;
+  planId: string;
   userId: string;
   userEmail: string;
 }
@@ -25,18 +27,20 @@ export class BillingController {
   /**
    * Frontend calls this to get a Lemon Squeezy checkout URL.
    * POST /billing/checkout
-   * Body: { planName: "Standard" | "Premium", userId: "...", userEmail: "..." }
+   * Body: { planId: "...", userId: "...", userEmail: "..." }
    */
   @Post('checkout')
   async createCheckout(@Body() body: CheckoutDto) {
-    const { planName, userId, userEmail } = body;
-    if (!planName || !userId || !userEmail) {
-      throw new BadRequestException('planName, userId and userEmail are required.');
+    const { planId, userId, userEmail } = body;
+    if (!planId || !userId || !userEmail) {
+      throw new BadRequestException(
+        'planId, userId and userEmail are required.',
+      );
     }
 
     try {
       const url = await this.billingService.createCheckoutSession(
-        planName,
+        planId,
         userId,
         userEmail,
       );
@@ -55,13 +59,15 @@ export class BillingController {
    */
   @Post('webhook')
   async handleWebhook(
-    @Req() req: Request,
+    @Req() req: RawBodyRequest,
     @Headers('x-signature') signature: string,
   ) {
-    const rawBody: Buffer = (req as any).rawBody;
+    const rawBody = req.rawBody;
 
     if (!rawBody) {
-      throw new BadRequestException('No raw body found. Check middleware config.');
+      throw new BadRequestException(
+        'No raw body found. Check middleware config.',
+      );
     }
 
     try {

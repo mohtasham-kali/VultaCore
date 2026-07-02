@@ -33,7 +33,8 @@ let ForumService = class ForumService {
         return this.postRepository.save(post);
     }
     async findAllPosts(type) {
-        const query = this.postRepository.createQueryBuilder('post')
+        const query = this.postRepository
+            .createQueryBuilder('post')
             .leftJoinAndSelect('post.author', 'author')
             .loadRelationCountAndMap('post.commentsCount', 'post.comments');
         if (type) {

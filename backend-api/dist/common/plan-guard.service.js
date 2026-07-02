@@ -29,7 +29,12 @@ let PlanGuardService = class PlanGuardService {
         const plan = (0, plan_limits_1.resolvePlanTier)(rank);
         const limit = plan.aiChatsPerDay;
         if (limit === 'unlimited') {
-            return { allowed: true, remaining: 'unlimited', limit: 'unlimited', tier: rank };
+            return {
+                allowed: true,
+                remaining: 'unlimited',
+                limit: 'unlimited',
+                tier: rank,
+            };
         }
         const today = this.todayDate();
         const existing = this.aiUsage.get(userId);
@@ -61,7 +66,12 @@ let PlanGuardService = class PlanGuardService {
         const plan = (0, plan_limits_1.resolvePlanTier)(rank);
         const limit = plan.securityHubScansPerDay;
         if (limit === 'unlimited') {
-            return { allowed: true, remaining: 'unlimited', limit: 'unlimited', tier: rank };
+            return {
+                allowed: true,
+                remaining: 'unlimited',
+                limit: 'unlimited',
+                tier: rank,
+            };
         }
         const today = this.todayDate();
         const existing = this.securityHubUsage.get(userId);
@@ -95,7 +105,8 @@ let PlanGuardService = class PlanGuardService {
     async canAccessSecurityHub(userId) {
         const user = await this.usersService.findOne(userId);
         const plan = (0, plan_limits_1.resolvePlanTier)(user?.rank ?? 'Free');
-        return plan.securityHubScansPerDay === 'unlimited' || plan.securityHubScansPerDay > 0;
+        return (plan.securityHubScansPerDay === 'unlimited' ||
+            plan.securityHubScansPerDay > 0);
     }
     async getPlanInfo(userId) {
         const user = await this.usersService.findOne(userId);

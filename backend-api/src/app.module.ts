@@ -30,15 +30,15 @@ const staticModuleOptions = fs.existsSync(join(process.cwd(), 'out'))
       isGlobal: true,
     }),
     TypeOrmModule.forRoot({
-      type: (process.env.DATABASE_URL ? 'postgres' : 'sqlite') as any,
+      type: process.env.DATABASE_URL ? 'postgres' : 'sqlite',
       url: process.env.DATABASE_URL,
       database: process.env.DATABASE_URL ? undefined : 'saas.sqlite',
       autoLoadEntities: true,
       synchronize: true,
       ssl: process.env.DATABASE_URL
-        ? { rejectUnauthorized: false }
+        ? ({ rejectUnauthorized: false } as unknown as never)
         : false,
-    }),
+    } as unknown as any),
     UsersModule,
     PlansModule,
     LeadsModule,

@@ -51,42 +51,32 @@ const rxjs_1 = require("rxjs");
 const crypto = __importStar(require("crypto"));
 const users_service_1 = require("../users/users.service");
 const events_gateway_1 = require("../events/events.gateway");
-const PLAN_VARIANT_MAP = {
-    Standard: 'standard',
-    Premium: 'premium',
-};
+const plans_service_1 = require("../plans/plans.service");
 let BillingService = BillingService_1 = class BillingService {
     http;
     config;
     usersService;
     eventsGateway;
+    plansService;
     logger = new common_1.Logger(BillingService_1.name);
     lsApiKey;
     lsStoreId;
     lsWebhookSecret;
     appUrl;
-    variantToPlan = {};
-    constructor(http, config, usersService, eventsGateway) {
+    constructor(http, config, usersService, eventsGateway, plansService) {
         this.http = http;
         this.config = config;
         this.usersService = usersService;
         this.eventsGateway = eventsGateway;
+        this.plansService = plansService;
         this.lsApiKey = this.config.get('LS_API_KEY', '');
         this.lsStoreId = this.config.get('LS_STORE_ID', '');
         this.lsWebhookSecret = this.config.get('LS_WEBHOOK_SECRET', '');
         this.appUrl = this.config.get('APP_URL', 'http://localhost:3000');
-        const variantStandard = this.config.get('LS_VARIANT_STANDARD', '');
-        const variantPremium = this.config.get('LS_VARIANT_PREMIUM', '');
-        if (variantStandard)
-            this.variantToPlan[variantStandard] = 'Standard';
-        if (variantPremium)
-            this.variantToPlan[variantPremium] = 'Premium';
     }
-    async createCheckoutSession(planName, userId, userEmail) {
-        const variantId = this.config.get(`LS_VARIANT_${planName.toUpperCase()}`);
-        if (!variantId) {
-            throw new Error(`No Lemon Squeezy variant configured for plan "${planName}". Set LS_VARIANT_${planName.toUpperCase()} in .env`);
-        }
+    async createCheckoutSession(planId, userId, userEmail) {
+        const plan = await this.plansService.findOne(planId);
+        const variantId = plan.variantId;
         const payload = {
             data: {
                 type: 'checkouts',
@@ -94,7 +84,7 @@ let BillingService = BillingService_1 = class BillingService {
                     checkout_data: {
                         custom: {
                             user_id: userId,
-                            plan_name: planName,
+                            plan_name: plan.name,
                         },
                         email: userEmail,
                     },
@@ -108,7 +98,7 @@ let BillingService = BillingService_1 = class BillingService {
                         subscription_preview: true,
                     },
                     product_options: {
-                        enabled_variants: [parseInt(variantId)],
+                        enabled_variants: [parseInt(variantId, 10)],
                         redirect_url: `${this.appUrl}/subscription?upgraded=true`,
                         receipt_link_url: `${this.appUrl}/subscription`,
                         receipt_thank_you_note: 'Thank you for upgrading VultaCore!',
@@ -132,8 +122,9 @@ let BillingService = BillingService_1 = class BillingService {
                 Authorization: `Bearer ${this.lsApiKey}`,
             },
         }));
-        const checkoutUrl = response.data?.data?.attributes?.url;
-        if (!checkoutUrl) {
+        const typedResponse = response;
+        const checkoutUrl = typedResponse?.data?.data?.attributes?.url;
+        if (typeof checkoutUrl !== 'string' || !checkoutUrl) {
             throw new Error('Lemon Squeezy did not return a checkout URL.');
         }
         this.logger.log(`🛒 Checkout created for user ${userId} → ${checkoutUrl}`);
@@ -147,24 +138,33 @@ let BillingService = BillingService_1 = class BillingService {
             this.logger.warn('❌ Webhook signature mismatch — ignoring.');
             throw new Error('Invalid webhook signature');
         }
-        const event = JSON.parse(rawBody.toString());
+        const parsed = JSON.parse(rawBody.toString());
+        const event = parsed;
         const eventName = event?.meta?.event_name;
         const customData = event?.meta?.custom_data;
-        const variantId = String(event?.data?.attributes?.variant_id ?? '');
+        const variantIdRaw = event?.data?.attributes?.variant_id;
+        const variantId = variantIdRaw !== undefined && variantIdRaw !== null
+            ? String(variantIdRaw)
+            : '';
         this.logger.log(`📩 Lemon Squeezy webhook: ${eventName}`);
-        if (eventName === 'order_created' ||
-            eventName === 'subscription_payment_success' ||
-            eventName === 'subscription_created') {
-            const userId = customData?.user_id;
-            const planName = customData?.plan_name ?? this.variantToPlan[variantId] ?? 'Standard';
-            if (!userId) {
-                this.logger.warn('Webhook missing user_id in custom_data');
-                return;
-            }
-            await this.usersService.updatePlan(userId, planName);
-            this.logger.log(`✅ Plan updated: user=${userId} plan=${planName}`);
-            this.eventsGateway.emitSubscriptionUpdated(userId, planName);
+        if (eventName !== 'order_created' &&
+            eventName !== 'subscription_payment_success' &&
+            eventName !== 'subscription_created') {
+            return;
         }
+        const userId = customData?.user_id;
+        const planNameFromWebhook = customData?.plan_name;
+        if (!userId) {
+            this.logger.warn('Webhook missing user_id in custom_data');
+            return;
+        }
+        const planFromVariant = variantId
+            ? await this.plansService.findByVariantId(variantId)
+            : null;
+        const resolvedPlanName = planFromVariant?.name ?? planNameFromWebhook ?? 'Free';
+        await this.usersService.updatePlan(userId, resolvedPlanName);
+        this.logger.log(`✅ Plan updated: user=${userId} plan=${resolvedPlanName}`);
+        this.eventsGateway.emitSubscriptionUpdated(userId, resolvedPlanName);
     }
 };
 exports.BillingService = BillingService;
@@ -173,6 +173,7 @@ exports.BillingService = BillingService = BillingService_1 = __decorate([
     __metadata("design:paramtypes", [axios_1.HttpService,
         config_1.ConfigService,
         users_service_1.UsersService,
-        events_gateway_1.EventsGateway])
+        events_gateway_1.EventsGateway,
+        plans_service_1.PlansService])
 ], BillingService);
 //# sourceMappingURL=billing.service.js.map

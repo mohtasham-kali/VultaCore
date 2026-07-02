@@ -1,4 +1,12 @@
-import { Controller, Get, Post, Body, Param, Query, ForbiddenException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Query,
+  ForbiddenException,
+} from '@nestjs/common';
 import { BotsService } from './bots.service';
 import { PlanGuardService } from '../common/plan-guard.service';
 import { resolvePlanTier } from '../common/plan-limits';
@@ -33,7 +41,7 @@ export class BotsController {
     if (!limitCheck.allowed) {
       throw new ForbiddenException(
         `Daily AI chat limit reached (${limitCheck.limit} chats/day on ${limitCheck.tier} plan). ` +
-        `Upgrade your plan at /subscription to get more.`,
+          `Upgrade your plan at /subscription to get more.`,
       );
     }
 
@@ -45,10 +53,7 @@ export class BotsController {
   }
 
   @Get(':id/history')
-  getHistory(
-    @Param('id') id: string,
-    @Query('userId') userId: string,
-  ) {
+  getHistory(@Param('id') id: string, @Query('userId') userId: string) {
     if (!userId) {
       return [];
     }
