@@ -8,14 +8,14 @@ import os
 from dotenv import load_dotenv
 
 # SDKs
-import google.generativeai as genai
+from google import genai
 from groq import AsyncGroq
 from openai import AsyncOpenAI
 
 load_dotenv()
 
 # Configure Clients
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 groq_api_key = os.getenv("GROQ_API_KEY", "")
 groq_client = AsyncGroq(api_key=groq_api_key, timeout=15.0, max_retries=0) if groq_api_key else None
 openrouter_api_key = os.getenv("OPENROUTER_API_KEY", "")
@@ -42,10 +42,12 @@ class BotResponse(BaseModel):
     processing_time: float
     metadata: dict
 
-async def call_gemini(prompt: str, model_name: str = "gemini-flash-latest"):
+async def call_gemini(prompt: str, model_name: str = "gemini-2.0-flash"):
     try:
-        model = genai.GenerativeModel(model_name)
-        response = await model.generate_content_async(prompt)
+        response = await gemini_client.aio.models.generate_content(
+            model=model_name,
+            contents=prompt,
+        )
         return response.text
     except Exception as e:
         return f"Gemini Error: {str(e)}"
@@ -107,12 +109,12 @@ async def execute_bot(request: BotRequest):
             engine_meta = "Llama-3-8B (OpenRouter)"
         elif bot_name == "Error Explainer":
             # Use Gemini Flash for stability and quota
-            response_text = await call_gemini(f"Explain this error in detail: {full_prompt}", "gemini-flash-latest")
-            engine_meta = "Gemini-Flash-Latest"
+            response_text = await call_gemini(f"Explain this error in detail: {full_prompt}", "gemini-2.0-flash")
+            engine_meta = "Gemini-2.0-Flash"
         else:
             # Use Gemini Flash for general tasks
-            response_text = await call_gemini(f"Analyze/Process this task: {full_prompt}", "gemini-flash-latest")
-            engine_meta = "Gemini-Flash-Latest"
+            response_text = await call_gemini(f"Analyze/Process this task: {full_prompt}", "gemini-2.0-flash")
+            engine_meta = "Gemini-2.0-Flash"
             
     except Exception as e:
         error_msg = str(e).lower()
