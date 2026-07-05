@@ -9,6 +9,6 @@ redis
 psycopg2-binary
 meilisearch
 qdrant-client
-google-generativeai
+google-genai
 groq
 openai
