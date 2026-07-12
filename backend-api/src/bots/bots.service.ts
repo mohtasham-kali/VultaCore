@@ -61,8 +61,13 @@ export class BotsService {
     await this.botsRepository.save(bot);
 
     try {
-      const aiServiceUrl =
+      let aiServiceUrl =
         process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
+      
+      // Ensure the URL has the http/https protocol
+      if (!aiServiceUrl.startsWith('http://') && !aiServiceUrl.startsWith('https://')) {
+        aiServiceUrl = `http://${aiServiceUrl}`;
+      }
 
       console.log(`Executing bot ${bot.name} for user ${userId}...`);
       console.log(`Resolved AI_SERVICE_URL: ${aiServiceUrl}`);
