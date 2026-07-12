@@ -12,11 +12,7 @@ services:
       - key: PORT
         value: 3001
       - key: AI_SERVICE_URL
-        fromService:
-          name: vultacore-ai
-          type: web
-          property: hostport
-          envVarKey: AI_SERVICE_HOSTPORT
+        value: https://vultacore-ai.onrender.com
 
   - type: web
     name: vultacore-ai
