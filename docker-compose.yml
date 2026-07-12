@@ -13,7 +13,7 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL:-/data/saas.sqlite}
-      AI_SERVICE_URL: http://ai:8000
+      AI_SERVICE_URL: http://ai:29041
     volumes:
       - api-data:/data
     healthcheck:
@@ -30,11 +30,11 @@ services:
     container_name: vultacore-ai
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "29041:29041"
     environment:
       PYTHONUNBUFFERED: "1"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:29041/health"]
       interval: 30s
       timeout: 5s
       retries: 3
