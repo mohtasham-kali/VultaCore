@@ -413,65 +413,30 @@ function findSystemPython() {
 // Resolve python3 absolute path at boot time so we can log clearly if missing
 function resolvePython() {
     const aiDir = path.join(rootDir, 'ai-services');
-    const venvDir = path.join(aiDir, 'venv');
-    const venvLibDir = path.join(venvDir, 'lib');
+    const localPackagesDir = path.join(aiDir, '.python_packages');
 
     const sysPython = findSystemPython();
 
-    // 1. Check if a valid venv exists (by checking lib/ dir which pip always creates)
-    if (fs.existsSync(venvLibDir)) {
-        try {
-            // Find the python3.x subdirectory dynamically
-            const pyDirs = fs.readdirSync(venvLibDir).filter(d => d.startsWith('python'));
-            if (pyDirs.length > 0) {
-                const sitePackages = path.join(venvLibDir, pyDirs[0], 'site-packages');
-                if (fs.existsSync(sitePackages)) {
-                    
-                    // Verify critical packages are installed (like uvicorn)
-                    if (!fs.existsSync(path.join(sitePackages, 'uvicorn'))) {
-                        log(`AI Engine: uvicorn missing in venv site-packages. Skipping venv use.`);
-                    } else {
-                        // Find working python binary: prefer venv python, fall back to system
-                        const candidates = [
-                            path.join(venvDir, 'bin', 'python3'),
-                            path.join(venvDir, 'bin', 'python'),
-                        ];
-                        for (const bin of candidates) {
-                            try {
-                                const { execFileSync } = require('child_process');
-                                execFileSync(bin, ['--version'], { stdio: 'ignore' });
-                                log(`AI Engine: resolved → venv python (${path.basename(bin)}) with site-packages`);
-                                return {
-                                    bin,
-                                    args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
-                                    env: { PYTHONPATH: sitePackages }
-                                };
-                            } catch (_) {}
-                        }
-                        // venv binaries broken — fall back to system python with PYTHONPATH
-                        if (sysPython) {
-                            log(`AI Engine: venv binaries broken, using system python (${sysPython}) with PYTHONPATH=${sitePackages}`);
-                            return {
-                                bin: sysPython,
-                                args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
-                                env: { PYTHONPATH: sitePackages }
-                            };
-                        }
-                    }
-                }
-            }
-        } catch (e) {
-            log(`AI Engine: venv scan error: ${e.message}`);
-        }
-    }
-
-    // 2. No venv at all — try system python3 (no guarantee uvicorn is installed)
     if (sysPython) {
-        log(`AI Engine: resolved → ${sysPython} (system, no venv — uvicorn must be installed globally)`);
+        log(`AI Engine: resolved → ${sysPython}`);
+        
+        let pythonPath = '';
+        if (fs.existsSync(localPackagesDir)) {
+            pythonPath = localPackagesDir;
+            log(`AI Engine: using local dependencies at ${localPackagesDir}`);
+            
+            // Check if uvicorn is installed in the local packages
+            if (!fs.existsSync(path.join(localPackagesDir, 'uvicorn'))) {
+                log('⚠️ AI Engine: uvicorn not found in local packages, it might fail to start if not installed globally.');
+            }
+        } else {
+            log('⚠️ AI Engine: .python_packages not found. Relying on globally installed packages.');
+        }
+
         return {
             bin: sysPython,
             args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
-            env: {}
+            env: pythonPath ? { PYTHONPATH: pythonPath } : {}
         };
     }
 
