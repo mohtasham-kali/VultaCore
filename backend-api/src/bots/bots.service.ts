@@ -61,9 +61,29 @@ export class BotsService {
     await this.botsRepository.save(bot);
 
     try {
-      console.log(`Executing bot ${bot.name} for user ${userId}...`);
       const aiServiceUrl =
         process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
+
+      console.log(`Executing bot ${bot.name} for user ${userId}...`);
+      console.log(`Resolved AI_SERVICE_URL: ${aiServiceUrl}`);
+
+      // Connectivity check (gives immediate, actionable error)
+      // / is expected to return { status: "AI Service Online", ... }
+      try {
+        const healthRes = await firstValueFrom(
+          this.httpService.get(`${aiServiceUrl}/`),
+        );
+        console.log('AI service base health:', healthRes.data);
+      } catch (healthErr: any) {
+        const debugMsg =
+          healthErr?.response?.data?.detail ||
+          healthErr?.response?.data?.error ||
+          healthErr?.message ||
+          'Unknown AI service connectivity error';
+        throw new Error(
+          `AI service not reachable at ${aiServiceUrl}/: ${debugMsg}`,
+        );
+      }
       const response = await firstValueFrom(
         this.httpService.post(`${aiServiceUrl}/execute`, {
           prompt,
