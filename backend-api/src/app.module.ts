@@ -3,7 +3,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { join } from 'path';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ConfigModule } from '@nestjs/config';
-import { TypeOrmModule, TypeOrmModuleOptions } from '@nestjs/typeorm';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UsersModule } from './users/users.module';
@@ -30,37 +30,31 @@ const staticModuleOptions = fs.existsSync(join(process.cwd(), 'out'))
       isGlobal: true,
     }),
     TypeOrmModule.forRootAsync({
-      useFactory: (): TypeOrmModuleOptions => {
+      useFactory: () => {
         const dbUrl = process.env.DATABASE_URL;
         const isPostgres =
           dbUrl &&
-          (dbUrl.startsWith('postgres://') || dbUrl.startsWith('postgresql://'));
-
-        if (isPostgres) {
-          return {
-            type: 'postgres',
-            url: dbUrl,
-            ssl: { rejectUnauthorized: false },
-            autoLoadEntities: true,
-            synchronize: true,
-          };
-        }
-
-        // Resolve SQLite database file path
-        let database = 'saas.sqlite';
-        if (dbUrl && dbUrl.startsWith('sqlite:')) {
-          // Strip 'sqlite:///' or 'sqlite://' or 'sqlite:' prefix
-          database = dbUrl.replace(/^sqlite:\/\/\/?/, '');
-        } else if (dbUrl) {
-          database = dbUrl;
-        }
-
-        return {
-          type: 'sqlite',
-          database,
+          (dbUrl.startsWith('postgres://') ||
+            dbUrl.startsWith('postgresql://'));
+        const dbConfig: any = {
           autoLoadEntities: true,
           synchronize: true,
         };
+
+        if (isPostgres) {
+          dbConfig.type = 'postgres';
+          dbConfig.url = dbUrl;
+          dbConfig.ssl = { rejectUnauthorized: false };
+        } else {
+          dbConfig.type = 'sqlite';
+          if (dbUrl && dbUrl.startsWith('sqlite:')) {
+            // Remove 'sqlite:///' or 'sqlite://' or 'sqlite:'
+            dbConfig.database = dbUrl.replace(/^sqlite:\/\/\/?/, '');
+          } else {
+            dbConfig.database = dbUrl || 'saas.sqlite';
+          }
+        }
+        return dbConfig;
       },
     }),
     UsersModule,
