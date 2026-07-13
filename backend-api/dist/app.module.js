@@ -76,29 +76,27 @@ exports.AppModule = AppModule = __decorate([
                 useFactory: () => {
                     const dbUrl = process.env.DATABASE_URL;
                     const isPostgres = dbUrl &&
-                        (dbUrl.startsWith('postgres://') || dbUrl.startsWith('postgresql://'));
-                    if (isPostgres) {
-                        return {
-                            type: 'postgres',
-                            url: dbUrl,
-                            ssl: { rejectUnauthorized: false },
-                            autoLoadEntities: true,
-                            synchronize: true,
-                        };
-                    }
-                    let database = 'saas.sqlite';
-                    if (dbUrl && dbUrl.startsWith('sqlite:')) {
-                        database = dbUrl.replace(/^sqlite:\/\/\/?/, '');
-                    }
-                    else if (dbUrl) {
-                        database = dbUrl;
-                    }
-                    return {
-                        type: 'sqlite',
-                        database,
+                        (dbUrl.startsWith('postgres://') ||
+                            dbUrl.startsWith('postgresql://'));
+                    const dbConfig = {
                         autoLoadEntities: true,
                         synchronize: true,
                     };
+                    if (isPostgres) {
+                        dbConfig.type = 'postgres';
+                        dbConfig.url = dbUrl;
+                        dbConfig.ssl = { rejectUnauthorized: false };
+                    }
+                    else {
+                        dbConfig.type = 'sqlite';
+                        if (dbUrl && dbUrl.startsWith('sqlite:')) {
+                            dbConfig.database = dbUrl.replace(/^sqlite:\/\/\/?/, '');
+                        }
+                        else {
+                            dbConfig.database = dbUrl || 'saas.sqlite';
+                        }
+                    }
+                    return dbConfig;
                 },
             }),
             users_module_1.UsersModule,
