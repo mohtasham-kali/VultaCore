@@ -2,7 +2,7 @@ const fetch = require('node-fetch'); // Next.js polyfills this globally usually,
 
 async function go() {
   console.log('Fetching bots...');
-  const botsRes = await fetch('http://localhost:3001/api/bots');
+  const botsRes = await fetch('http://localhost:3000/api/bots');
   const bots = await botsRes.json();
   
   if (!Array.isArray(bots)) {
@@ -24,7 +24,7 @@ async function go() {
     console.log(`Sending Prompt: "${prompt}"`);
     
     try {
-      const res = await fetch(`http://localhost:3001/api/bots/${bot.id}/execute`, {
+      const res = await fetch(`http://localhost:3000/api/bots/${bot.id}/execute`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

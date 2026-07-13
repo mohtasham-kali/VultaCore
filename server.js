@@ -301,9 +301,11 @@ const server = http.createServer((req, res) => {
 
 server.listen(masterPort, () => {
     log(`✨ Master Proxy listening on port ${masterPort}`);
-    // Spawn engines AFTER we are already listening
-    bootEngines().catch(err => {
-        log(`❌ Extent failure in bootEngines: ${err.message}`);
+    // Spawn engines AFTER we are already listening, but ensure Ollama is installed first
+    ensureOllama().then(() => {
+        bootEngines().catch(err => {
+            log(`❌ Extent failure in bootEngines: ${err.message}`);
+        });
     });
 });
 
@@ -464,14 +466,42 @@ function resolvePython() {
     return null;
 }
 
+async function ensureOllama() {
+    try {
+        execSync('ollama --version', { stdio: 'ignore' });
+        log('✅ Ollama is installed. Ensuring local AI models (llama3) are available in background...');
+        spawn('ollama', ['pull', 'llama3'], { stdio: 'ignore', detached: true });
+        spawn('ollama', ['pull', 'codellama'], { stdio: 'ignore', detached: true });
+    } catch (e) {
+        log('⚠️ Ollama is NOT installed. Offline AI mode requires it.');
+        if (process.platform === 'linux' || process.platform === 'darwin') {
+            log('🚀 Automatically installing Ollama...');
+            try {
+                execSync('curl -fsSL https://ollama.com/install.sh | sh', { stdio: 'inherit' });
+                log('✅ Ollama installed successfully!');
+                log('📥 Pulling local models in background...');
+                spawn('ollama', ['pull', 'llama3'], { stdio: 'ignore', detached: true });
+                spawn('ollama', ['pull', 'codellama'], { stdio: 'ignore', detached: true });
+            } catch (installErr) {
+                log(`❌ Failed to install Ollama automatically. Please install manually from https://ollama.com`);
+            }
+        } else {
+            log('Please install Ollama manually from https://ollama.com to enable offline AI mode.');
+        }
+    }
+}
+
 async function bootEngines() {
     killZombieChildren();
 
     try {
         BACK_PORT = await findFreePort();
         DASH_PORT = await findFreePort();
-        AI_PORT   = await findFreePort();
-        log(`Dynamically allocated ports: Backend=${BACK_PORT}, Dashboard=${DASH_PORT}, AI=${AI_PORT}`);
+        // AI_PORT is fixed so the backend always connects to the same address,
+        // even after a crash/restart. Randomising it caused ECONNREFUSED when
+        // server.js restarted and the old AI_SERVICE_URL became stale.
+        AI_PORT   = parseInt(process.env.AI_PORT || '8001');
+        log(`Allocated ports: Backend=${BACK_PORT}, Dashboard=${DASH_PORT}, AI=${AI_PORT} (fixed)`);
     } catch (e) {
         log(`❌ Failed to allocate ports: ${e.message}`);
         return;
@@ -509,17 +539,26 @@ async function bootEngines() {
         dashEntry = standaloneA;
         dashCwd   = path.dirname(standaloneA);
         dashArgs  = [standaloneA];
+        startEngine('Dashboard', process.execPath, dashArgs, DASH_PORT, dashCwd, {}, 5000);
     } else if (fs.existsSync(standaloneB)) {
         dashEntry = standaloneB;
         dashCwd   = path.dirname(standaloneB);
         dashArgs  = [standaloneB];
+        startEngine('Dashboard', process.execPath, dashArgs, DASH_PORT, dashCwd, {}, 5000);
     } else {
-        dashEntry = fs.existsSync(nextBinLocal) ? nextBinLocal : nextBinRoot;
-        dashCwd   = path.join(rootDir, 'web-dashboard');
-        dashArgs  = [dashEntry, 'start'];
+        // No standalone build found — use `next dev` as fallback so we don't
+        // spin-crash every 5 s with "could not find a production build" which
+        // destabilises the whole server process.
+        const nextBin = fs.existsSync(nextBinLocal) ? nextBinLocal : nextBinRoot;
+        if (fs.existsSync(nextBin)) {
+            log('⚠️  No Next.js standalone build found — starting Dashboard in dev mode (run npm run build in web-dashboard for production).');
+            dashCwd  = path.join(rootDir, 'web-dashboard');
+            dashArgs = [nextBin, 'dev', '--port', String(DASH_PORT)];
+            startEngine('Dashboard', process.execPath, dashArgs, DASH_PORT, dashCwd, {}, 5000);
+        } else {
+            log('⚠️  Dashboard skipped — next binary not found. Run: cd web-dashboard && npm install && npm run build');
+        }
     }
-
-    startEngine('Dashboard', process.execPath, dashArgs, DASH_PORT, dashCwd, {}, 5000);
 }
 
 

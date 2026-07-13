@@ -6,13 +6,24 @@ const downloadOptions = [
   {
     platform: "Windows",
     version: "2.1.0",
-    format: ".exe",
+    format: "Setup .exe",
     icon: Monitor,
     color: "text-blue-400",
     bgColor: "bg-blue-500/10",
     borderColor: "border-blue-500/20",
     url: "https://github.com/mohtasham-kali/VultaCore/releases/latest",
-    description: "Installable executable for Windows 10/11 with full hardware acceleration."
+    description: "Interactive installer. Allows you to select a custom installation path."
+  },
+  {
+    platform: "macOS",
+    version: "2.1.0",
+    format: "Installer .pkg",
+    icon: Laptop,
+    color: "text-purple-400",
+    bgColor: "bg-purple-500/10",
+    borderColor: "border-purple-500/20",
+    url: "https://github.com/mohtasham-kali/VultaCore/releases/latest",
+    description: "Interactive installer. Allows you to select a custom disk and path."
   },
   {
     platform: "Linux",
@@ -28,13 +39,13 @@ const downloadOptions = [
   {
     platform: "macOS",
     version: "2.1.0",
-    format: ".dmg",
+    format: "Portable .dmg",
     icon: Laptop,
-    color: "text-purple-400",
-    bgColor: "bg-purple-500/10",
-    borderColor: "border-purple-500/20",
+    color: "text-slate-400",
+    bgColor: "bg-slate-500/10",
+    borderColor: "border-slate-500/20",
     url: "https://github.com/mohtasham-kali/VultaCore/releases/latest",
-    description: "Universal disk image for Apple Silicon (M1/M2/M3) and Intel Macs."
+    description: "Universal drag-and-drop disk image for Apple Silicon and Intel Macs."
   }
 ];
 
@@ -135,15 +146,19 @@ export default function DownloadPage() {
             <div className="space-y-4">
               {/* Linux Installation Steps */}
               <div className="space-y-1">
-                <p className="text-slate-500"># Via Curl (Universal)</p>
+                <p className="text-slate-500"># Via Curl (Universal Linux)</p>
                 <p className="text-blue-400">curl -fsSL https://vultacore.tech/install.sh | sh</p>
               </div>
               
               <div className="space-y-1 pt-2">
-                <p className="text-slate-500"># Via APT (Debian/Ubuntu)</p>
-                <p className="text-blue-400">sudo apt update && sudo apt install vultacore</p>
+                <p className="text-slate-500"># macOS (Homebrew)</p>
+                <p className="text-blue-400">brew install --cask vultacore</p>
               </div>
 
+              <div className="space-y-1 pt-2">
+                <p className="text-slate-500"># Windows (Winget)</p>
+                <p className="text-blue-400">winget install VultaCore</p>
+              </div>
             </div>
           </div>
         </div>

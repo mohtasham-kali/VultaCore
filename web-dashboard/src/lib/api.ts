@@ -34,13 +34,83 @@ export async function likeComment(commentId: string) {
   return res.json();
 }
 
+let webLlmEngine: any = null;
+
+export async function syncOfflineChats() {
+  if (typeof window === 'undefined') return;
+  const pending = JSON.parse(localStorage.getItem('pending_chats') || '[]');
+  if (pending.length === 0) return;
+
+  console.log(`Syncing ${pending.length} offline chats to server...`);
+  // Try to sync to backend
+  const remaining = [];
+  for (const chat of pending) {
+    try {
+      await fetch(`${API_BASE_URL}/bots/${chat.id}/execute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: chat.prompt, userId: chat.userId, context: chat.context }),
+      });
+    } catch (e) {
+      remaining.push(chat);
+    }
+  }
+  localStorage.setItem('pending_chats', JSON.stringify(remaining));
+}
+
+// Automatically try to sync when coming back online
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', syncOfflineChats);
+}
+
 export async function executeBot(id: string, prompt: string, userId: string, context?: string) {
-  const res = await fetch(`${API_BASE_URL}/bots/${id}/execute`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, userId, context }),
-  });
-  return res.json();
+  try {
+    // Try the network first
+    const res = await fetch(`${API_BASE_URL}/bots/${id}/execute`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, userId, context }),
+    });
+    
+    if (!res.ok) throw new Error("Backend failed or offline");
+    return res.json();
+  } catch (err) {
+    console.warn("Network offline. Switching to True Mobile Offline mode via WebLLM...");
+    
+    // Save to sync queue
+    if (typeof window !== 'undefined') {
+      const pending = JSON.parse(localStorage.getItem('pending_chats') || '[]');
+      pending.push({ id, prompt, userId, context, timestamp: Date.now() });
+      localStorage.setItem('pending_chats', JSON.stringify(pending));
+    }
+
+    // Dynamic import to avoid SSR crashes
+    const { CreateMLCEngine } = await import('@mlc-ai/web-llm');
+    
+    if (!webLlmEngine) {
+      console.log("Initializing Mobile WebLLM Engine (Llama 3.2 1B). First run will download to phone storage...");
+      webLlmEngine = await CreateMLCEngine(
+        "Llama-3.2-1B-Instruct-q4f16_1-MLC", 
+        { initProgressCallback: (progress) => console.log("WebLLM Loading:", progress.text) }
+      );
+    }
+    
+    const messages = [
+      { role: "system", content: "You are an AI assistant running entirely offline inside the user's device memory via WebGPU. " + (context || "") },
+      { role: "user", content: prompt }
+    ];
+    
+    // Generate locally on the phone's GPU
+    const reply = await webLlmEngine.chat.completions.create({ messages });
+    
+    return {
+      bot_name: "Mobile On-Device AI (Llama 3.2 1B)",
+      response: reply.choices[0].message.content,
+      confidence: 1.0,
+      processing_time: 0,
+      metadata: { source: "true-mobile-offline-webgpu" }
+    };
+  }
 }
 
 
