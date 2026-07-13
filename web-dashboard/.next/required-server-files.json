@@ -88,7 +88,7 @@
     "logging": {},
     "expireTime": 31536000,
     "staticPageGenerationTimeout": 60,
-    "output": "standalone",
+    "output": "export",
     "modularizeImports": {
       "@mui/icons-material": {
         "transform": "@mui/icons-material/{{member}}"
@@ -97,7 +97,7 @@
         "transform": "lodash/{{member}}"
       }
     },
-    "outputFileTracingRoot": "/home/hacker/Documents/SaaS 2.0/tri-stack",
+    "outputFileTracingRoot": "/home/hacker/Documents/Projects/SaaS 2.0/tri-stack",
     "experimental": {
       "nodeMiddleware": false,
       "cacheLife": {
@@ -280,10 +280,10 @@
     "bundlePagesRouterDependencies": false,
     "configFileName": "next.config.ts",
     "turbopack": {
-      "root": "/home/hacker/Documents/SaaS 2.0/tri-stack"
+      "root": "/home/hacker/Documents/Projects/SaaS 2.0/tri-stack"
     }
   },
-  "appDir": "/home/hacker/Documents/SaaS 2.0/tri-stack/web-dashboard",
+  "appDir": "/home/hacker/Documents/Projects/SaaS 2.0/tri-stack/web-dashboard",
   "relativeAppDir": "web-dashboard",
   "files": [
     ".next/routes-manifest.json",

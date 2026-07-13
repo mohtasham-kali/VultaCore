@@ -11,7 +11,7 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: sqlite:///data/saas.sqlite  # Ensure correct SQLite URL format
-      AI_SERVICE_URL: http://ai:29041
+      AI_SERVICE_URL: http://ai:8000
     volumes:
       - api-data:/data
     healthcheck:

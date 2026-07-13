@@ -413,8 +413,28 @@ function findSystemPython() {
 // Resolve python3 absolute path at boot time so we can log clearly if missing
 function resolvePython() {
     const aiDir = path.join(rootDir, 'ai-services');
-    const localPackagesDir = path.join(aiDir, '.python_packages');
+    
+    // Check for local virtual environment first
+    const venvPython3 = path.join(aiDir, 'venv', 'bin', 'python3');
+    const venvPython = path.join(aiDir, 'venv', 'bin', 'python');
+    let pythonBin = null;
 
+    if (fs.existsSync(venvPython3)) {
+        pythonBin = venvPython3;
+    } else if (fs.existsSync(venvPython)) {
+        pythonBin = venvPython;
+    }
+
+    if (pythonBin) {
+        log(`AI Engine: using virtualenv python → ${pythonBin}`);
+        return {
+            bin: pythonBin,
+            args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
+            env: {}
+        };
+    }
+
+    const localPackagesDir = path.join(aiDir, '.python_packages');
     const sysPython = findSystemPython();
 
     if (sysPython) {
@@ -430,7 +450,7 @@ function resolvePython() {
                 log('⚠️ AI Engine: uvicorn not found in local packages, it might fail to start if not installed globally.');
             }
         } else {
-            log('⚠️ AI Engine: .python_packages not found. Relying on globally installed packages.');
+            log('⚠️ AI Engine: .python_packages or virtual environment not found. Relying on globally installed packages.');
         }
 
         return {

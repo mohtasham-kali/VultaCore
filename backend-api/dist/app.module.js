@@ -72,15 +72,34 @@ exports.AppModule = AppModule = __decorate([
             config_1.ConfigModule.forRoot({
                 isGlobal: true,
             }),
-            typeorm_1.TypeOrmModule.forRoot({
-                type: process.env.DATABASE_URL ? 'postgres' : 'sqlite',
-                url: process.env.DATABASE_URL,
-                database: process.env.DATABASE_URL ? undefined : 'saas.sqlite',
-                autoLoadEntities: true,
-                synchronize: true,
-                ssl: process.env.DATABASE_URL
-                    ? { rejectUnauthorized: false }
-                    : false,
+            typeorm_1.TypeOrmModule.forRootAsync({
+                useFactory: () => {
+                    const dbUrl = process.env.DATABASE_URL;
+                    const isPostgres = dbUrl &&
+                        (dbUrl.startsWith('postgres://') || dbUrl.startsWith('postgresql://'));
+                    if (isPostgres) {
+                        return {
+                            type: 'postgres',
+                            url: dbUrl,
+                            ssl: { rejectUnauthorized: false },
+                            autoLoadEntities: true,
+                            synchronize: true,
+                        };
+                    }
+                    let database = 'saas.sqlite';
+                    if (dbUrl && dbUrl.startsWith('sqlite:')) {
+                        database = dbUrl.replace(/^sqlite:\/\/\/?/, '');
+                    }
+                    else if (dbUrl) {
+                        database = dbUrl;
+                    }
+                    return {
+                        type: 'sqlite',
+                        database,
+                        autoLoadEntities: true,
+                        synchronize: true,
+                    };
+                },
             }),
             users_module_1.UsersModule,
             plans_module_1.PlansModule,
