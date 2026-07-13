@@ -418,14 +418,11 @@ function resolvePython() {
     
     // Check for local virtual environment first
     const venvPython3 = path.join(aiDir, 'venv', 'bin', 'python3');
-    const venvPython = path.join(aiDir, 'venv', 'bin', 'python');
+    const venvPython  = path.join(aiDir, 'venv', 'bin', 'python');
     let pythonBin = null;
 
-    if (fs.existsSync(venvPython3)) {
-        pythonBin = venvPython3;
-    } else if (fs.existsSync(venvPython)) {
-        pythonBin = venvPython;
-    }
+    if (fs.existsSync(venvPython3)) pythonBin = venvPython3;
+    else if (fs.existsSync(venvPython)) pythonBin = venvPython;
 
     if (pythonBin) {
         log(`AI Engine: using virtualenv python → ${pythonBin}`);
@@ -436,57 +433,86 @@ function resolvePython() {
         };
     }
 
-    const localPackagesDir = path.join(aiDir, '.python_packages');
+    // No venv — fall back to system python and auto-install packages into a local dir
     const sysPython = findSystemPython();
-
-    if (sysPython) {
-        log(`AI Engine: resolved → ${sysPython}`);
-        
-        let pythonPath = '';
-        if (fs.existsSync(localPackagesDir)) {
-            pythonPath = localPackagesDir;
-            log(`AI Engine: using local dependencies at ${localPackagesDir}`);
-            
-            // Check if uvicorn is installed in the local packages
-            if (!fs.existsSync(path.join(localPackagesDir, 'uvicorn'))) {
-                log('⚠️ AI Engine: uvicorn not found in local packages, it might fail to start if not installed globally.');
-            }
-        } else {
-            log('⚠️ AI Engine: .python_packages or virtual environment not found. Relying on globally installed packages.');
-        }
-
-        return {
-            bin: sysPython,
-            args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
-            env: pythonPath ? { PYTHONPATH: pythonPath } : {}
-        };
+    if (!sysPython) {
+        log('❌ AI Engine: no python3/python found anywhere — AI bots will be unavailable');
+        return null;
     }
 
-    log('❌ AI Engine: no python3/python found anywhere — AI bots will be unavailable');
-    return null;
+    log(`AI Engine: resolved system python → ${sysPython}`);
+
+    const localPackagesDir = path.join(aiDir, '.python_packages');
+    const requiredPackages = ['uvicorn', 'fastapi', 'httpx', 'google-generativeai', 'groq', 'openai', 'anthropic'];
+
+    // Install missing packages into local .python_packages dir (safe, no sudo needed)
+    const missingPkg = requiredPackages.filter(pkg => {
+        try {
+            execSync(`${sysPython} -c "import ${pkg.replace(/-/g, '_').split('[')[0]}"`, { stdio: 'ignore' });
+            return false;
+        } catch (_) { return true; }
+    });
+
+    if (missingPkg.length > 0) {
+        log(`AI Engine: installing missing packages into .python_packages: ${missingPkg.join(', ')}`);
+        try {
+            fs.mkdirSync(localPackagesDir, { recursive: true });
+            execSync(
+                `${sysPython} -m pip install --quiet --target=${localPackagesDir} ${missingPkg.join(' ')}`,
+                { stdio: 'inherit', timeout: 120000 }
+            );
+            log('✅ AI Engine: packages installed successfully into .python_packages');
+        } catch (pipErr) {
+            log(`⚠️ AI Engine: pip install failed — ${pipErr.message}. Bots may not respond.`);
+        }
+    } else {
+        log('AI Engine: all required packages already available globally.');
+    }
+
+    const pythonPath = fs.existsSync(localPackagesDir) ? localPackagesDir : '';
+    return {
+        bin: sysPython,
+        args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
+        env: pythonPath ? { PYTHONPATH: pythonPath } : {}
+    };
 }
 
 async function ensureOllama() {
+    // Ollama is a Desktop-only feature — it requires GPU access and sudo to install.
+    // On cloud/VPS hosts (like Hostinger), skip this entirely to avoid boot delay.
+    // Set ENABLE_OLLAMA=true in env to force-enable on a capable Linux machine.
+    const isCloudEnv = !process.env.ENABLE_OLLAMA && (
+        // Hostinger and shared hosts restrict package installs
+        process.env.PASSENGER_APP_ENV ||
+        process.env.HOSTINGER ||
+        process.env.RENDER ||
+        process.env.RAILWAY_ENVIRONMENT ||
+        process.env.VERCEL ||
+        process.env.CLOUD_ENV
+    );
+
+    if (isCloudEnv) {
+        log('☁️  Cloud environment detected — skipping Ollama (Desktop-only feature). Bots will use cloud AI providers.');
+        return;
+    }
+
     try {
         execSync('ollama --version', { stdio: 'ignore' });
-        log('✅ Ollama is installed. Ensuring local AI models (llama3) are available in background...');
-        spawn('ollama', ['pull', 'llama3'], { stdio: 'ignore', detached: true });
-        spawn('ollama', ['pull', 'codellama'], { stdio: 'ignore', detached: true });
+        log('✅ Ollama is installed. Pulling local AI models in background...');
+        spawn('ollama', ['pull', 'llama3'], { stdio: 'ignore', detached: true }).unref();
+        spawn('ollama', ['pull', 'codellama'], { stdio: 'ignore', detached: true }).unref();
     } catch (e) {
-        log('⚠️ Ollama is NOT installed. Offline AI mode requires it.');
+        log('ℹ️  Ollama not installed. Offline GPU inference will be unavailable.');
         if (process.platform === 'linux' || process.platform === 'darwin') {
-            log('🚀 Automatically installing Ollama...');
+            log('🚀 Attempting Ollama auto-install (Desktop mode)...');
             try {
-                execSync('curl -fsSL https://ollama.com/install.sh | sh', { stdio: 'inherit' });
-                log('✅ Ollama installed successfully!');
-                log('📥 Pulling local models in background...');
-                spawn('ollama', ['pull', 'llama3'], { stdio: 'ignore', detached: true });
-                spawn('ollama', ['pull', 'codellama'], { stdio: 'ignore', detached: true });
+                execSync('curl -fsSL https://ollama.com/install.sh | sh', { stdio: 'inherit', timeout: 60000 });
+                log('✅ Ollama installed! Pulling models in background...');
+                spawn('ollama', ['pull', 'llama3'], { stdio: 'ignore', detached: true }).unref();
+                spawn('ollama', ['pull', 'codellama'], { stdio: 'ignore', detached: true }).unref();
             } catch (installErr) {
-                log(`❌ Failed to install Ollama automatically. Please install manually from https://ollama.com`);
+                log('⚠️  Ollama auto-install failed. Install manually from https://ollama.com if you need offline AI.');
             }
-        } else {
-            log('Please install Ollama manually from https://ollama.com to enable offline AI mode.');
         }
     }
 }
