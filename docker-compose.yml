@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   # ── Backend API (NestJS) ──────────────────────────────
   api:
@@ -12,7 +10,7 @@ services:
       - "3001:3001"
     environment:
       NODE_ENV: production
-      DATABASE_URL: ${DATABASE_URL:-/data/saas.sqlite}
+      DATABASE_URL: sqlite:///data/saas.sqlite  # Ensure correct SQLite URL format
       AI_SERVICE_URL: http://ai:29041
     volumes:
       - api-data:/data
@@ -30,28 +28,14 @@ services:
     container_name: vultacore-ai
     restart: unless-stopped
     ports:
-      - "29041:29041"
+      - "29041:8000"  # Map host port 29041 to container port 8000
     environment:
       PYTHONUNBUFFERED: "1"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:29041/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]  # Check health on internal port
       interval: 30s
       timeout: 5s
       retries: 3
-
-  # ── Web Dashboard (Next.js) ─── uncomment for full stack ──
-  # web:
-  #   build:
-  #     context: ./web-dashboard
-  #     dockerfile: Dockerfile
-  #   container_name: vultacore-web
-  #   restart: unless-stopped
-  #   ports:
-  #     - "3000:3000"
-  #   env_file:
-  #     - ./web-dashboard/.env.local
-  #   depends_on:
-  #     - api
 
 volumes:
   api-data:
