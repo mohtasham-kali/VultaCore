@@ -9,11 +9,9 @@ from dotenv import load_dotenv
 
 # SDKs
 from google import genai
-# try optional import of groq to avoid hard failure when package missing
-try:
-    from groq import AsyncGroq
-except Exception:
-    AsyncGroq = None
+# pyrefly: ignore [missing-import]
+from groq import AsyncGroq
+# pyrefly: ignore [missing-import]
 from openai import AsyncOpenAI
 
 load_dotenv()
@@ -21,13 +19,7 @@ load_dotenv()
 # Configure Clients
 gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 groq_api_key = os.getenv("GROQ_API_KEY", "")
-# initialize groq_client only if import succeeded and key present
-groq_client = None
-if AsyncGroq and groq_api_key:
-    try:
-        groq_client = AsyncGroq(api_key=groq_api_key, timeout=15.0, max_retries=0)
-    except Exception:
-        groq_client = None
+groq_client = AsyncGroq(api_key=groq_api_key, timeout=15.0, max_retries=0) if groq_api_key else None
 openrouter_api_key = os.getenv("OPENROUTER_API_KEY", "")
 openrouter_client = AsyncOpenAI(
     base_url="https://openrouter.ai/api/v1",
@@ -63,8 +55,6 @@ async def call_gemini(prompt: str, model_name: str = "gemini-2.0-flash"):
         return f"Gemini Error: {str(e)}"
 
 async def call_groq(prompt: str, model_name: str = "llama-3.3-70b-versatile"):
-    if groq_client is None:
-        return "Groq Error: groq client not configured or unavailable (install 'groq' package and set GROQ_API_KEY)."
     try:
         chat_completion = await groq_client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
@@ -91,10 +81,6 @@ async def call_openrouter(prompt: str, model: str = "anthropic/claude-3-haiku"):
 @app.get("/")
 def read_root():
     return {"status": "AI Service Online", "engine": "Multi-Provider (Gemini/Groq/Claude/Mistral)"}
-
-@app.get("/health")
-def health_check():
-    return {"status": "healthy", "service": "AI Service"}
 
 @app.post("/execute", response_model=BotResponse)
 async def execute_bot(request: BotRequest):
