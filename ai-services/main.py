@@ -13,6 +13,7 @@ from google import genai
 from groq import AsyncGroq
 # pyrefly: ignore [missing-import]
 from openai import AsyncOpenAI
+import httpx
 
 load_dotenv()
 
@@ -78,9 +79,23 @@ async def call_openrouter(prompt: str, model: str = "anthropic/claude-3-haiku"):
     except Exception as e:
         return f"OpenRouter Error ({model}): {str(e)}"
 
+async def call_ollama(prompt: str, model: str = "llama3"):
+    """Local offline inference on Desktop GPU/Memory via Ollama."""
+    url = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434")
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                f"{url}/api/generate",
+                json={"model": model, "prompt": prompt, "stream": False}
+            )
+            response.raise_for_status()
+            return response.json().get("response", "")
+    except Exception as e:
+        return f"Ollama Local Error: {str(e)}"
+
 @app.get("/")
 def read_root():
-    return {"status": "AI Service Online", "engine": "Multi-Provider (Gemini/Groq/Claude/Mistral)"}
+    return {"status": "AI Service Online", "engine": "Multi-Provider (Gemini/Groq/Claude/Ollama)"}
 
 @app.post("/execute", response_model=BotResponse)
 async def execute_bot(request: BotRequest):
@@ -92,36 +107,107 @@ async def execute_bot(request: BotRequest):
     if request.context:
         full_prompt = f"ADDITIONAL CONTEXT (FILES/LOGS):\n---BEGIN CONTEXT---\n{request.context}\n---END CONTEXT---\n\nUSER PROMPT: {request.prompt}"
     
-    # Provider Routing Logic
-    response_text = ""
-    engine_meta = ""
-    
+    # ── Provider Routing & Automatic Fallback ────────────────────────────────
+    # Each entry is a (callable, label) pair. On quota / rate-limit / auth
+    # errors the engine transparently moves to the next provider in the chain.
+
+    QUOTA_SIGNALS = (
+        "429", "resource_exhausted", "rate_limit", "rate limit",
+        "quota", "too many requests", "exceeded", "insufficient_quota",
+        "402", "401", "invalid_api_key", "unauthorized",
+    )
+    NETWORK_SIGNALS = (
+        "connection error", "name or service not known", "network is unreachable",
+        "timeout", "socket", "connect", "dns", "failed to establish a new connection",
+    )
+
+    def is_quota_or_network_error(text: str) -> bool:
+        t = text.lower()
+        return any(sig in t for sig in QUOTA_SIGNALS + NETWORK_SIGNALS)
+
+    async def try_providers(chain: list) -> tuple[str, str]:
+        """Try each (coroutine_factory, label) in order; skip on quota/network errors."""
+        last_err = "No providers available"
+        for factory, label in chain:
+            try:
+                result = await factory()
+                if is_quota_or_network_error(result):
+                    last_err = result
+                    continue          # try next provider
+                return result, label
+            except Exception as exc:
+                last_err = str(exc)
+                if is_quota_or_network_error(last_err):
+                    continue          # try next provider
+                raise                 # real error — bubble up
+        return last_err, "All-Providers-Exhausted"
+
+    # ── Per-bot provider chains (primary first, fallbacks after) ─────────────
+    cyber_prompt   = f"You are a Cyber Security Expert. Analyze this: {full_prompt}"
+    general_prompt = f"Analyze/Process this task: {full_prompt}"
+    code_prompt    = f"You are an expert coder. Write code for: {full_prompt}"
+    bug_prompt     = f"You are a debugging expert. Fix the bugs in this: {full_prompt}"
+    error_prompt   = f"Explain this error in detail: {full_prompt}"
+
+    # Shared fallback tail available to all chains
+    def groq_factory(p): return lambda: call_groq(p)
+    def gemini_factory(p, m="gemini-2.0-flash"): return lambda: call_gemini(p, m)
+    def openrouter_factory(p, m): return lambda: call_openrouter(p, m)
+    def ollama_factory(p, m="llama3"): return lambda: call_ollama(p, m)
+
+    GROQ_FALLBACK   = [(groq_factory(general_prompt),   "Groq/Llama-3.3-70B")]
+    GEMINI_FALLBACK = [(gemini_factory(general_prompt),  "Gemini-2.0-Flash")]
+
+    if request.bot_type == "cyber":
+        chain = [
+            (groq_factory(cyber_prompt),                               "Groq/Llama-3.3-70B"),
+            (openrouter_factory(cyber_prompt, "anthropic/claude-3-haiku"), "Claude-3-Haiku"),
+            (gemini_factory(cyber_prompt),                             "Gemini-2.0-Flash"),
+            (ollama_factory(cyber_prompt, "llama3"),                   "Ollama-Local-Llama3"),
+        ]
+    elif bot_name == "Text to Code":
+        chain = [
+            (openrouter_factory(code_prompt, "anthropic/claude-3-haiku"),          "Claude-3-Haiku"),
+            (openrouter_factory(code_prompt, "meta-llama/llama-3-8b-instruct"),    "Llama-3-8B"),
+            (groq_factory(code_prompt),                                            "Groq/Llama-3.3-70B"),
+            (gemini_factory(code_prompt),                                          "Gemini-2.0-Flash"),
+            (ollama_factory(code_prompt, "codellama"),                             "Ollama-Local-CodeLlama"),
+        ]
+    elif bot_name == "Bug Fixer":
+        chain = [
+            (openrouter_factory(bug_prompt, "meta-llama/llama-3-8b-instruct"), "Llama-3-8B"),
+            (groq_factory(bug_prompt),                                          "Groq/Llama-3.3-70B"),
+            (openrouter_factory(bug_prompt, "anthropic/claude-3-haiku"),       "Claude-3-Haiku"),
+            (gemini_factory(bug_prompt),                                        "Gemini-2.0-Flash"),
+            (ollama_factory(bug_prompt, "llama3"),                              "Ollama-Local-Llama3"),
+        ]
+    elif bot_name == "Error Explainer":
+        chain = [
+            (gemini_factory(error_prompt),                                      "Gemini-2.0-Flash"),
+            (groq_factory(error_prompt),                                        "Groq/Llama-3.3-70B"),
+            (openrouter_factory(error_prompt, "anthropic/claude-3-haiku"),     "Claude-3-Haiku"),
+            (ollama_factory(error_prompt, "llama3"),                            "Ollama-Local-Llama3"),
+        ]
+    else:
+        # General fallback chain
+        chain = [
+            (gemini_factory(general_prompt),                                    "Gemini-2.0-Flash"),
+            (groq_factory(general_prompt),                                      "Groq/Llama-3.3-70B"),
+            (openrouter_factory(general_prompt, "anthropic/claude-3-haiku"),   "Claude-3-Haiku"),
+            (openrouter_factory(general_prompt, "meta-llama/llama-3-8b-instruct"), "Llama-3-8B"),
+            (ollama_factory(general_prompt, "llama3"),                          "Ollama-Local-Llama3"),
+        ]
+
     try:
-        if request.bot_type == "cyber":
-            # Use Groq (Llama 3) for cyber security bots (extremely fast)
-            response_text = await call_groq(f"You are a Cyber Security Expert. Analyze this: {full_prompt}")
-            engine_meta = "Groq/Llama-3.3-70B"
-        elif bot_name == "Text to Code":
-            # Use Claude for high-end coding
-            response_text = await call_openrouter(f"You are an expert coder. Write code for: {full_prompt}", "anthropic/claude-3-haiku")
-            engine_meta = "Claude-3-Haiku (OpenRouter)"
-        elif bot_name == "Bug Fixer":
-            # Use Llama 3 on OpenRouter for bug fixing
-            response_text = await call_openrouter(f"You are a debugging expert. Fix the bugs in this: {full_prompt}", "meta-llama/llama-3-8b-instruct")
-            engine_meta = "Llama-3-8B (OpenRouter)"
-        elif bot_name == "Error Explainer":
-            # Use Gemini Flash for stability and quota
-            response_text = await call_gemini(f"Explain this error in detail: {full_prompt}", "gemini-2.0-flash")
-            engine_meta = "Gemini-2.0-Flash"
-        else:
-            # Use Gemini Flash for general tasks
-            response_text = await call_gemini(f"Analyze/Process this task: {full_prompt}", "gemini-2.0-flash")
-            engine_meta = "Gemini-2.0-Flash"
-            
+        response_text, engine_meta = await try_providers(chain)
     except Exception as e:
         error_msg = str(e).lower()
-        if "connection error" in error_msg or "name or service not known" in error_msg or "network is unreachable" in error_msg:
-            response_text = f"Network Connection Error: The Python microservice cannot reach the cloud API ({bot_name}). Please ensure your computer is connected to the internet, or enable Offline Mode (Local GPU) in the app if you wish to run locally."
+        if any(k in error_msg for k in NETWORK_SIGNALS):
+            response_text = (
+                f"Offline Mode Critical Error: The AI microservice cannot reach the cloud API "
+                f"({bot_name}) AND the local Ollama instance is not running. "
+                f"To run completely offline, please install and run Ollama with the 'llama3' model locally."
+            )
         else:
             response_text = f"Processing Error: {str(e)}"
         engine_meta = "Error Fallback"
