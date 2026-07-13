@@ -58,7 +58,7 @@ let BotsService = class BotsService {
         bot.status = 'working';
         await this.botsRepository.save(bot);
         try {
-            let aiServiceUrl = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
+            let aiServiceUrl = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8001';
             if (!aiServiceUrl.startsWith('http://') &&
                 !aiServiceUrl.startsWith('https://')) {
                 aiServiceUrl = `http://${aiServiceUrl}`;
