@@ -58,8 +58,36 @@ let BotsService = class BotsService {
         bot.status = 'working';
         await this.botsRepository.save(bot);
         try {
+            let aiServiceUrl = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
+            if (!aiServiceUrl.startsWith('http://') &&
+                !aiServiceUrl.startsWith('https://')) {
+                aiServiceUrl = `http://${aiServiceUrl}`;
+            }
             console.log(`Executing bot ${bot.name} for user ${userId}...`);
-            const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
+            console.log(`Resolved AI_SERVICE_URL: ${aiServiceUrl}`);
+            try {
+                const healthRes = await (0, rxjs_1.firstValueFrom)(this.httpService.get(`${aiServiceUrl}/`));
+                console.log('AI service base health:', healthRes.data);
+            }
+            catch (healthErr) {
+                let debugMsg;
+                if (healthErr instanceof Error) {
+                    debugMsg = healthErr.message;
+                }
+                else if (typeof healthErr === 'object' &&
+                    healthErr !== null &&
+                    'response' in healthErr) {
+                    const err = healthErr;
+                    debugMsg =
+                        err.response?.data?.detail ||
+                            err.response?.data?.error ||
+                            'Unknown AI service connectivity error';
+                }
+                else {
+                    debugMsg = 'Unknown AI service connectivity error';
+                }
+                throw new Error(`AI service not reachable at ${aiServiceUrl}/: ${debugMsg}`);
+            }
             const response = await (0, rxjs_1.firstValueFrom)(this.httpService.post(`${aiServiceUrl}/execute`, {
                 prompt,
                 user_id: userId,
@@ -86,15 +114,36 @@ let BotsService = class BotsService {
         catch (error) {
             bot.status = 'idle';
             await this.botsRepository.save(bot);
-            const debugMsg = error?.response?.data?.detail ||
-                error?.response?.data?.error ||
-                error?.message ||
-                error?.code ||
-                JSON.stringify(error) ||
-                'Unknown connection or parsing fallback error';
+            let debugMsg;
+            if (error instanceof Error) {
+                debugMsg = error.message;
+            }
+            else if (typeof error === 'object' &&
+                error !== null &&
+                'response' in error) {
+                const err = error;
+                debugMsg =
+                    (typeof err.response?.data?.detail === 'string'
+                        ? err.response.data.detail
+                        : null) ||
+                        (typeof err.response?.data?.error === 'string'
+                            ? err.response.data.error
+                            : null) ||
+                        (typeof err.message === 'string' ? err.message : null) ||
+                        (typeof err.code === 'string' ? err.code : null) ||
+                        JSON.stringify(error);
+            }
+            else {
+                debugMsg = JSON.stringify(error);
+            }
             console.error(`AI Service Error (${bot.name}):`, debugMsg);
-            if (error.response) {
-                console.error('Response data:', error.response.data);
+            if (typeof error === 'object' && error !== null && 'response' in error) {
+                const errorResponse = error.response;
+                if (typeof errorResponse === 'object' &&
+                    errorResponse !== null &&
+                    'data' in errorResponse) {
+                    console.error('Response data:', errorResponse.data);
+                }
             }
             return { error: `AI Service communication failed: ${debugMsg}` };
         }

@@ -3,7 +3,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { join } from 'path';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ConfigModule } from '@nestjs/config';
-import { TypeOrmModule } from '@nestjs/typeorm';
+import { TypeOrmModule, TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UsersModule } from './users/users.module';
@@ -29,16 +29,40 @@ const staticModuleOptions = fs.existsSync(join(process.cwd(), 'out'))
     ConfigModule.forRoot({
       isGlobal: true,
     }),
-    TypeOrmModule.forRoot({
-      type: process.env.DATABASE_URL ? 'postgres' : 'sqlite',
-      url: process.env.DATABASE_URL,
-      database: process.env.DATABASE_URL ? undefined : 'saas.sqlite',
-      autoLoadEntities: true,
-      synchronize: true,
-      ssl: process.env.DATABASE_URL
-        ? ({ rejectUnauthorized: false } as unknown as never)
-        : false,
-    } as unknown as any),
+    TypeOrmModule.forRootAsync({
+      useFactory: (): TypeOrmModuleOptions => {
+        const dbUrl = process.env.DATABASE_URL;
+        const isPostgres =
+          dbUrl &&
+          (dbUrl.startsWith('postgres://') || dbUrl.startsWith('postgresql://'));
+
+        if (isPostgres) {
+          return {
+            type: 'postgres',
+            url: dbUrl,
+            ssl: { rejectUnauthorized: false },
+            autoLoadEntities: true,
+            synchronize: true,
+          };
+        }
+
+        // Resolve SQLite database file path
+        let database = 'saas.sqlite';
+        if (dbUrl && dbUrl.startsWith('sqlite:')) {
+          // Strip 'sqlite:///' or 'sqlite://' or 'sqlite:' prefix
+          database = dbUrl.replace(/^sqlite:\/\/\/?/, '');
+        } else if (dbUrl) {
+          database = dbUrl;
+        }
+
+        return {
+          type: 'sqlite',
+          database,
+          autoLoadEntities: true,
+          synchronize: true,
+        };
+      },
+    }),
     UsersModule,
     PlansModule,
     LeadsModule,
