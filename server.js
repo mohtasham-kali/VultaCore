@@ -443,12 +443,19 @@ function resolvePython() {
     log(`AI Engine: resolved system python → ${sysPython}`);
 
     const localPackagesDir = path.join(aiDir, '.python_packages');
-    const requiredPackages = ['uvicorn', 'fastapi', 'httpx', 'google-generativeai', 'groq', 'openai', 'anthropic'];
+    const requiredPackages = ['uvicorn', 'fastapi', 'httpx', 'python-dotenv', 'pydantic', 'google-genai', 'groq', 'openai', 'anthropic'];
+
+    const getImportName = (pkg) => {
+        if (pkg === 'google-genai') return 'google.genai';
+        if (pkg === 'google-generativeai') return 'google.generativeai';
+        if (pkg === 'python-dotenv') return 'dotenv';
+        return pkg.replace(/-/g, '_').split('[')[0];
+    };
 
     // Install missing packages into local .python_packages dir (safe, no sudo needed)
     const missingPkg = requiredPackages.filter(pkg => {
         try {
-            execSync(`${sysPython} -c "import ${pkg.replace(/-/g, '_').split('[')[0]}"`, { stdio: 'ignore' });
+            execSync(`${sysPython} -c "import ${getImportName(pkg)}"`, { stdio: 'ignore' });
             return false;
         } catch (_) { return true; }
     });
