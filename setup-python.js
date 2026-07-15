@@ -22,7 +22,7 @@ const REQUIRED = [
   'httpx',
   'python-dotenv',
   'pydantic',
-  'google-generativeai',
+  'google-genai',
   'groq',
   'openai',
   'anthropic',
@@ -68,13 +68,19 @@ if (!python) {
 
 console.log(`[setup-python] Using Python: ${python}`);
 
+function getImportName(pkg) {
+  if (pkg === 'google-genai') return 'google.genai';
+  if (pkg === 'google-generativeai') return 'google.generativeai';
+  if (pkg === 'python-dotenv') return 'dotenv';
+  return pkg.replace(/-/g, '_').split('[')[0];
+}
+
 // Check which packages are already importable
 const missing = REQUIRED.filter(pkg => {
-  const importName = pkg.replace(/-/g, '_').split('[')[0]
-    .replace('google_generativeai', 'google.generativeai');
+  const importName = getImportName(pkg);
   try {
-    spawnSync(python, ['-c', `import ${importName}`], { encoding: 'utf8' });
-    return spawnSync(python, ['-c', `import ${importName}`]).status !== 0;
+    const r = spawnSync(python, ['-c', `import ${importName}`], { encoding: 'utf8' });
+    return r.status !== 0;
   } catch (_) { return true; }
 });
 
