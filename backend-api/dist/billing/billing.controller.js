@@ -23,12 +23,12 @@ let BillingController = BillingController_1 = class BillingController {
         this.billingService = billingService;
     }
     async createCheckout(body) {
-        const { planId, userId, userEmail } = body;
-        if (!planId || !userId || !userEmail) {
-            throw new common_1.BadRequestException('planId, userId and userEmail are required.');
+        const { planName, userId, userEmail } = body;
+        if (!planName || !userId || !userEmail) {
+            throw new common_1.BadRequestException('planName, userId and userEmail are required.');
         }
         try {
-            const url = await this.billingService.createCheckoutSession(planId, userId, userEmail);
+            const url = await this.billingService.createCheckoutSession(planName, userId, userEmail);
             return { checkoutUrl: url };
         }
         catch (err) {

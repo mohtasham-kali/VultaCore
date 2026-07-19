@@ -44,11 +44,11 @@ export class BillingService {
   }
 
   async createCheckoutSession(
-    planId: string,
+    planName: string,
     userId: string,
     userEmail: string,
   ): Promise<string> {
-    const plan = await this.plansService.findOne(planId);
+    const plan = await this.plansService.findByName(planName);
     const variantId = plan.variantId;
 
     const payload = {

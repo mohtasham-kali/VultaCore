@@ -74,8 +74,8 @@ let BillingService = BillingService_1 = class BillingService {
         this.lsWebhookSecret = this.config.get('LS_WEBHOOK_SECRET', '');
         this.appUrl = this.config.get('APP_URL', 'http://localhost:3000');
     }
-    async createCheckoutSession(planId, userId, userEmail) {
-        const plan = await this.plansService.findOne(planId);
+    async createCheckoutSession(planName, userId, userEmail) {
+        const plan = await this.plansService.findByName(planName);
         const variantId = plan.variantId;
         const payload = {
             data: {

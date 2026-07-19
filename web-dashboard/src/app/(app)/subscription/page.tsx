@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from "react";
 import { Check, Loader2, Sparkles, Zap, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
+import { API_BASE_URL } from "@/lib/constants";
 import { io, Socket } from "socket.io-client";
 import { useSearchParams } from "next/navigation";
 
@@ -95,8 +96,8 @@ function SubscriptionPageClient() {
   useEffect(() => {
     if (!user?.id) return;
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
-    const socket: Socket = io(apiUrl, { transports: ["websocket"] });
+    const socketUrl = API_BASE_URL.replace(/\/api$/, '');
+    const socket: Socket = io(socketUrl, { transports: ["websocket"] });
 
     socket.on("connect", () => {
       setIsSocketConnected(true);
@@ -119,8 +120,7 @@ function SubscriptionPageClient() {
   // Fetch current plan from backend on load
   useEffect(() => {
     if (!user?.id) return;
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
-    fetch(`${apiUrl}/users/${user.id}`)
+    fetch(`${API_BASE_URL}/users/${user.id}`)
       .then((r) => r.json())
       .then((u) => {
         if (u?.rank) setCurrentPlan(u.rank);
@@ -143,9 +143,7 @@ function SubscriptionPageClient() {
 
     try {
       setUpgradingPlan(planId);
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
-
-      const res = await fetch(`${apiUrl}/api/billing/checkout`, {
+      const res = await fetch(`${API_BASE_URL}/billing/checkout`, {
 
         method: "POST",
         headers: { "Content-Type": "application/json" },

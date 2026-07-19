@@ -19,6 +19,7 @@ export declare class PlansService {
     constructor(plansRepository: Repository<Plan>);
     findAll(): Promise<Plan[]>;
     findOne(id: string): Promise<Plan>;
+    findByName(name: string): Promise<Plan>;
     findByVariantId(variantId: string): Promise<Plan | null>;
     create(dto: CreatePlanDto): Promise<Plan>;
     update(id: string, dto: UpdatePlanDto): Promise<Plan>;

@@ -13,7 +13,7 @@ import { BillingService } from './billing.service';
 type RawBodyRequest = Request & { rawBody?: Buffer };
 
 interface CheckoutDto {
-  planId: string;
+  planName: string;
   userId: string;
   userEmail: string;
 }
@@ -31,16 +31,16 @@ export class BillingController {
    */
   @Post('checkout')
   async createCheckout(@Body() body: CheckoutDto) {
-    const { planId, userId, userEmail } = body;
-    if (!planId || !userId || !userEmail) {
+    const { planName, userId, userEmail } = body;
+    if (!planName || !userId || !userEmail) {
       throw new BadRequestException(
-        'planId, userId and userEmail are required.',
+        'planName, userId and userEmail are required.',
       );
     }
 
     try {
       const url = await this.billingService.createCheckoutSession(
-        planId,
+        planName,
         userId,
         userEmail,
       );

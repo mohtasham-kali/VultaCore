@@ -36,6 +36,12 @@ export class PlansService {
     return plan;
   }
 
+  async findByName(name: string): Promise<Plan> {
+    const plan = await this.plansRepository.findOneBy({ name });
+    if (!plan) throw new NotFoundException(`Plan with name "${name}" not found`);
+    return plan;
+  }
+
   async findByVariantId(variantId: string): Promise<Plan | null> {
     return this.plansRepository.findOneBy({ variantId });
   }
