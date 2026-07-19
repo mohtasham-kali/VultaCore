@@ -45,10 +45,13 @@ export class BillingController {
         userEmail,
       );
       return { checkoutUrl: url };
-    } catch (err: unknown) {
-      const message = (err as Error).message;
-      this.logger.error(`Checkout creation failed: ${message}`);
-      throw new BadRequestException(message);
+    } catch (err: any) {
+      // If it's an Axios error, extract the detailed Lemon Squeezy response
+      const errorMessage = err.response?.data?.errors 
+        ? JSON.stringify(err.response.data.errors) 
+        : err.message;
+      this.logger.error(`Checkout creation failed: ${errorMessage}`);
+      throw new BadRequestException(errorMessage);
     }
   }
 

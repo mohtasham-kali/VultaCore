@@ -48,6 +48,11 @@ export class BillingService {
     userId: string,
     userEmail: string,
   ): Promise<string> {
+    if (!this.lsApiKey || !this.lsStoreId) {
+      this.logger.error('Missing LS_API_KEY or LS_STORE_ID in environment variables.');
+      throw new Error('Server configuration error: Billing is not configured correctly on this environment.');
+    }
+
     const plan = await this.plansService.findByName(planName);
     const variantId = plan.variantId;
 
