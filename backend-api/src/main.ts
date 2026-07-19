@@ -34,7 +34,43 @@ async function bootstrap() {
         status: 'working',
         description: 'Searching for CVEs.',
       });
-      console.log('✅ Auto-seed successful!');
+      console.log('✅ Bots Auto-seed successful!');
+    }
+
+    const { PlansService } = require('./plans/plans.service');
+    const plansService = app.get(PlansService);
+    const existingPlans = await plansService.findAll();
+    if (existingPlans.length === 0) {
+      console.log('No plans found. Running auto-seed for Plans...');
+      await plansService.create({
+        name: 'Free',
+        price: 0,
+        interval: 'monthly',
+        features: ['Basic access'],
+        variantId: 'free-tier',
+      });
+      await plansService.create({
+        name: 'Standard',
+        price: 19,
+        interval: 'monthly',
+        features: ['Standard access'],
+        variantId: process.env.LS_VARIANT_STANDARD || '1820715',
+      });
+      await plansService.create({
+        name: 'Premium',
+        price: 49,
+        interval: 'monthly',
+        features: ['Premium access'],
+        variantId: process.env.LS_VARIANT_PREMIUM || '1820708',
+      });
+      await plansService.create({
+        name: 'Enterprise',
+        price: 99,
+        interval: 'monthly',
+        features: ['Enterprise access'],
+        variantId: process.env.LS_VARIANT_ENTERPRISE || process.env.LS_VARIANT_ENTERPISE || '1860093',
+      });
+      console.log('✅ Plans auto-seeded!');
     }
   } catch (error: any) {
     fs.writeFileSync(
