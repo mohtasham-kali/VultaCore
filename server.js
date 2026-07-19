@@ -352,7 +352,10 @@ function freePort(port) {
     try { execSync(`fuser -k ${port}/tcp`, { stdio: 'ignore' }); } catch (_) {}
 }
 
-function startEngine(name, execBin, execArgs, port, cwd, envExtra = {}, delay = 0) {
+function startEngine(name, execBin, execArgs, port, cwd, envExtra = {}, delay = 0, retries = 0) {
+    const MAX_RETRIES = 8;
+    const BASE_DELAY  = 5000;
+
     setTimeout(() => {
         // Only stat-check absolute paths — bare commands are resolved by the OS
         const isAbsPath = execBin.startsWith('/');
@@ -361,7 +364,7 @@ function startEngine(name, execBin, execArgs, port, cwd, envExtra = {}, delay = 
             return;
         }
         freePort(port);
-        log(`📡 Spawning ${name} on port ${port} [${execBin}]...`);
+        log(`📡 Spawning ${name} on port ${port} [${execBin}]... (attempt ${retries + 1}/${MAX_RETRIES})`);
 
         const child = spawn(execBin, execArgs, {
             env  : { ...process.env, PORT: String(port), NODE_ENV: 'production', ...envExtra },
@@ -375,9 +378,23 @@ function startEngine(name, execBin, execArgs, port, cwd, envExtra = {}, delay = 
         child.on('error', err => {
             log(`❌ [${name}] spawn error: ${err.message}`);
         });
-        child.on('exit', code => {
-            log(`⚠️  ${name} exited (${code}) — restarting in 5 s…`);
-            setTimeout(() => startEngine(name, execBin, execArgs, port, cwd, envExtra), 5000);
+        child.on('exit', (code, signal) => {
+            // Exit code 0 = clean shutdown (e.g. server restart), always re-launch
+            if (code === 0 || signal === 'SIGTERM' || signal === 'SIGKILL') {
+                log(`🔄 ${name} exited cleanly (${code}/${signal}) — restarting in 5s…`);
+                setTimeout(() => startEngine(name, execBin, execArgs, port, cwd, envExtra, 0, 0), BASE_DELAY);
+                return;
+            }
+
+            // Crash path — apply exponential backoff
+            const newRetries = retries + 1;
+            if (newRetries >= MAX_RETRIES) {
+                log(`🛑 ${name} has crashed ${MAX_RETRIES} times — giving up. Check logs above for the Python import error or missing dependency. Fix the issue and restart the server.`);
+                return;
+            }
+            const backoffMs = Math.min(BASE_DELAY * Math.pow(2, retries), 300000); // Max 5 min
+            log(`⚠️  ${name} crashed (exit ${code}) — restarting in ${Math.round(backoffMs / 1000)}s… (${newRetries}/${MAX_RETRIES})`);
+            setTimeout(() => startEngine(name, execBin, execArgs, port, cwd, envExtra, 0, newRetries), backoffMs);
         });
     }, delay);
 }
