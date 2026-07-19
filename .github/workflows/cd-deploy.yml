@@ -12,7 +12,7 @@ jobs:
     name: Build & Deploy to Hostinger
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # Required to push .next build back to repo
+      contents: write
 
     steps:
       - name: Checkout
@@ -26,11 +26,6 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Wipe stale .next build from git and disk
-        run: |
-          git rm -r --cached web-dashboard/.next/ 2>/dev/null || true
-          rm -rf web-dashboard/.next/
-
       - name: Install & Build Next.js
         working-directory: web-dashboard
         run: |
@@ -41,11 +36,11 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           NEXT_PUBLIC_API_URL: https://vultacore.techprogression.com/api
 
-      - name: Commit built .next back to repo
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "ci: update compiled next.js build [skip ci]"
-          file_pattern: "web-dashboard/.next/ backend-api/dist/"
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
       - name: 🔍 Diagnose and Commit Hostinger Logs
         run: |
           sudo apt-get update && sudo apt-get install -y sshpass
@@ -69,12 +64,11 @@ jobs:
           EOF
           
           rm ssh_pass.txt
-          
+
       - name: Commit Diagnostic Logs
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "ci: commit diagnostic logs [skip ci]"
-          file_pattern: "diag.txt"
+        run: |
+          git add diag.txt
+          git commit -m "ci: commit diagnostic logs [skip ci]" || echo "No changes to commit"
 
       - name: Deploy to Hostinger via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -84,22 +78,17 @@ jobs:
           username: ${{ secrets.HOSTINGER_SSH_USER }}
           password: ${{ secrets.HOSTINGER_SSH_PASS }}
           script: |
-            # 1. Source environment so that node/npm might be in PATH
             source ~/.bashrc 2>/dev/null || source ~/.bash_profile 2>/dev/null || true
             cd ~/domains/vultacore.techprogression.com/nodejs
 
-            # 2. Pull latest code
             git fetch origin main
             git reset --hard origin/main
 
-            # 3. Install root dependencies properly (swallowing errors if npm is missing on SSH)
             npm install --omit=dev 2>&1 | tail -5 || echo "npm install bypassed due to missing path"
 
-            # 4. Install Python AI service dependencies locally (no venv)
             echo "Setting up Python AI service dependencies..."
             cd ~/domains/vultacore.techprogression.com/nodejs/ai-services
             
-            # Find python/pip
             PYTHON_BIN=""
             for py in /opt/alt/python311/bin/python3 /opt/alt/python310/bin/python3 /opt/alt/python39/bin/python3 python3.11 python3.10 python3.9 python3; do
               if command -v $py &>/dev/null || [ -x "$py" ]; then
@@ -110,10 +99,7 @@ jobs:
             
             if [ -n "$PYTHON_BIN" ]; then
               echo "Using Python: $PYTHON_BIN"
-              # Install get-pip if pip is totally missing
               $PYTHON_BIN -m pip --version &>/dev/null || (curl -sS https://bootstrap.pypa.io/get-pip.py | $PYTHON_BIN)
-              
-              # Install directly to a local directory
               $PYTHON_BIN -m pip install --quiet --upgrade pip
               $PYTHON_BIN -m pip install --quiet --target ./.python_packages -r requirements.txt && echo "✅ AI deps installed locally"
             else
@@ -122,24 +108,20 @@ jobs:
             
             cd ~/domains/vultacore.techprogression.com/nodejs
 
-            # 5. Restart via Passenger CLI (Hostinger's actual mechanism)
-            #    Try multiple methods in order of preference
             if command -v passenger-config &>/dev/null; then
               passenger-config restart-app ~/domains/vultacore.techprogression.com/nodejs && echo "✅ passenger-config restart done"
             elif command -v passenger &>/dev/null; then
               passenger restart-app ~/domains/vultacore.techprogression.com/nodejs && echo "✅ passenger restart done"
             else
-              # Fallback: touch the restart file
               mkdir -p tmp && touch tmp/restart.txt && echo "✅ restart.txt touched"
             fi
 
             echo "Deploy complete at $(date)"
 
-
   deploy-api:
     name: Deploy Backend API
     runs-on: ubuntu-latest
-    continue-on-error: true  # Don't block the pipeline if Docker build fails
+    continue-on-error: true
     permissions:
       contents: read
       packages: write
@@ -170,7 +152,7 @@ jobs:
   deploy-ai:
     name: Deploy AI Services
     runs-on: ubuntu-latest
-    continue-on-error: true  # Don't block the pipeline if AI build fails
+    continue-on-error: true
     permissions:
       contents: read
       packages: write
