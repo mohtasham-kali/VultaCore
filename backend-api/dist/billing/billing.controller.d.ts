@@ -4,7 +4,7 @@ type RawBodyRequest = Request & {
     rawBody?: Buffer;
 };
 interface CheckoutDto {
-    planId: string;
+    planName: string;
     userId: string;
     userEmail: string;
 }

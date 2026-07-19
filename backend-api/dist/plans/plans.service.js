@@ -31,6 +31,12 @@ let PlansService = class PlansService {
             throw new common_1.NotFoundException(`Plan ${id} not found`);
         return plan;
     }
+    async findByName(name) {
+        const plan = await this.plansRepository.findOneBy({ name });
+        if (!plan)
+            throw new common_1.NotFoundException(`Plan with name "${name}" not found`);
+        return plan;
+    }
     async findByVariantId(variantId) {
         return this.plansRepository.findOneBy({ variantId });
     }
