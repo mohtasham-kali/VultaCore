@@ -478,16 +478,25 @@ function resolvePython() {
     });
 
     if (missingPkg.length > 0) {
-        log(`AI Engine: installing missing packages into .python_packages: ${missingPkg.join(', ')}`);
-        try {
-            fs.mkdirSync(localPackagesDir, { recursive: true });
-            execSync(
-                `${sysPython} -m pip install --quiet --target=${localPackagesDir} ${missingPkg.join(' ')}`,
-                { stdio: 'inherit', timeout: 120000 }
-            );
-            log('✅ AI Engine: packages installed successfully into .python_packages');
-        } catch (pipErr) {
-            log(`⚠️ AI Engine: pip install failed — ${pipErr.message}. Bots may not respond.`);
+        // Use a lock file to prevent multiple Passenger workers from running pip install at the same time
+        const lockFile = path.join(localPackagesDir, '.pip_installing.lock');
+        if (fs.existsSync(lockFile)) {
+            log('AI Engine: pip install already running in another process — skipping duplicate install.');
+        } else {
+            log(`AI Engine: installing missing packages into .python_packages: ${missingPkg.join(', ')}`);
+            try {
+                fs.mkdirSync(localPackagesDir, { recursive: true });
+                fs.writeFileSync(lockFile, String(process.pid));
+                execSync(
+                    `${sysPython} -m pip install --quiet --target=${localPackagesDir} ${missingPkg.join(' ')}`,
+                    { stdio: 'inherit', timeout: 120000 }
+                );
+                fs.unlinkSync(lockFile);
+                log('✅ AI Engine: packages installed successfully into .python_packages');
+            } catch (pipErr) {
+                try { fs.unlinkSync(lockFile); } catch (_) {}
+                log(`⚠️ AI Engine: pip install failed — ${pipErr.message}. Bots may not respond.`);
+            }
         }
     } else {
         log('AI Engine: all required packages already available globally.');
@@ -505,8 +514,11 @@ async function ensureOllama() {
     // Ollama is a Desktop-only feature — it requires GPU access and sudo to install.
     // On cloud/VPS hosts (like Hostinger), skip this entirely to avoid boot delay.
     // Set ENABLE_OLLAMA=true in env to force-enable on a capable Linux machine.
+    const homeDir = process.env.HOME || '';
+    const isHostingerHome = homeDir.startsWith('/home/u'); // Hostinger uses /home/u<uid>
     const isCloudEnv = !process.env.ENABLE_OLLAMA && (
         // Hostinger and shared hosts restrict package installs
+        isHostingerHome ||
         process.env.PASSENGER_APP_ENV ||
         process.env.HOSTINGER ||
         process.env.RENDER ||
@@ -516,7 +528,7 @@ async function ensureOllama() {
     );
 
     if (isCloudEnv) {
-        log('☁️  Cloud environment detected — skipping Ollama (Desktop-only feature). Bots will use cloud AI providers.');
+        log('☁️  Cloud/Hostinger environment detected — skipping Ollama (Desktop-only feature).');
         return;
     }
 
