@@ -57,17 +57,6 @@ const downloadOptions = [
     borderColor: "border-red-500/20",
     url: "/downloads/VultaCore_0.1.0_amd64.deb",
     description: "Debian package. Can also be installed via apt package manager."
-  },
-  {
-    platform: "Linux (RHEL/Fedora)",
-    version: "0.1.0",
-    format: "Installer .rpm",
-    icon: Terminal,
-    color: "text-emerald-400",
-    bgColor: "bg-emerald-500/10",
-    borderColor: "border-emerald-500/20",
-    url: "/downloads/VultaCore-0.1.0-1.x86_64.rpm",
-    description: "RPM package for Red Hat, Fedora, and SUSE based distributions."
   }
 ];
 
