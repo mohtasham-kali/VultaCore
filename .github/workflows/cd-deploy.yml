@@ -42,15 +42,10 @@ jobs:
           NEXT_PUBLIC_API_URL: https://vultacore.techprogression.com/api
 
       - name: Commit built .next back to repo
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -f web-dashboard/.next/
-          git add -f backend-api/dist/ || true
-          git diff --staged --quiet || git commit -m "ci: update compiled next.js build [skip ci]"
-          git pull --rebase origin main
-          git push origin main
-
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "ci: update compiled next.js build [skip ci]"
+          file_pattern: "web-dashboard/.next/ backend-api/dist/"
       - name: 🔍 Diagnose and Commit Hostinger Logs
         run: |
           sudo apt-get update && sudo apt-get install -y sshpass
@@ -75,12 +70,11 @@ jobs:
           
           rm ssh_pass.txt
           
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add diag.txt
-          git commit -m "ci: commit diagnostic logs [skip ci]" || echo "No changes to commit"
-          git pull --rebase origin main
-          git push origin main
+      - name: Commit Diagnostic Logs
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "ci: commit diagnostic logs [skip ci]"
+          file_pattern: "diag.txt"
 
       - name: Deploy to Hostinger via SSH
         uses: appleboy/ssh-action@v1.0.3

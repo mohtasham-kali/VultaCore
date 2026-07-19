@@ -44,6 +44,13 @@ let UsersService = class UsersService {
     findByUsername(username) {
         return this.usersRepository.findOneBy({ username });
     }
+    findByEmail(email) {
+        return this.usersRepository.findOneBy({ email });
+    }
+    async update(id, updates) {
+        await this.usersRepository.update(id, updates);
+        return this.usersRepository.findOneBy({ id });
+    }
     create(userData) {
         const user = this.usersRepository.create(userData);
         return this.usersRepository.save(user);
