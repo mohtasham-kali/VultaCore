@@ -7,6 +7,8 @@ export declare class UsersService {
     findOrCreateUser(id: string, email?: string): Promise<User>;
     findAll(): Promise<User[]>;
     findByUsername(username: string): Promise<User | null>;
+    findByEmail(email: string): Promise<User | null>;
+    update(id: string, updates: Partial<User>): Promise<User | null>;
     create(userData: Partial<User>): Promise<User>;
     updatePlan(userId: string, planName: string): Promise<User>;
 }

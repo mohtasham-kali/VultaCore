@@ -100,6 +100,22 @@ async function bootstrap() {
             });
             console.log('✅ Plans auto-seeded!');
         }
+        const adminEmail = process.env.ADMIN_EMAIL;
+        if (adminEmail) {
+            const { UsersService } = require('./users/users.service');
+            const usersService = app.get(UsersService);
+            const adminUser = await usersService.findByEmail(adminEmail);
+            if (adminUser && !adminUser.isAdmin) {
+                await usersService.update(adminUser.id, { isAdmin: true });
+                console.log(`✅ Auto-promoted ${adminEmail} to admin.`);
+            }
+            else if (adminUser) {
+                console.log(`✅ Admin user (${adminEmail}) is already set.`);
+            }
+            else {
+                console.warn(`⚠️  ADMIN_EMAIL is set to "${adminEmail}" but no matching user was found in the database yet.`);
+            }
+        }
     }
     catch (error) {
         fs.writeFileSync('error_log.txt', `[STUPID ERROR] ${new Date().toISOString()}\n${error?.stack || error}\n`);
