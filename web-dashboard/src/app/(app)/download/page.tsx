@@ -11,7 +11,7 @@ const downloadOptions = [
     color: "text-blue-400",
     bgColor: "bg-blue-500/10",
     borderColor: "border-blue-500/20",
-    url: "https://github.com/mohtasham-kali/VultaCore/releases/latest",
+    url: "https://github.com/mohtasham-kali/VultaCore/releases/latest/download/VultaCore-Setup-2.1.0.exe",
     description: "Interactive installer. Allows you to select a custom installation path."
   },
   {
@@ -22,19 +22,8 @@ const downloadOptions = [
     color: "text-purple-400",
     bgColor: "bg-purple-500/10",
     borderColor: "border-purple-500/20",
-    url: "https://github.com/mohtasham-kali/VultaCore/releases/latest",
+    url: "https://github.com/mohtasham-kali/VultaCore/releases/latest/download/VultaCore-2.1.0.pkg",
     description: "Interactive installer. Allows you to select a custom disk and path."
-  },
-  {
-    platform: "Linux",
-    version: "2.1.0",
-    format: "AppImage",
-    icon: Terminal,
-    color: "text-orange-400",
-    bgColor: "bg-orange-500/10",
-    borderColor: "border-orange-500/20",
-    url: "https://github.com/mohtasham-kali/VultaCore/releases/latest",
-    description: "Portable AppImage for all distributions. No installation required."
   },
   {
     platform: "macOS",
@@ -44,8 +33,41 @@ const downloadOptions = [
     color: "text-slate-400",
     bgColor: "bg-slate-500/10",
     borderColor: "border-slate-500/20",
-    url: "https://github.com/mohtasham-kali/VultaCore/releases/latest",
+    url: "https://github.com/mohtasham-kali/VultaCore/releases/latest/download/VultaCore-2.1.0.dmg",
     description: "Universal drag-and-drop disk image for Apple Silicon and Intel Macs."
+  },
+  {
+    platform: "Linux",
+    version: "2.1.0",
+    format: "AppImage",
+    icon: Terminal,
+    color: "text-orange-400",
+    bgColor: "bg-orange-500/10",
+    borderColor: "border-orange-500/20",
+    url: "https://github.com/mohtasham-kali/VultaCore/releases/latest/download/VultaCore-2.1.0.AppImage",
+    description: "Portable AppImage for all distributions. No installation required."
+  },
+  {
+    platform: "Linux (Debian/Ubuntu)",
+    version: "2.1.0",
+    format: "Installer .deb",
+    icon: Terminal,
+    color: "text-red-400",
+    bgColor: "bg-red-500/10",
+    borderColor: "border-red-500/20",
+    url: "https://github.com/mohtasham-kali/VultaCore/releases/latest/download/vultacore_2.1.0_amd64.deb",
+    description: "Debian package. Can also be installed via apt package manager."
+  },
+  {
+    platform: "Linux (RHEL/Fedora)",
+    version: "2.1.0",
+    format: "Installer .rpm",
+    icon: Terminal,
+    color: "text-emerald-400",
+    bgColor: "bg-emerald-500/10",
+    borderColor: "border-emerald-500/20",
+    url: "https://github.com/mohtasham-kali/VultaCore/releases/latest/download/vultacore-2.1.0.x86_64.rpm",
+    description: "RPM package for Red Hat, Fedora, and SUSE based distributions."
   }
 ];
 
@@ -146,10 +168,16 @@ export default function DownloadPage() {
             <div className="space-y-4">
               {/* Linux Installation Steps */}
               <div className="space-y-1">
-                <p className="text-slate-500"># Via Curl (Universal Linux)</p>
-                <p className="text-blue-400">curl -fsSL https://vultacore.tech/install.sh | sh</p>
+                <p className="text-slate-500"># Debian / Ubuntu (APT)</p>
+                <p className="text-blue-400">wget https://github.com/mohtasham-kali/VultaCore/releases/latest/download/vultacore_2.1.0_amd64.deb</p>
+                <p className="text-blue-400">sudo apt install ./vultacore_2.1.0_amd64.deb</p>
               </div>
               
+              <div className="space-y-1 pt-2">
+                <p className="text-slate-500"># Universal Linux (Curl)</p>
+                <p className="text-blue-400">curl -fsSL https://vultacore.tech/install.sh | sh</p>
+              </div>
+
               <div className="space-y-1 pt-2">
                 <p className="text-slate-500"># macOS (Homebrew)</p>
                 <p className="text-blue-400">brew install --cask vultacore</p>
