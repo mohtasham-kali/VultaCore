@@ -14,6 +14,8 @@ interface ChatMessage {
   author?: { username: string; id: string };
 }
 
+import { API_BASE_URL } from "@/lib/constants";
+
 interface LiveChatPanelProps {
   room: "dev" | "cyber";
 }
@@ -37,7 +39,7 @@ export function LiveChatPanel({ room }: LiveChatPanelProps) {
 
   useEffect(() => {
     // 1. Establish connection
-    const socketUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    const socketUrl = API_BASE_URL.startsWith('/') ? window.location.origin : API_BASE_URL.replace(/\/api$/, '');
     const newSocket = io(socketUrl, { transports: ["websocket"] });
     
     newSocket.on("connect", () => {

@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { ChevronRight, ShieldCheck, Mail, Building2, Phone } from "lucide-react";
 
+import { API_BASE_URL } from "@/lib/constants";
+
 export default function EnterpriseContactPage() {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -20,7 +22,7 @@ export default function EnterpriseContactPage() {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/leads`,{
+      await fetch(`${API_BASE_URL}/leads`,{
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),

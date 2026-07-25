@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { User as UserIcon, Search, MoreVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+import { API_BASE_URL } from "@/lib/constants";
+
 interface User {
   id: string;
   username: string;
@@ -23,7 +25,7 @@ export default function AdminUsersPage() {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
 
-    fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/users`, { signal: controller.signal })
+    fetch(`${API_BASE_URL}/users`, { signal: controller.signal })
       .then(res => {
         if (!res.ok) throw new Error(`Server returned ${res.status}`);
         return res.json();
@@ -34,6 +36,7 @@ export default function AdminUsersPage() {
       })
       .catch(err => {
         setError(err.name === 'AbortError' ? 'Backend timed out — it may still be starting up.' : err.message);
+        setUsers([]);
         setLoading(false);
       })
       .finally(() => clearTimeout(timeout));
@@ -44,7 +47,7 @@ export default function AdminUsersPage() {
 
   const handleUpdateRank = async (userId: string, newRank: string) => {
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/users/${userId}/plan`, {
+      await fetch(`${API_BASE_URL}/users/${userId}/plan`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ plan: newRank }),

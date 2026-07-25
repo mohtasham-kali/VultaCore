@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { Users, Target, TrendingUp, DollarSign, ArrowUpRight, Activity, CreditCard } from "lucide-react";
 import Link from "next/link";
 
+import { API_BASE_URL } from "@/lib/constants";
+
 interface Stats {
   totalUsers: number;
   totalLeads: number;
@@ -16,9 +18,11 @@ export default function AdminOverview() {
   useEffect(() => {
     // Parallel fetches for efficiency
     Promise.all([
-      fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/users`).then(res => res.json()),
-      fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/leads`).then(res => res.json())
-    ]).then(([users, leads]) => {
+      fetch(`${API_BASE_URL}/users`).then(res => res.ok ? res.json() : []).catch(() => []),
+      fetch(`${API_BASE_URL}/leads`).then(res => res.ok ? res.json() : []).catch(() => [])
+    ]).then(([usersData, leadsData]) => {
+      const users = Array.isArray(usersData) ? usersData : [];
+      const leads = Array.isArray(leadsData) ? leadsData : [];
       setStats({
         totalUsers: users.length,
         totalLeads: leads.length,

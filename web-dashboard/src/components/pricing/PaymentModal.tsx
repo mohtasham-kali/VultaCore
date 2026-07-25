@@ -18,6 +18,8 @@ interface GooglePayWindow extends Window {
   };
 }
 
+import { API_BASE_URL } from "@/lib/constants";
+
 interface PaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -40,7 +42,7 @@ export function PaymentModal({ isOpen, onClose, planName, planPrice, userId }: P
     console.log(`📡 Syncing plan ${planName} for user ${userId}...`);
     
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/users/${userId}/plan`, {
+      const response = await fetch(`${API_BASE_URL}/users/${userId}/plan`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ plan: planName }),

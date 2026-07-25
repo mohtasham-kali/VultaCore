@@ -37,9 +37,35 @@ export class PlansService {
   }
 
   async findByName(name: string): Promise<Plan> {
-    const plan = await this.plansRepository.findOneBy({ name });
-    if (!plan) throw new NotFoundException(`Plan with name "${name}" not found`);
-    return plan;
+    const plans = await this.plansRepository.find();
+    const plan = plans.find((p) => p.name.toLowerCase() === name.toLowerCase());
+    if (plan) return plan;
+
+    const defaultVariant =
+      name.toLowerCase() === 'standard'
+        ? process.env.LS_VARIANT_STANDARD || '1820715'
+        : name.toLowerCase() === 'premium'
+        ? process.env.LS_VARIANT_PREMIUM || '1820708'
+        : name.toLowerCase() === 'enterprise'
+        ? process.env.LS_VARIANT_ENTERPRISE || '1860093'
+        : 'free-tier';
+
+    const defaultPrice =
+      name.toLowerCase() === 'standard'
+        ? 29
+        : name.toLowerCase() === 'premium'
+        ? 99
+        : name.toLowerCase() === 'enterprise'
+        ? 179
+        : 0;
+
+    return this.create({
+      name,
+      price: defaultPrice,
+      interval: 'monthly',
+      features: [`${name} tier access`],
+      variantId: defaultVariant,
+    });
   }
 
   async findByVariantId(variantId: string): Promise<Plan | null> {
