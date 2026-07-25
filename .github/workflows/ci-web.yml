@@ -12,12 +12,7 @@ on:
       - 'web-dashboard/**'
 
 jobs:
-  build-and-check:
-    name: TypeCheck & Build
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: web-dashboard
+    runs-on: self-hosted
 
     steps:
       - name: Checkout
