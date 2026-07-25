@@ -15,6 +15,9 @@ export declare class BillingService {
     private readonly lsWebhookSecret;
     private readonly appUrl;
     constructor(http: HttpService, config: ConfigService, usersService: UsersService, eventsGateway: EventsGateway, plansService: PlansService);
-    createCheckoutSession(planName: string, userId: string, userEmail: string): Promise<string>;
+    createCheckoutSession(planName: string, userId: string, userEmail: string): Promise<string | {
+        url: string;
+        newPlan: string;
+    }>;
     handleWebhook(rawBody: Buffer, signature: string): Promise<void>;
 }

@@ -71,6 +71,11 @@ exports.AppModule = AppModule = __decorate([
         imports: [
             config_1.ConfigModule.forRoot({
                 isGlobal: true,
+                envFilePath: [
+                    (0, path_1.join)(process.cwd(), '.env'),
+                    (0, path_1.join)(process.cwd(), 'backend-api', '.env'),
+                    (0, path_1.join)(__dirname, '..', '.env'),
+                ],
             }),
             typeorm_1.TypeOrmModule.forRootAsync({
                 useFactory: () => {

@@ -39,16 +39,20 @@ export class BillingController {
     }
 
     try {
-      const url = await this.billingService.createCheckoutSession(
+      const result = await this.billingService.createCheckoutSession(
         planName,
         userId,
         userEmail,
       );
-      return { checkoutUrl: url };
+
+      // result is either a Lemon Squeezy URL or { url, newPlan } for direct-update
+      if (typeof result === 'string') {
+        return { checkoutUrl: result };
+      }
+      return { checkoutUrl: result.url, newPlan: result.newPlan };
     } catch (err: any) {
-      // If it's an Axios error, extract the detailed Lemon Squeezy response
-      const errorMessage = err.response?.data?.errors 
-        ? JSON.stringify(err.response.data.errors) 
+      const errorMessage = err.response?.data?.errors
+        ? JSON.stringify(err.response.data.errors)
         : err.message;
       this.logger.error(`Checkout creation failed: ${errorMessage}`);
       throw new BadRequestException(errorMessage);

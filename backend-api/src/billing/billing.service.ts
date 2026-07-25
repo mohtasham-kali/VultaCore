@@ -47,12 +47,15 @@ export class BillingService {
     planName: string,
     userId: string,
     userEmail: string,
-  ): Promise<string> {
+  ): Promise<string | { url: string; newPlan: string }> {
     if (!this.lsApiKey || !this.lsStoreId || planName.toLowerCase() === 'free') {
       this.logger.log(`Direct plan update mode: user=${userId} plan=${planName}`);
       await this.usersService.updatePlan(userId, planName);
       this.eventsGateway.emitSubscriptionUpdated(userId, planName);
-      return `${this.appUrl}/subscription?upgraded=true`;
+      return {
+        url: `${this.appUrl}/subscription?upgraded=true`,
+        newPlan: planName,
+      };
     }
 
     const plan = await this.plansService.findByName(planName);

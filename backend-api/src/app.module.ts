@@ -28,6 +28,11 @@ const staticModuleOptions = fs.existsSync(join(process.cwd(), 'out'))
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: [
+        join(process.cwd(), '.env'),
+        join(process.cwd(), 'backend-api', '.env'),
+        join(__dirname, '..', '.env'),
+      ],
     }),
     TypeOrmModule.forRootAsync({
       useFactory: () => {
