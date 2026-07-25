@@ -3,6 +3,7 @@ name: Release Multi-Platform App
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   publish:
@@ -14,7 +15,7 @@ jobs:
             args: '--target universal-apple-darwin'
           - platform: 'ubuntu-22.04'
             args: ''
-          - platform: 'windows-2025'
+          - platform: 'windows-latest'
             args: ''
 
     runs-on: ${{ matrix.platform }}
@@ -25,16 +26,13 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: '22'
           cache: 'npm'
-          cache-dependency-path: |
-            web-dashboard/package-lock.json
-            desktop-app/package-lock.json
+          cache-dependency-path: 'web-dashboard/package-lock.json'
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          # Add the universal Apple Darwin targets for macOS universal binary
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - name: Install Linux system dependencies
