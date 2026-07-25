@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Download, Monitor, Laptop, Terminal, Shield, Cpu, Apple, Package } from "lucide-react";
 
-const GH_BASE = "https://github.com/mohtasham-kali/VultaCore/releases/latest/download";
+const DOWNLOAD_BASE = "/downloads";
 
 const downloadOptions = [
   {
@@ -139,7 +139,7 @@ export default function DownloadPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {downloadOptions.map((opt) => {
           const isRecommended = detectedPlatform && opt.platform.startsWith(detectedPlatform);
-          const downloadUrl = `${GH_BASE}/${opt.filename}`;
+          const downloadUrl = `${DOWNLOAD_BASE}/${opt.filename}`;
 
           return (
             <div
