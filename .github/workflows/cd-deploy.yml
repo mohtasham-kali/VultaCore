@@ -23,7 +23,7 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-          cache-dependency-path: 'web-dashboard/package-lock.json'
+          cache-dependency-path: 'package-lock.json'
 
       - name: Install & Build Next.js
         working-directory: web-dashboard
