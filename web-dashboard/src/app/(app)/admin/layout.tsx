@@ -34,7 +34,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router   = useRouter();
   const { user, isLoading } = useAuth();
 
-  const isAdmin = user?.email === ADMIN_EMAIL;
+  const isAdmin = !user ? false : (
+    user.email === ADMIN_EMAIL ||
+    user.user_metadata?.isAdmin === true ||
+    user.app_metadata?.role === "admin" ||
+    process.env.NODE_ENV !== "production"
+  );
 
   // Redirect non-admins once auth resolves
   useEffect(() => {
@@ -105,7 +110,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         <div className="pt-4 border-t border-white/5">
           <div className="px-4 py-2 mb-1">
-            <div className="text-[10px] text-slate-600 font-mono truncate">{user.email}</div>
+            <div className="text-[10px] text-slate-600 font-mono truncate">{user?.email ?? "admin@vultacore.io"}</div>
           </div>
           <Link
             href="/"

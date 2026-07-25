@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { CreditCard, Search, ShieldPlus, ChevronRight, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+import { API_BASE_URL } from "@/lib/constants";
+
 interface User {
   id: string;
   username: string;
@@ -19,14 +21,15 @@ export default function SalesPOSTerminal() {
   const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/users`)
-      .then(res => res.json())
-      .then(setUsers);
+    fetch(`${API_BASE_URL}/users`)
+      .then(res => res.ok ? res.json() : [])
+      .then(data => setUsers(Array.isArray(data) ? data : []))
+      .catch(() => setUsers([]));
   }, []);
 
   const filteredUsers = users.filter(u => 
-    u.username.toLowerCase().includes(search.toLowerCase()) || 
-    u.email.toLowerCase().includes(search.toLowerCase())
+    u.username?.toLowerCase().includes(search.toLowerCase()) || 
+    u.email?.toLowerCase().includes(search.toLowerCase())
   );
 
   const handleManualSubscription = async () => {
@@ -34,7 +37,7 @@ export default function SalesPOSTerminal() {
     setIsProcessing(true);
     
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/users/${selectedUser.id}/plan`, {
+      await fetch(`${API_BASE_URL}/users/${selectedUser.id}/plan`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ plan: selectedPlan }),
@@ -42,8 +45,9 @@ export default function SalesPOSTerminal() {
       alert(`Manual upgrade successful! ${selectedUser.username} is now on the ${selectedPlan} tier.`);
       setSelectedUser(null);
       // Refresh list
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/users`);
-      setUsers(await res.json());
+      const res = await fetch(`${API_BASE_URL}/users`);
+      const data = await res.json();
+      setUsers(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("POS Error:", err);
     } finally {

@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { User, Users, Building2, Calendar, Phone, Mail, MessageSquare, ShieldCheck } from "lucide-react";
 
+import { API_BASE_URL } from "@/lib/constants";
+
 interface Lead {
   id: string;
   firstName: string;
@@ -21,14 +23,15 @@ export default function AdminLeadsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/leads`)
-      .then(res => res.json())
+    fetch(`${API_BASE_URL}/leads`)
+      .then(res => res.ok ? res.json() : [])
       .then(data => {
-        setLeads(data);
+        setLeads(Array.isArray(data) ? data : []);
         setLoading(false);
       })
       .catch(err => {
         console.error("Error fetching leads:", err);
+        setLeads([]);
         setLoading(false);
       });
   }, []);

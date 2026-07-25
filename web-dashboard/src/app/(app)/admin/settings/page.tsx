@@ -4,13 +4,15 @@ import { useState, useEffect } from "react";
 import { Settings, Save, Server, ShieldCheck, Mail, Database } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+import { API_BASE_URL } from "@/lib/constants";
+
 export default function AdminSettingsPage() {
   const [maintenanceMode, setMaintenanceMode] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api'}/settings`)
+    fetch(`${API_BASE_URL}/settings`)
       .then(res => {
         if (!res.ok) throw new Error('Failed to load settings');
         return res.json();
@@ -28,7 +30,7 @@ export default function AdminSettingsPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api'}/settings`, {
+      await fetch(`${API_BASE_URL}/settings`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ maintenanceMode: maintenanceMode.toString() }),

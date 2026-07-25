@@ -5,6 +5,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 
+import { API_BASE_URL } from "@/lib/constants";
+
 interface Notification {
   id: string;
   title: string;
@@ -26,10 +28,10 @@ export function NotificationCenter() {
     if (!user) return;
     try {
       setLoading(true);
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/notifications/user/${user.id}`);
+      const res = await fetch(`${API_BASE_URL}/notifications/user/${user.id}`);
       if (res.ok) {
         const data = await res.json();
-        setNotifications(data);
+        setNotifications(Array.isArray(data) ? data : []);
       }
     } catch (err) {
       console.error("Failed to fetch notifications:", err);
@@ -56,7 +58,7 @@ export function NotificationCenter() {
 
   const markAsRead = async (id: string) => {
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/notifications/${id}/read`, { method: 'PATCH' });
+      await fetch(`${API_BASE_URL}/notifications/${id}/read`, { method: 'PATCH' });
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
     } catch (err) {
       console.error("Failed to mark as read:", err);
@@ -66,7 +68,7 @@ export function NotificationCenter() {
   const markAllAsRead = async () => {
     if (!user) return;
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/notifications/user/${user.id}/read-all`, { method: 'PATCH' });
+      await fetch(`${API_BASE_URL}/notifications/user/${user.id}/read-all`, { method: 'PATCH' });
       setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
     } catch (err) {
       console.error("Failed to mark all as read:", err);
@@ -75,7 +77,7 @@ export function NotificationCenter() {
 
   const deleteNotification = async (id: string) => {
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/notifications/${id}`, { method: 'DELETE' });
+      await fetch(`${API_BASE_URL}/notifications/${id}`, { method: 'DELETE' });
       setNotifications(prev => prev.filter(n => n.id !== id));
     } catch (err) {
       console.error("Failed to delete notification:", err);

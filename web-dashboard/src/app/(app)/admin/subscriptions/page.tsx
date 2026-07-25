@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { CreditCard, TrendingUp, Users, ShieldCheck, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+import { API_BASE_URL } from "@/lib/constants";
+
 interface User {
   id: string;
   username: string;
@@ -16,14 +18,15 @@ export default function AdminSubscriptionsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/users`)
-      .then(res => res.json())
+    fetch(`${API_BASE_URL}/users`)
+      .then(res => res.ok ? res.json() : [])
       .then(data => {
-        setUsers(data);
+        setUsers(Array.isArray(data) ? data : []);
         setLoading(false);
       })
       .catch(err => {
         console.error(err);
+        setUsers([]);
         setLoading(false);
       });
   }, []);
