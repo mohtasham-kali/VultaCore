@@ -249,13 +249,13 @@ export default function DownloadPage() {
             <div className="space-y-5">
               <div className="space-y-1">
                 <p className="text-slate-500"># Debian / Ubuntu — use apt (resolves deps)</p>
-                <p className="text-blue-400">wget {GH_BASE}/VultaCore_0.1.0_amd64.deb</p>
+                <p className="text-blue-400">wget https://vultacore.techprogression.com/downloads/VultaCore_0.1.0_amd64.deb</p>
                 <p className="text-blue-400">sudo apt install ./VultaCore_0.1.0_amd64.deb</p>
               </div>
 
               <div className="space-y-1">
                 <p className="text-slate-500"># Fedora / RHEL / CentOS</p>
-                <p className="text-blue-400">wget {GH_BASE}/VultaCore-0.1.0-1.x86_64.rpm</p>
+                <p className="text-blue-400">wget https://vultacore.techprogression.com/downloads/VultaCore-0.1.0-1.x86_64.rpm</p>
                 <p className="text-blue-400">sudo dnf install ./VultaCore-0.1.0-1.x86_64.rpm</p>
               </div>
 
