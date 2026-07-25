@@ -1,0 +1,137 @@
+name: Build & Upload Installers to Hostinger
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'ubuntu-22.04'
+            args: ''
+            label: 'linux'
+          - platform: 'windows-latest'
+            args: ''
+            label: 'windows'
+          - platform: 'macos-latest'
+            args: '--target universal-apple-darwin'
+            label: 'macos'
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Add macOS Universal Darwin Targets
+        if: matrix.platform == 'macos-latest'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Install Linux system dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-dev libwebkit2gtk-4.1-dev build-essential \
+            curl wget file libxdo-dev libssl-dev \
+            libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - name: Install web-dashboard dependencies
+        run: npm install
+        working-directory: web-dashboard
+
+      - name: Build web-dashboard (static export for Tauri)
+        run: |
+          rm -rf .next/ out/
+          STATIC_EXPORT=true npm run build
+        working-directory: web-dashboard
+
+      - name: Install desktop-app dependencies
+        run: npm install
+        working-directory: desktop-app
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: desktop-app
+          args: ${{ matrix.args }}
+
+      - name: Collect built installers (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          mkdir -p dist-installers
+          find desktop-app/src-tauri/target -name "*.deb" -o -name "*.AppImage" -o -name "*.rpm" 2>/dev/null | xargs -I{} cp {} dist-installers/ || true
+          ls -lh dist-installers/
+
+      - name: Collect built installers (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: bash
+        run: |
+          mkdir -p dist-installers
+          find desktop-app/src-tauri/target -name "*.exe" -o -name "*.msi" 2>/dev/null | xargs -I{} cp {} dist-installers/ || true
+          ls -lh dist-installers/
+
+      - name: Collect built installers (macOS)
+        if: matrix.platform == 'macos-latest'
+        run: |
+          mkdir -p dist-installers
+          find desktop-app/src-tauri/target -name "*.dmg" -o -name "*.pkg" 2>/dev/null | xargs -I{} cp {} dist-installers/ || true
+          ls -lh dist-installers/
+
+      - name: Upload installers as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.label }}
+          path: dist-installers/
+          retention-days: 7
+
+  deploy-to-hostinger:
+    name: Upload Installers to Hostinger
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all installer artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all-installers
+          merge-multiple: true
+
+      - name: List collected installers
+        run: ls -lh all-installers/
+
+      - name: Upload installers to Hostinger via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HOSTINGER_SSH_HOST }}
+          port: ${{ secrets.HOSTINGER_SSH_PORT }}
+          username: ${{ secrets.HOSTINGER_SSH_USER }}
+          password: ${{ secrets.HOSTINGER_SSH_PASS }}
+          source: "all-installers/*"
+          target: "~/domains/vultacore.techprogression.com/nodejs/public/downloads/"
+          strip_components: 1
+
+      - name: Verify upload on Hostinger
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOSTINGER_SSH_HOST }}
+          port: ${{ secrets.HOSTINGER_SSH_PORT }}
+          username: ${{ secrets.HOSTINGER_SSH_USER }}
+          password: ${{ secrets.HOSTINGER_SSH_PASS }}
+          script: |
+            echo "=== Installers in public/downloads/ ==="
+            ls -lh ~/domains/vultacore.techprogression.com/nodejs/public/downloads/ 2>/dev/null || echo "Directory empty or missing"

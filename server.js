@@ -257,30 +257,48 @@ function tryServeStatic(req, res) {
     return false;
 }
 
-// ─── /downloads/ — redirect to GitHub Releases CDN ─────────────────────────
-const GH_RELEASES_BASE = 'https://github.com/mohtasham-kali/VultaCore/releases/latest/download';
-const FILENAME_MAP = {
-    'vultacore-0.1.0.exe'             : 'VultaCore_0.1.0_x64-setup.exe',
-    'vultacore-0.1.0.dmg'             : 'VultaCore_0.1.0_universal.dmg',
-    'vultacore-0.1.0.pkg'             : 'VultaCore_0.1.0_universal.pkg',
-    'VultaCore-0.1.0-1.x86_64.exe'   : 'VultaCore_0.1.0_x64-setup.exe',
-    'VultaCore-0.1.0-1.x86_64.dmg'   : 'VultaCore_0.1.0_universal.dmg',
-    'VultaCore-0.1.0-1.x86_64.pkg'   : 'VultaCore_0.1.0_universal.pkg',
-    'VultaCore-0.1.0-1.x86_64.AppImage': 'VultaCore_0.1.0_amd64.AppImage',
-    'VultaCore-0.1.0-1.x86_64.deb'   : 'VultaCore_0.1.0_amd64.deb',
-    'VultaCore-0.1.0-1.x86_64.rpm'   : 'VultaCore-0.1.0-1.x86_64.rpm',
-};
+// ─── /downloads/ — serve installer files directly from disk ─────────────────
+const DOWNLOADS_DIR = path.join(rootDir, 'public', 'downloads');
 
 // ─── /logs diagnostic route ─────────────────────────────────────────────────
 const server = http.createServer((req, res) => {
-    // ── /downloads/:filename → redirect to GitHub Releases CDN ──
+    // ── /downloads/:filename → serve local installer file ──
     if (req.url.startsWith('/downloads/')) {
-        const filename = req.url.replace('/downloads/', '').split('?')[0];
-        const target = FILENAME_MAP[filename] || filename;
-        const location = `${GH_RELEASES_BASE}/${target}`;
-        log(`⬇  Download redirect: ${filename} → ${location}`);
-        res.writeHead(302, { Location: location });
-        return res.end();
+        const filename = decodeURIComponent(req.url.replace('/downloads/', '').split('?')[0]);
+        const filePath = path.join(DOWNLOADS_DIR, filename);
+
+        // Security: prevent path traversal
+        if (!filePath.startsWith(DOWNLOADS_DIR)) {
+            res.writeHead(403); return res.end('Forbidden');
+        }
+
+        if (!fs.existsSync(filePath)) {
+            res.writeHead(404, { 'Content-Type': 'text/plain' });
+            return res.end(`Installer not found: ${filename}`);
+        }
+
+        const stat = fs.statSync(filePath);
+        const ext  = path.extname(filename).toLowerCase();
+        const mimeMap = {
+            '.deb': 'application/vnd.debian.binary-package',
+            '.rpm': 'application/x-rpm',
+            '.exe': 'application/x-msdownload',
+            '.msi': 'application/x-msi',
+            '.dmg': 'application/x-apple-diskimage',
+            '.pkg': 'application/x-newton-compatible-pkg',
+            '.appimage': 'application/x-executable',
+        };
+        const contentType = mimeMap[ext] || 'application/octet-stream';
+
+        log(`⬇  Serving installer: ${filename} (${(stat.size / 1024 / 1024).toFixed(1)} MB)`);
+        res.writeHead(200, {
+            'Content-Type'        : contentType,
+            'Content-Disposition' : `attachment; filename="${filename}"`,
+            'Content-Length'      : stat.size,
+            'Cache-Control'       : 'public, max-age=86400',
+        });
+        fs.createReadStream(filePath).pipe(res);
+        return;
     }
 
     // Diagnostic endpoints — always available
