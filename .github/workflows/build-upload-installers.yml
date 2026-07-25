@@ -62,19 +62,15 @@ jobs:
         run: npm install
         working-directory: desktop-app
 
-      - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          projectPath: desktop-app
-          args: ${{ matrix.args }}
+      - name: Build Tauri app executable & installers
+        run: npx tauri build ${{ matrix.args }}
+        working-directory: desktop-app
 
       - name: Collect built installers (Linux)
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           mkdir -p dist-installers
-          find desktop-app/src-tauri/target -name "*.deb" -o -name "*.AppImage" -o -name "*.rpm" 2>/dev/null | xargs -I{} cp {} dist-installers/ || true
+          find desktop-app/src-tauri/target -type f \( -name "*.deb" -o -name "*.AppImage" -o -name "*.rpm" \) 2>/dev/null | xargs -I{} cp {} dist-installers/ || true
           ls -lh dist-installers/
 
       - name: Collect built installers (Windows)
@@ -82,14 +78,14 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist-installers
-          find desktop-app/src-tauri/target -name "*.exe" -o -name "*.msi" 2>/dev/null | xargs -I{} cp {} dist-installers/ || true
+          find desktop-app/src-tauri/target -type f \( -name "*.exe" -o -name "*.msi" \) 2>/dev/null | xargs -I{} cp {} dist-installers/ || true
           ls -lh dist-installers/
 
       - name: Collect built installers (macOS)
         if: matrix.platform == 'macos-latest'
         run: |
           mkdir -p dist-installers
-          find desktop-app/src-tauri/target -name "*.dmg" -o -name "*.pkg" 2>/dev/null | xargs -I{} cp {} dist-installers/ || true
+          find desktop-app/src-tauri/target -type f \( -name "*.dmg" -o -name "*.pkg" \) 2>/dev/null | xargs -I{} cp {} dist-installers/ || true
           ls -lh dist-installers/
 
       - name: Upload installers as artifact
