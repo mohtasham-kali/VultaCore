@@ -257,8 +257,32 @@ function tryServeStatic(req, res) {
     return false;
 }
 
+// ─── /downloads/ — redirect to GitHub Releases CDN ─────────────────────────
+const GH_RELEASES_BASE = 'https://github.com/mohtasham-kali/VultaCore/releases/latest/download';
+const FILENAME_MAP = {
+    'vultacore-0.1.0.exe'             : 'VultaCore_0.1.0_x64-setup.exe',
+    'vultacore-0.1.0.dmg'             : 'VultaCore_0.1.0_universal.dmg',
+    'vultacore-0.1.0.pkg'             : 'VultaCore_0.1.0_universal.pkg',
+    'VultaCore-0.1.0-1.x86_64.exe'   : 'VultaCore_0.1.0_x64-setup.exe',
+    'VultaCore-0.1.0-1.x86_64.dmg'   : 'VultaCore_0.1.0_universal.dmg',
+    'VultaCore-0.1.0-1.x86_64.pkg'   : 'VultaCore_0.1.0_universal.pkg',
+    'VultaCore-0.1.0-1.x86_64.AppImage': 'VultaCore_0.1.0_amd64.AppImage',
+    'VultaCore-0.1.0-1.x86_64.deb'   : 'VultaCore_0.1.0_amd64.deb',
+    'VultaCore-0.1.0-1.x86_64.rpm'   : 'VultaCore-0.1.0-1.x86_64.rpm',
+};
+
 // ─── /logs diagnostic route ─────────────────────────────────────────────────
 const server = http.createServer((req, res) => {
+    // ── /downloads/:filename → redirect to GitHub Releases CDN ──
+    if (req.url.startsWith('/downloads/')) {
+        const filename = req.url.replace('/downloads/', '').split('?')[0];
+        const target = FILENAME_MAP[filename] || filename;
+        const location = `${GH_RELEASES_BASE}/${target}`;
+        log(`⬇  Download redirect: ${filename} → ${location}`);
+        res.writeHead(302, { Location: location });
+        return res.end();
+    }
+
     // Diagnostic endpoints — always available
     if (req.url === '/logs' || req.url === '/_logs') {
         res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });

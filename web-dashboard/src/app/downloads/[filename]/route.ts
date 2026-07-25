@@ -26,7 +26,7 @@ export async function GET(
 ) {
   const { filename } = await params;
 
-  // Always issue a 302 redirect directly to official GitHub Release assets
+  // Always redirect directly to official GitHub Release assets (302 follows automatically via wget/curl)
   const targetFilename = FILENAME_MAP[filename] || filename;
   const targetUrl = `${GH_RELEASES_BASE}/${targetFilename}`;
 
