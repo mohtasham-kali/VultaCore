@@ -14,6 +14,10 @@ export declare class BillingController {
     constructor(billingService: BillingService);
     createCheckout(body: CheckoutDto): Promise<{
         checkoutUrl: string;
+        newPlan?: undefined;
+    } | {
+        checkoutUrl: string;
+        newPlan: string;
     }>;
     handleWebhook(req: RawBodyRequest, signature: string): Promise<{
         received: boolean;

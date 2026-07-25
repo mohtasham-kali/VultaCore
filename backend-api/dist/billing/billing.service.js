@@ -79,7 +79,10 @@ let BillingService = BillingService_1 = class BillingService {
             this.logger.log(`Direct plan update mode: user=${userId} plan=${planName}`);
             await this.usersService.updatePlan(userId, planName);
             this.eventsGateway.emitSubscriptionUpdated(userId, planName);
-            return `${this.appUrl}/subscription?upgraded=true`;
+            return {
+                url: `${this.appUrl}/subscription?upgraded=true`,
+                newPlan: planName,
+            };
         }
         const plan = await this.plansService.findByName(planName);
         const variantId = plan.variantId;

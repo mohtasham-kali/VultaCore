@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
-import { Check, Loader2, Sparkles, Zap, ExternalLink } from "lucide-react";
+import { useState, useEffect, useRef, Suspense } from "react";
+import { Check, Loader2, Sparkles, Zap, ExternalLink, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 import { API_BASE_URL } from "@/lib/constants";
@@ -20,7 +20,7 @@ const PLANS = [
       "Public Analytics",
       "Standard Support",
     ],
-    buttonText: "Current Plan",
+    buttonText: "Downgrade to Free",
     highlight: false,
     gradient: "from-slate-500 to-slate-600",
   },
@@ -76,6 +76,15 @@ const PAYMENT_METHODS = [
   { name: "PayPal", icon: "🅿️" },
 ];
 
+/** Derive a socket base URL that works for both relative (/api) and absolute (https://...) API_BASE_URL */
+function getSocketUrl(): string {
+  if (typeof window === "undefined") return "http://localhost:3001";
+  // If the API_BASE_URL is a relative path like /api, use window.location.origin
+  if (API_BASE_URL.startsWith("/")) return window.location.origin;
+  // Otherwise strip /api suffix to get socket host
+  return API_BASE_URL.replace(/\/api$/, "");
+}
+
 function SubscriptionPageClient() {
   const { user } = useAuth();
   const searchParams = useSearchParams();
@@ -83,50 +92,102 @@ function SubscriptionPageClient() {
   const [upgradingPlan, setUpgradingPlan] = useState<string | null>(null);
   const [isSocketConnected, setIsSocketConnected] = useState(false);
   const [justUpgraded, setJustUpgraded] = useState(false);
+  const [isPolling, setIsPolling] = useState(false);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Detect return from Lemon Squeezy checkout
-  useEffect(() => {
-    if (searchParams.get("upgraded") === "true") {
-      setJustUpgraded(true);
-      setTimeout(() => setJustUpgraded(false), 5000);
+  // Fetch current plan from backend
+  const fetchCurrentPlan = async (): Promise<string | null> => {
+    if (!user?.id) return null;
+    try {
+      const res = await fetch(`${API_BASE_URL}/users/${user.id}`);
+      if (!res.ok) return null;
+      const u = await res.json();
+      return u?.rank ?? null;
+    } catch {
+      return null;
     }
-  }, [searchParams]);
+  };
+
+  // Detect return from Lemon Squeezy checkout — start polling for plan update
+  useEffect(() => {
+    if (searchParams.get("upgraded") !== "true" || !user?.id) return;
+
+    setJustUpgraded(true);
+    setIsPolling(true);
+
+    // Poll every 2 seconds for up to 30 seconds until plan changes from what it was
+    let attempts = 0;
+    const initialPlan = currentPlan;
+
+    const poll = async () => {
+      attempts++;
+      const rank = await fetchCurrentPlan();
+      if (rank && rank.toLowerCase() !== initialPlan.toLowerCase()) {
+        setCurrentPlan(rank);
+        setIsPolling(false);
+        setUpgradingPlan(null);
+        clearInterval(pollingRef.current!);
+        pollingRef.current = null;
+      } else if (attempts >= 15) {
+        // Stop polling after 30s even if no change
+        if (rank) setCurrentPlan(rank);
+        setIsPolling(false);
+        clearInterval(pollingRef.current!);
+        pollingRef.current = null;
+      }
+    };
+
+    pollingRef.current = setInterval(poll, 2000);
+    setTimeout(() => setJustUpgraded(false), 8000);
+
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, user?.id]);
 
   // Real-time WebSocket subscription sync
   useEffect(() => {
     if (!user?.id) return;
 
-    const socketUrl = API_BASE_URL.replace(/\/api$/, '');
-    const socket: Socket = io(socketUrl, { transports: ["websocket"] });
+    let socket: Socket;
+    try {
+      const socketUrl = getSocketUrl();
+      socket = io(socketUrl, { transports: ["websocket"], reconnectionAttempts: 3 });
 
-    socket.on("connect", () => {
-      setIsSocketConnected(true);
-      socket.emit("subscribeToUserEvents", user.id);
-    });
+      socket.on("connect", () => {
+        setIsSocketConnected(true);
+        socket.emit("subscribeToUserEvents", user.id);
+      });
 
-    socket.on("subscriptionUpdated", (data: { newRank: string }) => {
-      console.log("⚡ Plan updated in real-time:", data.newRank);
-      setCurrentPlan(data.newRank);
-      setUpgradingPlan(null);
-    });
+      socket.on("subscriptionUpdated", (data: { newRank: string }) => {
+        console.log("⚡ Plan updated in real-time:", data.newRank);
+        setCurrentPlan(data.newRank);
+        setUpgradingPlan(null);
+        setIsPolling(false);
+        if (pollingRef.current) {
+          clearInterval(pollingRef.current);
+          pollingRef.current = null;
+        }
+      });
 
-    socket.on("disconnect", () => setIsSocketConnected(false));
+      socket.on("disconnect", () => setIsSocketConnected(false));
+    } catch {
+      // WebSocket unavailable — polling fallback is active
+    }
 
     return () => {
-      socket.disconnect();
+      socket?.disconnect();
     };
-  }, [user]);
+  }, [user?.id]);
 
-  // Fetch current plan from backend on load
+  // Fetch current plan from backend on initial load
   useEffect(() => {
-    if (!user?.id) return;
-    fetch(`${API_BASE_URL}/users/${user.id}`)
-      .then((r) => r.json())
-      .then((u) => {
-        if (u?.rank) setCurrentPlan(u.rank);
-      })
-      .catch(() => {});
-  }, [user]);
+    fetchCurrentPlan().then((rank) => {
+      if (rank) setCurrentPlan(rank);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const handleUpgrade = async (planId: string, planName: string) => {
     if (planId === "enterprise") {
@@ -134,7 +195,8 @@ function SubscriptionPageClient() {
       return;
     }
 
-    if (planName === currentPlan) return;
+    // Case-insensitive current plan check
+    if (planName.toLowerCase() === currentPlan.toLowerCase()) return;
 
     if (!user?.id || !user?.email) {
       alert("Please log in to upgrade your plan.");
@@ -144,7 +206,6 @@ function SubscriptionPageClient() {
     try {
       setUpgradingPlan(planId);
       const res = await fetch(`${API_BASE_URL}/billing/checkout`, {
-
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -159,10 +220,21 @@ function SubscriptionPageClient() {
         throw new Error(err.message || "Failed to create checkout session.");
       }
 
-      const { checkoutUrl } = await res.json();
+      const { checkoutUrl, newPlan } = await res.json();
 
-      // Redirect to Lemon Squeezy hosted checkout
-      // Supports: Credit/Debit cards, PayPal, Google Pay, Apple Pay
+      // If backend returned a newPlan (Free/direct mode), update UI immediately
+      if (newPlan) {
+        setCurrentPlan(newPlan);
+        setUpgradingPlan(null);
+        setJustUpgraded(true);
+        setTimeout(() => setJustUpgraded(false), 5000);
+        // Navigate to subscription page with upgraded flag (relative-safe)
+        const url = new URL(checkoutUrl, window.location.origin);
+        window.history.replaceState({}, "", url.pathname + url.search);
+        return;
+      }
+
+      // For Lemon Squeezy hosted checkout — redirect to payment page
       window.location.href = checkoutUrl;
     } catch (err: unknown) {
       console.error("Checkout Error:", err);
@@ -177,7 +249,12 @@ function SubscriptionPageClient() {
       <div className="text-center mb-16 space-y-4">
         {/* Live Sync Indicator */}
         <div className="fixed top-24 right-8 flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-full bg-slate-900 border border-slate-800 z-50">
-          {isSocketConnected ? (
+          {isPolling ? (
+            <>
+              <RefreshCw className="w-2.5 h-2.5 text-yellow-400 animate-spin" />
+              <span className="text-yellow-400">Syncing Plan...</span>
+            </>
+          ) : isSocketConnected ? (
             <>
               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.7)]" />
               Live Sync
@@ -194,7 +271,7 @@ function SubscriptionPageClient() {
         {justUpgraded && (
           <div className="mb-6 p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl text-center animate-in fade-in slide-in-from-top-2 duration-500">
             <p className="text-emerald-400 font-semibold text-sm">
-              🎉 Payment successful! Your plan is being activated. It will update automatically in a few seconds.
+              🎉 Payment successful! Your plan is being activated — it will update automatically in a few seconds.
             </p>
           </div>
         )}
@@ -210,6 +287,16 @@ function SubscriptionPageClient() {
           <span className="text-yellow-400 font-semibold">Lemon Squeezy</span>.
           Pay with card, PayPal, Google Pay or Apple Pay.
         </p>
+
+        {/* Current plan indicator */}
+        {user?.id && (
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-full">
+            <Zap className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="text-indigo-300 text-sm font-semibold">
+              Active Plan: {currentPlan}
+            </span>
+          </div>
+        )}
 
         {/* Accepted payment methods */}
         <div className="flex items-center justify-center gap-3 flex-wrap pt-2">
@@ -247,7 +334,6 @@ function SubscriptionPageClient() {
           return (
             <div
               key={plan.id}
-
               className={cn(
                 "relative flex flex-col p-8 rounded-3xl border transition-all duration-500 overflow-hidden",
                 isCurrentPlan
@@ -259,13 +345,12 @@ function SubscriptionPageClient() {
             >
               {/* Active plan top bar */}
               {isCurrentPlan && (
-
                 <div
                   className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r ${plan.gradient}`}
                 />
               )}
 
-              {/* Popular badge (never overlaps title/CTA) */}
+              {/* Popular badge */}
               {plan.highlight && !isCurrentPlan && (
                 <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
                   <div className="bg-gradient-to-r from-purple-500 to-blue-500 text-white text-[10px] font-bold uppercase tracking-widest px-4 py-1.5 rounded-full shadow-lg flex items-center gap-1">
@@ -273,7 +358,6 @@ function SubscriptionPageClient() {
                   </div>
                 </div>
               )}
-
 
               {/* Plan info */}
               <div className="mb-8 relative z-10">
@@ -326,11 +410,13 @@ function SubscriptionPageClient() {
               {/* CTA Button */}
               <button
                 onClick={() => handleUpgrade(plan.id, plan.name)}
-                disabled={isCurrentPlan || isLoading}
+                disabled={isCurrentPlan || isLoading || isPolling}
                 className={cn(
                   "w-full py-4 rounded-2xl font-bold transition-all duration-300 flex items-center justify-center gap-2 relative z-10",
                   isCurrentPlan
                     ? "bg-white/5 text-slate-400 cursor-not-allowed border border-white/5"
+                    : isPolling
+                    ? "bg-slate-700 text-slate-400 cursor-wait"
                     : plan.highlight
                     ? "bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-xl shadow-purple-500/20 hover:opacity-90 active:scale-95"
                     : `bg-gradient-to-r ${plan.gradient} text-white opacity-80 hover:opacity-100 active:scale-95`
