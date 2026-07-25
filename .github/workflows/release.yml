@@ -2,7 +2,8 @@ name: Release Multi-Platform App
 
 on:
   push:
-    branches: [ main ]
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 jobs:
@@ -50,13 +51,13 @@ jobs:
             librsvg2-dev \
             patchelf
 
-      - name: Install web-dashboard dependencies (Tauri frontend)
+      - name: Install web-dashboard dependencies
         run: npm install
         working-directory: web-dashboard
 
       - name: Build web-dashboard (Next.js static export for Tauri)
         run: |
-          rm -rf .next/
+          rm -rf .next/ out/
           STATIC_EXPORT=true npm run build
         working-directory: web-dashboard
 
@@ -70,15 +71,30 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: desktop-app
-          tagName: vultacore-v__VERSION__
+          tagName: v__VERSION__
           releaseName: 'VultaCore v__VERSION__'
           releaseBody: |
-            VultaCore Desktop Release
-            
-            Download your platform installer below:
-            - **Windows**: `.exe` (NSIS installer) or `.msi`
-            - **macOS**: `.dmg` (Universal — runs on both Intel & Apple Silicon)
-            - **Linux**: `.deb` (Debian/Ubuntu) or `.AppImage` (portable)
-          releaseDraft: true
+            ## VultaCore v__VERSION__ Desktop Release
+
+            Download the installer for your platform:
+
+            | Platform | File |
+            |---|---|
+            | **Windows** | `VultaCore_x.x.x_x64-setup.exe` |
+            | **macOS (Universal)** | `VultaCore_x.x.x_universal.dmg` |
+            | **Linux (.deb)** | `VultaCore_x.x.x_amd64.deb` |
+            | **Linux (AppImage)** | `VultaCore_x.x.x_amd64.AppImage` |
+
+            ### Terminal Install (Linux)
+            ```bash
+            # Debian / Ubuntu
+            curl -fsSL https://vultacore.techprogression.com/downloads/VultaCore_0.1.0_amd64.deb -o VultaCore.deb
+            sudo apt install ./VultaCore.deb && rm VultaCore.deb
+
+            # Fedora / RHEL
+            curl -fsSL https://vultacore.techprogression.com/downloads/VultaCore-0.1.0-1.x86_64.rpm -o VultaCore.rpm
+            sudo dnf install ./VultaCore.rpm && rm VultaCore.rpm
+            ```
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
