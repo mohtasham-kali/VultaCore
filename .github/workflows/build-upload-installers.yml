@@ -8,20 +8,8 @@ on:
 
 jobs:
   build:
-    name: Build (${{ matrix.label }})
-    strategy:
-      matrix:
-        include:
-          - platform: ubuntu-22.04
-            label: linux
-            args: ''
-          - platform: windows-latest
-            label: windows
-            args: '--target x86_64-pc-windows-msvc'
-          - platform: macos-latest
-            label: macos
-            args: '--target universal-apple-darwin'
-    runs-on: ${{ matrix.platform }}
+    name: Build Linux Installers
+    runs-on: self-hosted
 
     steps:
       - uses: actions/checkout@v4
@@ -34,12 +22,7 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Add macOS Universal Darwin Targets
-        if: matrix.platform == 'macos-latest'
-        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
-
       - name: Install Linux system dependencies
-        if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -71,42 +54,26 @@ jobs:
         working-directory: desktop-app
 
       - name: Build Tauri app executable & installers
-        run: npx tauri build ${{ matrix.args }}
+        run: npx tauri build
         working-directory: desktop-app
 
-      - name: Collect built installers (Linux)
-        if: matrix.platform == 'ubuntu-22.04'
+      - name: Collect built Linux installers
         run: |
           mkdir -p dist-installers
           find desktop-app/src-tauri/target -type f \( -name "*.deb" -o -name "*.AppImage" -o -name "*.rpm" \) 2>/dev/null | xargs -I{} cp {} dist-installers/ || true
           ls -lh dist-installers/
 
-      - name: Collect built installers (Windows)
-        if: matrix.platform == 'windows-latest'
-        shell: bash
-        run: |
-          mkdir -p dist-installers
-          find desktop-app/src-tauri/target -type f \( -name "*.exe" -o -name "*.msi" \) 2>/dev/null | xargs -I{} cp {} dist-installers/ || true
-          ls -lh dist-installers/
-
-      - name: Collect built installers (macOS)
-        if: matrix.platform == 'macos-latest'
-        run: |
-          mkdir -p dist-installers
-          find desktop-app/src-tauri/target -type f \( -name "*.dmg" -o -name "*.pkg" \) 2>/dev/null | xargs -I{} cp {} dist-installers/ || true
-          ls -lh dist-installers/
-
       - name: Upload installers as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: installers-${{ matrix.label }}
+          name: installers-linux
           path: dist-installers/
           retention-days: 7
 
   deploy-to-hostinger:
     name: Upload Installers to Hostinger
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
 
     steps:
       - name: Download all installer artifacts
