@@ -8,20 +8,19 @@ on:
 
 jobs:
   build:
+    name: Build (${{ matrix.label }})
     strategy:
-      fail-fast: false
       matrix:
         include:
-          - platform: 'ubuntu-22.04'
+          - platform: ubuntu-22.04
+            label: linux
             args: ''
-            label: 'linux'
-          - platform: 'windows-latest'
-            args: ''
-            label: 'windows'
-          - platform: 'macos-latest'
+          - platform: windows-latest
+            label: windows
+            args: '--target x86_64-pc-windows-msvc'
+          - platform: macos-latest
+            label: macos
             args: '--target universal-apple-darwin'
-            label: 'macos'
-
     runs-on: ${{ matrix.platform }}
 
     steps:
@@ -140,3 +139,4 @@ jobs:
           script: |
             echo "=== Installers in public/downloads/ ==="
             ls -lh ~/domains/vultacore.techprogression.com/nodejs/public/downloads/ 2>/dev/null || echo "Directory empty or missing"
+
