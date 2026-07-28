@@ -24,3 +24,5 @@ venv/
 .pytest_cache/
 
 Added actions-runner/*.tar.gz
+analytics-engine/target/
+desktop-app/src-tauri/target/
