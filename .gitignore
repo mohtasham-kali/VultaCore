@@ -26,3 +26,4 @@ venv/
 Added actions-runner/*.tar.gz
 analytics-engine/target/
 desktop-app/src-tauri/target/
+web-dashboard/.next/cache/
