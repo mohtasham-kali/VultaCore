@@ -28,3 +28,4 @@ analytics-engine/target/
 desktop-app/src-tauri/target/
 web-dashboard/.next/cache/
 web-dashboard/.next/cache/
+actions-runner/actions-runner-linux-x64-*.tar.gz
