@@ -75,14 +75,24 @@ let BillingService = BillingService_1 = class BillingService {
         this.appUrl = this.config.get('APP_URL', 'http://localhost:3000');
     }
     async createCheckoutSession(planName, userId, userEmail) {
-        if (!this.lsApiKey || !this.lsStoreId || planName.toLowerCase() === 'free') {
-            this.logger.log(`Direct plan update mode: user=${userId} plan=${planName}`);
+        if (planName.toLowerCase() === 'free') {
+            this.logger.log(`Direct plan update mode (free tier): user=${userId} plan=${planName}`);
             await this.usersService.updatePlan(userId, planName);
             this.eventsGateway.emitSubscriptionUpdated(userId, planName);
             return {
                 url: `${this.appUrl}/subscription?upgraded=true`,
                 newPlan: planName,
             };
+        }
+        if (!this.lsApiKey || !this.lsStoreId) {
+            const missing = [];
+            if (!this.lsApiKey)
+                missing.push('LS_API_KEY');
+            if (!this.lsStoreId)
+                missing.push('LS_STORE_ID');
+            const msg = `Missing Lemon Squeezy configuration: ${missing.join(', ')}`;
+            this.logger.error(msg);
+            throw new Error(msg);
         }
         const plan = await this.plansService.findByName(planName);
         const variantId = plan.variantId;

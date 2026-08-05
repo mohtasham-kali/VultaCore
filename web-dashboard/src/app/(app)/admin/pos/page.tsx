@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { CreditCard, Search, ShieldPlus, ChevronRight, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { startUpgrade } from "@/lib/payments";
 
 import { API_BASE_URL } from "@/lib/constants";
 
@@ -32,24 +33,13 @@ export default function SalesPOSTerminal() {
     u.email?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleManualSubscription = async () => {
+  const handleUpgrade = async () => {
     if (!selectedUser) return;
     setIsProcessing(true);
-    
     try {
-      await fetch(`${API_BASE_URL}/users/${selectedUser.id}/plan`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: selectedPlan }),
-      });
-      alert(`Manual upgrade successful! ${selectedUser.username} is now on the ${selectedPlan} tier.`);
-      setSelectedUser(null);
-      // Refresh list
-      const res = await fetch(`${API_BASE_URL}/users`);
-      const data = await res.json();
-      setUsers(Array.isArray(data) ? data : []);
+      await startUpgrade(selectedPlan, selectedUser.id, selectedUser.email);
     } catch (err) {
-      console.error("POS Error:", err);
+      console.error("Upgrade error:", err);
     } finally {
       setIsProcessing(false);
     }
@@ -139,7 +129,7 @@ export default function SalesPOSTerminal() {
             </div>
 
             <button 
-              onClick={handleManualSubscription}
+              onClick={handleUpgrade}
               disabled={isProcessing}
               className="w-full bg-gradient-to-r from-purple-500 to-blue-500 py-4 rounded-2xl text-white font-bold text-lg shadow-xl shadow-purple-500/20 hover:scale-[1.02] transition-all flex items-center justify-center gap-3 mt-12 group"
             >
