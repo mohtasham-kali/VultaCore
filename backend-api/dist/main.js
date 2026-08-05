@@ -36,10 +36,18 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const core_1 = require("@nestjs/core");
 const fs = __importStar(require("fs"));
 const app_module_1 = require("./app.module");
+const cookieParser = __importStar(require("cookie-parser"));
+const csurf = __importStar(require("csurf"));
 async function bootstrap() {
     try {
         const app = await core_1.NestFactory.create(app_module_1.AppModule, {
             rawBody: true,
+        });
+        app.use(cookieParser());
+        app.use(csurf({ cookie: true }));
+        app.use((req, res, next) => {
+            res.cookie('XSRF-TOKEN', req.csrfToken ? req.csrfToken() : '', { httpOnly: false });
+            next();
         });
         app.enableCors();
         app.setGlobalPrefix('api');

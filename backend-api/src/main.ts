@@ -1,12 +1,23 @@
 import { NestFactory } from '@nestjs/core';
 import * as fs from 'fs';
 import { AppModule } from './app.module';
+import * as cookieParser from 'cookie-parser';
+import * as csurf from 'csurf';
 
 async function bootstrap() {
   try {
     const app = await NestFactory.create(AppModule, {
       // Capture raw body buffer — required for Lemon Squeezy webhook HMAC verification
       rawBody: true,
+    });
+    // Security middlewares
+    app.use(cookieParser());
+    // csurf expects the CSRF token to be sent in a header (e.g., 'x-csrf-token')
+    app.use(csurf({ cookie: true }));
+    // Expose CSRF token to clients (e.g., via response locals or a dedicated endpoint)
+    app.use((req: any, res: any, next: any) => {
+      res.cookie('XSRF-TOKEN', req.csrfToken ? req.csrfToken() : '', { httpOnly: false });
+      next();
     });
     app.enableCors();
     app.setGlobalPrefix('api');

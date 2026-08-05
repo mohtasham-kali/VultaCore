@@ -7,6 +7,7 @@ import { useAuth } from "@/context/AuthContext";
 import { API_BASE_URL } from "@/lib/constants";
 import { io, Socket } from "socket.io-client";
 import { useSearchParams } from "next/navigation";
+import { PaymentModal } from "@/components/pricing/PaymentModal";
 
 const PLANS = [
   {
@@ -94,6 +95,10 @@ function SubscriptionPageClient() {
   const [justUpgraded, setJustUpgraded] = useState(false);
   const [isPolling, setIsPolling] = useState(false);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Payment modal state
+  const [modalOpen, setModalOpen] = useState(false);
+  const [pendingPlan, setPendingPlan] = useState<{ id: string; name: string; price: string } | null>(null);
 
   // Fetch current plan from backend
   const fetchCurrentPlan = async (): Promise<string | null> => {
@@ -189,7 +194,17 @@ function SubscriptionPageClient() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
-  const handleUpgrade = async (planId: string, planName: string) => {
+  /** Called when the PaymentModal successfully processes payment */
+  const handlePaymentSuccess = (planName: string) => {
+    setCurrentPlan(planName);
+    setUpgradingPlan(null);
+    setJustUpgraded(true);
+    setModalOpen(false);
+    setPendingPlan(null);
+    setTimeout(() => setJustUpgraded(false), 6000);
+  };
+
+  const handleUpgrade = async (planId: string, planName: string, planPrice: string) => {
     if (planId === "enterprise") {
       window.location.href = "mailto:sales@vultacore.com?subject=Enterprise Plan Inquiry";
       return;
@@ -199,48 +214,38 @@ function SubscriptionPageClient() {
     if (planName.toLowerCase() === currentPlan.toLowerCase()) return;
 
     if (!user?.id || !user?.email) {
-      alert("Please log in to upgrade your plan.");
+      alert("Please log in to manage your subscription.");
       return;
     }
 
-    try {
-      setUpgradingPlan(planId);
-      const res = await fetch(`${API_BASE_URL}/billing/checkout`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          planName,
-          userId: user.id,
-          userEmail: user.email,
-        }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || "Failed to create checkout session.");
-      }
-
-      const { checkoutUrl, newPlan } = await res.json();
-
-      // If backend returned a newPlan (Free/direct mode), update UI immediately
-      if (newPlan) {
-        setCurrentPlan(newPlan);
+    // For "Free" downgrade — no payment needed, update directly
+    if (planName.toLowerCase() === "free") {
+      try {
+        setUpgradingPlan(planId);
+        const res = await fetch(`${API_BASE_URL}/billing/checkout`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ planName, userId: user.id, userEmail: user.email }),
+        });
+        if (!res.ok) throw new Error((await res.json()).message || "Failed.");
+        const { checkoutUrl, newPlan } = await res.json();
+        if (newPlan) {
+          handlePaymentSuccess(newPlan);
+          const url = new URL(checkoutUrl, window.location.origin);
+          window.history.replaceState({}, "", url.pathname + url.search);
+        }
+      } catch (err: unknown) {
+        console.error("Downgrade Error:", err);
+        alert(`Downgrade failed: ${(err as Error).message}`);
+      } finally {
         setUpgradingPlan(null);
-        setJustUpgraded(true);
-        setTimeout(() => setJustUpgraded(false), 5000);
-        // Navigate to subscription page with upgraded flag (relative-safe)
-        const url = new URL(checkoutUrl, window.location.origin);
-        window.history.replaceState({}, "", url.pathname + url.search);
-        return;
       }
-
-      // For Lemon Squeezy hosted checkout — redirect to payment page
-      window.location.href = checkoutUrl;
-    } catch (err: unknown) {
-      console.error("Checkout Error:", err);
-      alert(`Checkout failed: ${(err as Error).message}`);
-      setUpgradingPlan(null);
+      return;
     }
+
+    // For paid plans — open the payment modal
+    setPendingPlan({ id: planId, name: planName, price: planPrice });
+    setModalOpen(true);
   };
 
   return (
@@ -323,6 +328,22 @@ function SubscriptionPageClient() {
           </div>
         )}
       </div>
+
+      {/* Payment Modal */}
+      {pendingPlan && (
+        <PaymentModal
+          isOpen={modalOpen}
+          onClose={() => {
+            setModalOpen(false);
+            setPendingPlan(null);
+          }}
+          planName={pendingPlan.name}
+          planPrice={pendingPlan.price}
+          userId={user?.id}
+          userEmail={user?.email ?? undefined}
+          onSuccess={handlePaymentSuccess}
+        />
+      )}
 
       {/* Plan Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
@@ -409,7 +430,7 @@ function SubscriptionPageClient() {
 
               {/* CTA Button */}
               <button
-                onClick={() => handleUpgrade(plan.id, plan.name)}
+                onClick={() => handleUpgrade(plan.id, plan.name, plan.price)}
                 disabled={isCurrentPlan || isLoading || isPolling}
                 className={cn(
                   "w-full py-4 rounded-2xl font-bold transition-all duration-300 flex items-center justify-center gap-2 relative z-10",

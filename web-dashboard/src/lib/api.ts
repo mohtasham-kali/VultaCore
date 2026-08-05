@@ -1,5 +1,25 @@
 import { API_BASE_URL } from './constants';
 
+// Helper to read CSRF token from cookie (set by backend)
+function getCsrfToken(): string | undefined {
+  const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : undefined;
+}
+
+// Wrapper around fetch that automatically adds CSRF token for state‑changing requests
+async function secureFetch(input: RequestInfo, init: RequestInit = {}): Promise<Response> {
+  const method = (init.method || 'GET').toUpperCase();
+  // For unsafe methods, attach the CSRF token header
+  if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(method)) {
+    const token = getCsrfToken();
+    init.headers = {
+      ...(init.headers || {}),
+      'x-csrf-token': token || '',
+    };
+  }
+  return fetch(input, init);
+}
+
 export async function fetchPosts(type?: 'dev' | 'cyber') {
   const url = type ? `${API_BASE_URL}/forum?type=${type}` : `${API_BASE_URL}/forum`;
   const res = await fetch(url, { cache: 'no-store' });
@@ -12,7 +32,7 @@ export async function fetchPostDetail(id: string) {
 }
 
 export async function createComment(postId: string, content: string) {
-  const res = await fetch(`${API_BASE_URL}/forum/${postId}/comments`, {
+  const res = await secureFetch(`${API_BASE_URL}/forum/${postId}/comments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ content }),
@@ -21,14 +41,14 @@ export async function createComment(postId: string, content: string) {
 }
 
 export async function likePost(postId: string) {
-  const res = await fetch(`${API_BASE_URL}/forum/${postId}/like`, {
+  const res = await secureFetch(`${API_BASE_URL}/forum/${postId}/like`, {
     method: 'POST',
   });
   return res.json();
 }
 
 export async function likeComment(commentId: string) {
-  const res = await fetch(`${API_BASE_URL}/forum/comments/${commentId}/like`, {
+  const res = await secureFetch(`${API_BASE_URL}/forum/comments/${commentId}/like`, {
     method: 'POST',
   });
   return res.json();
@@ -46,7 +66,7 @@ export async function syncOfflineChats() {
   const remaining = [];
   for (const chat of pending) {
     try {
-      await fetch(`${API_BASE_URL}/bots/${chat.id}/execute`, {
+      await secureFetch(`${API_BASE_URL}/bots/${chat.id}/execute`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: chat.prompt, userId: chat.userId, context: chat.context }),
@@ -66,7 +86,7 @@ if (typeof window !== 'undefined') {
 export async function executeBot(id: string, prompt: string, userId: string, context?: string) {
   try {
     // Try the network first
-    const res = await fetch(`${API_BASE_URL}/bots/${id}/execute`, {
+    const res = await secureFetch(`${API_BASE_URL}/bots/${id}/execute`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ prompt, userId, context }),
@@ -115,17 +135,17 @@ export async function executeBot(id: string, prompt: string, userId: string, con
 
 
 export async function fetchBotHistory(botId: string, userId: string) {
-  const res = await fetch(`${API_BASE_URL}/bots/${botId}/history?userId=${userId}`, { cache: 'no-store' });
+  const res = await secureFetch(`${API_BASE_URL}/bots/${botId}/history?userId=${userId}`, { cache: 'no-store' });
   return res.json();
 }
 
 export async function fetchAnalytics(userId: string) {
-  const res = await fetch(`${API_BASE_URL}/analytics/${userId}`, { cache: 'no-store' });
+  const res = await secureFetch(`${API_BASE_URL}/analytics/${userId}`, { cache: 'no-store' });
   return res.json();
 }
 
 export async function fetchBots() {
-  const res = await fetch(`${API_BASE_URL}/bots`, { cache: 'no-store' });
+  const res = await secureFetch(`${API_BASE_URL}/bots`, { cache: 'no-store' });
   return res.json();
 }
 
@@ -137,7 +157,7 @@ export async function createPost(postData: {
   userId: string,
   severity?: 'low' | 'medium' | 'high' | 'critical'
 }) {
-  const res = await fetch(`${API_BASE_URL}/forum`, {
+  const res = await secureFetch(`${API_BASE_URL}/forum`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(postData),

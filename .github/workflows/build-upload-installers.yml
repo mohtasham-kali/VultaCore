@@ -70,21 +70,78 @@ jobs:
           path: dist-installers/
           retention-days: 7
 
+  build-windows:
+    name: Build Windows Installers
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install desktop-app dependencies
+        run: npm install
+        working-directory: desktop-app
+      - name: Build Tauri app executable & installers (Windows)
+        run: npx tauri build
+        working-directory: desktop-app
+      - name: Collect built Windows installers
+        run: |
+          mkdir -p dist-installers
+          copy desktop-app\src-tauri\target\release\bundle\msi\*.msi dist-installers\ || true
+          copy desktop-app\src-tauri\target\release\bundle\exe\*.exe dist-installers\ || true
+          dir dist-installers
+      - name: Upload installers as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-windows
+          path: dist-installers/
+          retention-days: 7
+
+  build-macos:
+    name: Build macOS Installers
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install desktop-app dependencies
+        run: npm install
+        working-directory: desktop-app
+      - name: Build Tauri app executable & installers (macOS)
+        run: npx tauri build
+        working-directory: desktop-app
+      - name: Collect built macOS installers
+        run: |
+          mkdir -p dist-installers
+          cp desktop-app/src-tauri/target/release/bundle/dmg/*.dmg dist-installers/ || true
+          cp desktop-app/src-tauri/target/release/bundle/macos/*.pkg dist-installers/ || true
+          ls -lh dist-installers/
+      - name: Upload installers as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-macos
+          path: dist-installers/
+          retention-days: 7
+
   deploy-to-hostinger:
     name: Upload Installers to Hostinger
-    needs: build
+    needs: [build, build-windows, build-macos]
     runs-on: self-hosted
-
     steps:
       - name: Download all installer artifacts
         uses: actions/download-artifact@v4
         with:
           path: all-installers
           merge-multiple: true
-
       - name: List collected installers
         run: ls -lh all-installers/
-
       - name: Upload installers to Hostinger via SCP
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -95,7 +152,6 @@ jobs:
           source: "all-installers/*"
           target: "~/domains/vultacore.techprogression.com/nodejs/public/downloads/"
           strip_components: 1
-
       - name: Verify upload on Hostinger
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -106,4 +162,3 @@ jobs:
           script: |
             echo "=== Installers in public/downloads/ ==="
             ls -lh ~/domains/vultacore.techprogression.com/nodejs/public/downloads/ 2>/dev/null || echo "Directory empty or missing"
-
