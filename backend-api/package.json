@@ -15,6 +15,7 @@
     "start:prod": "node dist/main.js",
     "seed": "ts-node src/seed.ts",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
+    "typecheck": "tsc --noEmit",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",

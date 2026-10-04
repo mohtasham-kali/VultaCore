@@ -14,6 +14,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web-dashboard
 
     steps:
       - name: Checkout
@@ -25,9 +28,7 @@ jobs:
           node-version: '22'
 
       - name: Install dependencies
-        run: |
-          npm install
-          rm -rf .next/
+        run: npm install
 
       - name: Type check
         run: npx tsc --noEmit
