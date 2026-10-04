@@ -9,7 +9,7 @@ on:
 jobs:
   build:
     name: Build Linux Installers
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -72,7 +72,7 @@ jobs:
 
   build-windows:
     name: Build Windows Installers
-    runs-on: self-hosted
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - name: Setup Node.js
@@ -102,7 +102,7 @@ jobs:
 
   build-macos:
     name: Build macOS Installers
-    runs-on: self-hosted
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - name: Setup Node.js
@@ -133,7 +133,7 @@ jobs:
   deploy-to-hostinger:
     name: Upload Installers to Hostinger
     needs: [build, build-windows, build-macos]
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - name: Download all installer artifacts
         uses: actions/download-artifact@v4
