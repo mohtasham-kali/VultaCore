@@ -20,31 +20,58 @@ export default function AppLayout({
   useEffect(() => {
     if (authLoading) return;
 
-    fetch(`${API_BASE_URL}/settings`)
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to fetch settings');
-        return res.json();
-      })
-      .then(settings => {
+    const fetchSettings = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/settings`);
+        
+        if (!res.ok) {
+          const errorText = await res.text();
+          console.error(
+            `[Settings API Error] Status: ${res.status}, ` +
+            `Response: ${errorText || '(empty)'}, ` +
+            `URL: ${API_BASE_URL}/settings`
+          );
+          return;
+        }
+        
+        const settings = await res.json();
+        
         if (settings.maintenanceMode === 'true') {
           setIsMaintenanceMode(true);
-          fetch(`${API_BASE_URL}/users`)
-            .then(res => {
-              if (!res.ok) throw new Error('Failed to fetch users');
-              return res.json();
-            })
-            .then(users => {
-              const dbUser = users.find((u: any) => u.email === user?.email);
-              if (dbUser && dbUser.isAdmin) {
-                setIsAdmin(true);
-              } else {
-                window.location.href = '/maintenance';
-              }
-            })
-            .catch(err => console.error(err));
+          
+          try {
+            const usersRes = await fetch(`${API_BASE_URL}/users`);
+            
+            if (!usersRes.ok) {
+              console.error(
+                `[Users API Error] Status: ${usersRes.status}, ` +
+                `URL: ${API_BASE_URL}/users`
+              );
+              return;
+            }
+            
+            const users = await usersRes.json();
+            const dbUser = users.find((u: any) => u.email === user?.email);
+            
+            if (dbUser && dbUser.isAdmin) {
+              setIsAdmin(true);
+            } else {
+              window.location.href = '/maintenance';
+            }
+          } catch (error) {
+            console.error('[Users Fetch Error]', error);
+          }
         }
-      })
-      .catch(err => console.error(err));
+      } catch (error) {
+        console.error(
+          '[Settings Fetch Error]',
+          error,
+          `API_BASE_URL: ${API_BASE_URL}`
+        );
+      }
+    };
+
+    fetchSettings();
   }, [user, authLoading]);
 
   return (

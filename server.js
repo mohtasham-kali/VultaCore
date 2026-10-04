@@ -35,11 +35,39 @@ let AI_PORT = parseInt(process.env.AI_PORT || '8001', 10);
  
 let bootLogs = [];
 let runningChildren = [];
- 
+
 let backendDependencyPromise = null;
 let bootStarted = false;
- 
- 
+
+function buildRuntimeEnv(extra = {}) {
+    const nodeBinDir = process.execPath
+        ? path.dirname(process.execPath)
+        : null;
+
+    const pathEntries = [
+        nodeBinDir,
+        '/opt/alt/alt-nodejs24/root/usr/bin',
+        '/opt/alt/alt-nodejs22/root/usr/bin',
+        '/opt/alt/alt-nodejs20/root/usr/bin',
+        '/usr/local/bin',
+        '/usr/bin',
+        '/bin'
+    ];
+
+    if (process.env.PATH) {
+        pathEntries.push(...process.env.PATH.split(path.delimiter));
+    }
+
+    return {
+        ...process.env,
+        ...extra,
+        PATH: [
+            ...new Set(pathEntries.filter(Boolean))
+        ].join(path.delimiter)
+    };
+}
+
+
 // ═══════════════════════════════════════════════════════════════════════════
 // LOGGING
 // ═══════════════════════════════════════════════════════════════════════════
@@ -950,25 +978,15 @@ async function ensureBackendDependencies() {
  
                             timeout: 240000,
  
-                            env: {
-                                ...process.env,
+                            env: buildRuntimeEnv({
                                 NODE_ENV: 'production'
-                            }
+                            })
  
                         }
                     );
- 
-                    if (requirement.ok()) {
- 
-                        log(
-                            `✅ ${requirement.name} installed successfully!`
-                        );
- 
-                        installed = true;
- 
-                        break;
-                    }
- 
+
+                    installed = true;
+
                     lastError =
                         new Error(
                             `npm finished but ${requirement.name} ` +
@@ -1955,11 +1973,8 @@ async function bootEngines() {
                 ],
  
                 DASH_PORT,
- 
                 DASHBOARD_DIR,
- 
                 {},
- 
                 3000
             );
  
@@ -2046,4 +2061,3 @@ server.on(
         process.exit(1);
     }
 );
- 
