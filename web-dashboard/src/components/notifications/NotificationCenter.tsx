@@ -6,6 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 
 import { API_BASE_URL } from "@/lib/constants";
+import { secureFetch } from "@/lib/api";
 
 interface Notification {
   id: string;
@@ -58,7 +59,7 @@ export function NotificationCenter() {
 
   const markAsRead = async (id: string) => {
     try {
-      await fetch(`${API_BASE_URL}/notifications/${id}/read`, { method: 'PATCH' });
+      await secureFetch(`${API_BASE_URL}/notifications/${id}/read`, { method: 'PATCH' });
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
     } catch (err) {
       console.error("Failed to mark as read:", err);
@@ -68,7 +69,7 @@ export function NotificationCenter() {
   const markAllAsRead = async () => {
     if (!user) return;
     try {
-      await fetch(`${API_BASE_URL}/notifications/user/${user.id}/read-all`, { method: 'PATCH' });
+      await secureFetch(`${API_BASE_URL}/notifications/user/${user.id}/read-all`, { method: 'PATCH' });
       setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
     } catch (err) {
       console.error("Failed to mark all as read:", err);
@@ -77,7 +78,7 @@ export function NotificationCenter() {
 
   const deleteNotification = async (id: string) => {
     try {
-      await fetch(`${API_BASE_URL}/notifications/${id}`, { method: 'DELETE' });
+      await secureFetch(`${API_BASE_URL}/notifications/${id}`, { method: 'DELETE' });
       setNotifications(prev => prev.filter(n => n.id !== id));
     } catch (err) {
       console.error("Failed to delete notification:", err);

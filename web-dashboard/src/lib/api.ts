@@ -7,7 +7,7 @@ function getCsrfToken(): string | undefined {
 }
 
 // Wrapper around fetch that automatically adds CSRF token for state‑changing requests
-async function secureFetch(input: RequestInfo, init: RequestInit = {}): Promise<Response> {
+export async function secureFetch(input: RequestInfo, init: RequestInit = {}): Promise<Response> {
   const method = (init.method || 'GET').toUpperCase();
   // For unsafe methods, attach the CSRF token header
   if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(method)) {

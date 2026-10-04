@@ -14,9 +14,17 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppController = void 0;
 const common_1 = require("@nestjs/common");
+const crypto_1 = require("crypto");
 const app_service_1 = require("./app.service");
 const chat_gateway_1 = require("./chat/chat.gateway");
 const users_service_1 = require("./users/users.service");
+function authMatches(provided, expected) {
+    if (!provided || !expected)
+        return false;
+    const a = Buffer.from(provided);
+    const b = Buffer.from(expected);
+    return a.length === b.length && (0, crypto_1.timingSafeEqual)(a, b);
+}
 let AppController = class AppController {
     appService;
     chatGateway;
@@ -29,13 +37,16 @@ let AppController = class AppController {
     getHello() {
         return this.appService.getHello();
     }
-    async handleRevenueCatWebhook(payload) {
+    async handleLemonSqueezyWebhook(payload, authHeader) {
+        if (!authMatches(authHeader, process.env.LEMONSQUEEZY_WEBHOOK_AUTH)) {
+            throw new common_1.UnauthorizedException();
+        }
         if (!payload?.event)
             return { status: 'ignored' };
         const appUserId = payload.event.app_user_id;
         const type = payload.event.type;
-        const productId = payload.event.product_id;
-        console.log(`[RevenueCat Webhook] User ${appUserId} triggered ${type} for ${productId}`);
+        const productId = String(payload.event.product_id ?? '');
+        console.log(`[LemonSqueez Webhook] User ${appUserId} triggered ${type} for ${productId}`);
         if (type === 'INITIAL_PURCHASE' || type === 'RENEWAL') {
             let rank = 'Free';
             if (productId.includes('standard'))
@@ -56,12 +67,13 @@ __decorate([
     __metadata("design:returntype", String)
 ], AppController.prototype, "getHello", null);
 __decorate([
-    (0, common_1.Post)('webhooks/revenuecat'),
+    (0, common_1.Post)('webhooks/lemonsqueezy'),
     __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Headers)('authorization')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
+    __metadata("design:paramtypes", [Object, String]),
     __metadata("design:returntype", Promise)
-], AppController.prototype, "handleRevenueCatWebhook", null);
+], AppController.prototype, "handleLemonSqueezyWebhook", null);
 exports.AppController = AppController = __decorate([
     (0, common_1.Controller)(),
     __metadata("design:paramtypes", [app_service_1.AppService,

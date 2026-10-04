@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '@/lib/constants';
+import { secureFetch } from "@/lib/api";
 
 /**
  * Initiates a Lemon Squeezy checkout session for a plan upgrade.
@@ -7,7 +8,7 @@ import { API_BASE_URL } from '@/lib/constants';
  */
 export async function startUpgrade(planName: string, userId: string, userEmail: string): Promise<void> {
   try {
-    const response = await fetch(`${API_BASE_URL}/billing/checkout`, {
+    const response = await secureFetch(`${API_BASE_URL}/billing/checkout`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ planName, userId, userEmail }),

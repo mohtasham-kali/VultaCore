@@ -5,6 +5,7 @@ import { User as UserIcon, Search, MoreVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 import { API_BASE_URL } from "@/lib/constants";
+import { secureFetch } from "@/lib/api";
 
 interface User {
   id: string;
@@ -47,7 +48,7 @@ export default function AdminUsersPage() {
 
   const handleUpdateRank = async (userId: string, newRank: string) => {
     try {
-      await fetch(`${API_BASE_URL}/users/${userId}/plan`, {
+      await secureFetch(`${API_BASE_URL}/users/${userId}/plan`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ plan: newRank }),

@@ -5,6 +5,7 @@ import { Check, Loader2, Sparkles, Zap, ExternalLink, RefreshCw } from "lucide-r
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 import { API_BASE_URL } from "@/lib/constants";
+import { secureFetch } from "@/lib/api";
 import { io, Socket } from "socket.io-client";
 import { useSearchParams } from "next/navigation";
 import { PaymentModal } from "@/components/pricing/PaymentModal";
@@ -222,7 +223,7 @@ function SubscriptionPageClient() {
     if (planName.toLowerCase() === "free") {
       try {
         setUpgradingPlan(planId);
-        const res = await fetch(`${API_BASE_URL}/billing/checkout`, {
+        const res = await secureFetch(`${API_BASE_URL}/billing/checkout`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ planName, userId: user.id, userEmail: user.email }),

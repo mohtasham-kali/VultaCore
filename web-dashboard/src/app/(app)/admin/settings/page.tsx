@@ -5,6 +5,7 @@ import { Settings, Save, Server, ShieldCheck, Mail, Database } from "lucide-reac
 import { cn } from "@/lib/utils";
 
 import { API_BASE_URL } from "@/lib/constants";
+import { secureFetch } from "@/lib/api";
 
 export default function AdminSettingsPage() {
   const [maintenanceMode, setMaintenanceMode] = useState(false);
@@ -30,7 +31,7 @@ export default function AdminSettingsPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await fetch(`${API_BASE_URL}/settings`, {
+      await secureFetch(`${API_BASE_URL}/settings`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ maintenanceMode: maintenanceMode.toString() }),

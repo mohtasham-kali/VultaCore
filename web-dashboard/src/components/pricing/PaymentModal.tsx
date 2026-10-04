@@ -19,6 +19,7 @@ interface GooglePayWindow extends Window {
 }
 
 import { API_BASE_URL } from "@/lib/constants";
+import { secureFetch } from "@/lib/api";
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -62,7 +63,7 @@ export function PaymentModal({
 
     try {
       // Primary: Direct PATCH /users/:id/plan
-      const response = await fetch(`${API_BASE_URL}/users/${userId}/plan`, {
+      const response = await secureFetch(`${API_BASE_URL}/users/${userId}/plan`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ plan: planName }),
@@ -70,7 +71,7 @@ export function PaymentModal({
 
       if (!response.ok) {
         // Fallback: POST /billing/checkout
-        const checkoutRes = await fetch(`${API_BASE_URL}/billing/checkout`, {
+        const checkoutRes = await secureFetch(`${API_BASE_URL}/billing/checkout`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
