@@ -1,8 +1,13 @@
 import { NestFactory } from '@nestjs/core';
 import * as fs from 'fs';
 import { AppModule } from './app.module';
-import * as cookieParser from 'cookie-parser';
-import * as csurf from 'csurf';
+import cookieParser from 'cookie-parser';
+import csurf from 'csurf';
+
+// External services that call us cannot send a CSRF token.
+// POST /api/billing/webhook is authenticated by the Lemon Squeezy HMAC
+// signature (x-signature) checked in BillingService.handleWebhook().
+const CSRF_EXEMPT_PATHS = ['/api/billing/webhook'];
 
 async function bootstrap() {
   try {
@@ -13,10 +18,18 @@ async function bootstrap() {
     // Security middlewares
     app.use(cookieParser());
     // csurf expects the CSRF token to be sent in a header (e.g., 'x-csrf-token')
-    app.use(csurf({ cookie: true }));
-    // Expose CSRF token to clients (e.g., via response locals or a dedicated endpoint)
+    const csrfProtection = csurf({ cookie: true });
     app.use((req: any, res: any, next: any) => {
-      res.cookie('XSRF-TOKEN', req.csrfToken ? req.csrfToken() : '', { httpOnly: false });
+      if (CSRF_EXEMPT_PATHS.includes(req.path.replace(/\/+$/, ''))) {
+        return next();
+      }
+      return csrfProtection(req, res, next);
+    });
+    // Expose CSRF token to clients (only on routes where csurf ran)
+    app.use((req: any, res: any, next: any) => {
+      if (typeof req.csrfToken === 'function') {
+        res.cookie('XSRF-TOKEN', req.csrfToken(), { httpOnly: false });
+      }
       next();
     });
     app.enableCors();

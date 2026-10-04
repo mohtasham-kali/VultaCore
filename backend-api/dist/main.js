@@ -32,21 +32,33 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const core_1 = require("@nestjs/core");
 const fs = __importStar(require("fs"));
 const app_module_1 = require("./app.module");
-const cookieParser = __importStar(require("cookie-parser"));
-const csurf = __importStar(require("csurf"));
+const cookie_parser_1 = __importDefault(require("cookie-parser"));
+const csurf_1 = __importDefault(require("csurf"));
+const CSRF_EXEMPT_PATHS = ['/api/billing/webhook'];
 async function bootstrap() {
     try {
         const app = await core_1.NestFactory.create(app_module_1.AppModule, {
             rawBody: true,
         });
-        app.use(cookieParser());
-        app.use(csurf({ cookie: true }));
+        app.use((0, cookie_parser_1.default)());
+        const csrfProtection = (0, csurf_1.default)({ cookie: true });
         app.use((req, res, next) => {
-            res.cookie('XSRF-TOKEN', req.csrfToken ? req.csrfToken() : '', { httpOnly: false });
+            if (CSRF_EXEMPT_PATHS.includes(req.path.replace(/\/+$/, ''))) {
+                return next();
+            }
+            return csrfProtection(req, res, next);
+        });
+        app.use((req, res, next) => {
+            if (typeof req.csrfToken === 'function') {
+                res.cookie('XSRF-TOKEN', req.csrfToken(), { httpOnly: false });
+            }
             next();
         });
         app.enableCors();
