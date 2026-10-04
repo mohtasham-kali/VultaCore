@@ -1,668 +1,1972 @@
 #!/usr/bin/env node
+
 /**
  * VultaCore Master Proxy
- * Zero external dependencies — uses only Node built-ins.
- * Passenger must see this process bind to process.env.PORT quickly.
+ *
+ * Hostinger Cloud / Passenger compatible.
+ *
+ * IMPORTANT:
+ * - No external Node dependencies required by this file.
+ * - Automatically repairs missing backend cookie-parser.
+ * - Prevents duplicate AI Engine processes on port 8001.
+ * - Keeps Backend, Dashboard and AI behind one public port.
  */
-const http  = require('http');
-const https = require('https');
+
+const http = require('http');
 const { spawn, execSync } = require('child_process');
-const path  = require('path');
-const fs    = require('fs');
+const path = require('path');
+const fs = require('fs');
+const net = require('net');
 
-const rootDir    = __dirname;
-const masterPort = process.env.PORT || 3000;
+const rootDir = __dirname;
+const masterPort = parseInt(process.env.PORT || '3000', 10);
 
-// Child ports — assigned dynamically on boot to prevent Zombie process EADDRINUSE errors
+const BACKEND_DIR = path.join(rootDir, 'backend-api');
+const BACKEND_ENTRY = path.join(BACKEND_DIR, 'dist', 'main.js');
+
+const DASHBOARD_DIR = path.join(rootDir, 'web-dashboard');
+const AI_DIR = path.join(rootDir, 'ai-services');
+
+const DOWNLOADS_DIR = path.join(rootDir, 'public', 'downloads');
+
 let BACK_PORT = null;
 let DASH_PORT = null;
-let AI_PORT   = null;
-
-function findFreePort() {
-    return new Promise((resolve, reject) => {
-        const net = require('net');
-        const srv = net.createServer();
-        srv.listen(0, '127.0.0.1', () => {
-            const port = srv.address().port;
-            srv.close((err) => err ? reject(err) : resolve(port));
-        });
-        srv.on('error', reject);
-    });
-}
+let AI_PORT = parseInt(process.env.AI_PORT || '8001', 10);
 
 let bootLogs = [];
+let runningChildren = [];
 
-function log(msg) {
-    const line = `[${new Date().toLocaleTimeString()}] ${msg}`;
+let backendDependencyPromise = null;
+let bootStarted = false;
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LOGGING
+// ═══════════════════════════════════════════════════════════════════════════
+
+function log(message) {
+    const line = `[${new Date().toLocaleTimeString()}] ${message}`;
+
     bootLogs.push(line);
-    if (bootLogs.length > 100) bootLogs.shift();
+
+    if (bootLogs.length > 150) {
+        bootLogs.shift();
+    }
+
     console.log(line);
 }
 
-log('Master Proxy Booting...');
+log('════════════════════════════════════════════════════════════');
+log('VultaCore Master Proxy Booting...');
+log(`Root directory: ${rootDir}`);
+log(`Public port: ${masterPort}`);
+log('════════════════════════════════════════════════════════════');
 
-// ─── Built-in HTTP Proxy ────────────────────────────────────────────────────
-function proxyRequest(req, res, targetPort) {
-    const options = {
-        hostname : '127.0.0.1',
-        port     : targetPort,
-        path     : req.url,
-        method   : req.method,
-        headers  : { ...req.headers, host: `127.0.0.1:${targetPort}` }
-    };
 
-    const proxyReq = http.request(options, (proxyRes) => {
-        res.writeHead(proxyRes.statusCode, proxyRes.headers);
-        proxyRes.pipe(res, { end: true });
+// ═══════════════════════════════════════════════════════════════════════════
+// PORT HELPERS
+// ═══════════════════════════════════════════════════════════════════════════
+
+function findFreePort() {
+    return new Promise((resolve, reject) => {
+        const server = net.createServer();
+
+        server.once('error', reject);
+
+        server.listen(0, '127.0.0.1', () => {
+            const address = server.address();
+
+            if (!address || typeof address === 'string') {
+                server.close();
+                reject(new Error('Unable to determine free port'));
+                return;
+            }
+
+            const port = address.port;
+
+            server.close(() => resolve(port));
+        });
     });
-
-    proxyReq.on('error', () => sendBooting(res));
-    req.pipe(proxyReq, { end: true });
 }
 
+
+function isPortListening(port, timeout = 1200) {
+    return new Promise((resolve) => {
+        const socket = new net.Socket();
+
+        let finished = false;
+
+        const finish = (value) => {
+            if (finished) return;
+
+            finished = true;
+
+            try {
+                socket.destroy();
+            } catch (_) {}
+
+            resolve(value);
+        };
+
+        socket.setTimeout(timeout);
+
+        socket.once('connect', () => finish(true));
+        socket.once('error', () => finish(false));
+        socket.once('timeout', () => finish(false));
+
+        try {
+            socket.connect(port, '127.0.0.1');
+        } catch (_) {
+            finish(false);
+        }
+    });
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOOT PAGE
+// ═══════════════════════════════════════════════════════════════════════════
+
 function sendBooting(res) {
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store'
+    });
+
     res.end(`<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="refresh" content="6">
-  <title>VultaCore — Starting</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta http-equiv="refresh" content="6">
+<title>VultaCore — Starting</title>
 
-    body {
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: #050a14;
-      overflow: hidden;
-      font-family: 'Segoe UI', system-ui, sans-serif;
+<style>
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #050a14;
+    overflow: hidden;
+    font-family: Segoe UI, system-ui, sans-serif;
+}
+
+.bg {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(90px);
+    opacity: .18;
+}
+
+.b1 {
+    width: 500px;
+    height: 500px;
+    background: #7c3aed;
+    top: -150px;
+    left: -150px;
+}
+
+.b2 {
+    width: 400px;
+    height: 400px;
+    background: #2563eb;
+    bottom: -120px;
+    right: -120px;
+}
+
+.b3 {
+    width: 300px;
+    height: 300px;
+    background: #0ea5e9;
+    top: 40%;
+    left: 55%;
+}
+
+.wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.stage {
+    width: 220px;
+    height: 220px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+.ring {
+    position: absolute;
+    border-radius: 50%;
+    border: 1.5px solid rgba(139,92,246,.4);
+    animation: pulse 2.4s ease-in-out infinite;
+}
+
+.r1 {
+    width: 130px;
+    height: 130px;
+}
+
+.r2 {
+    width: 170px;
+    height: 170px;
+    animation-delay: .5s;
+}
+
+.r3 {
+    width: 210px;
+    height: 210px;
+    animation-delay: 1s;
+}
+
+.r4 {
+    width: 250px;
+    height: 250px;
+    animation-delay: 1.5s;
+}
+
+.logo {
+    width: 88px;
+    height: 88px;
+    border-radius: 50%;
+    position: relative;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.12);
+    box-shadow: 0 0 50px rgba(139,92,246,.4);
+    animation: breathe 3s ease-in-out infinite;
+}
+
+.logo img {
+    width: 54px;
+    height: 54px;
+    object-fit: contain;
+}
+
+.label {
+    margin-top: 45px;
+    color: rgba(255,255,255,.88);
+    font-size: 1.3rem;
+    font-weight: 700;
+    letter-spacing: .06em;
+}
+
+.sub {
+    margin-top: 8px;
+    color: rgba(148,163,184,.7);
+    font-size: .72rem;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+}
+
+.dots {
+    display: flex;
+    gap: 6px;
+    margin-top: 22px;
+}
+
+.dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #7c3aed;
+    animation: bounce 1.4s infinite;
+}
+
+.dot:nth-child(2) {
+    animation-delay: .2s;
+    background: #6366f1;
+}
+
+.dot:nth-child(3) {
+    animation-delay: .4s;
+    background: #3b82f6;
+}
+
+@keyframes pulse {
+    0%,100% {
+        transform: scale(.88);
+        opacity: .9;
     }
 
-    /* ── Blurred ambient background blobs ── */
-    .bg-blob {
-      position: fixed;
-      border-radius: 50%;
-      filter: blur(90px);
-      opacity: 0.18;
-      animation: blobDrift 8s ease-in-out infinite alternate;
+    50% {
+        transform: scale(1.05);
+        opacity: .5;
     }
-    .bg-blob-1 { width: 500px; height: 500px; background: #7c3aed; top: -150px; left: -150px; animation-delay: 0s; }
-    .bg-blob-2 { width: 400px; height: 400px; background: #2563eb; bottom: -120px; right: -120px; animation-delay: -3s; }
-    .bg-blob-3 { width: 300px; height: 300px; background: #0ea5e9; top: 40%; left: 55%; animation-delay: -6s; }
+}
 
-    @keyframes blobDrift {
-      from { transform: translate(0, 0) scale(1); }
-      to   { transform: translate(30px, 20px) scale(1.08); }
+@keyframes breathe {
+    0%,100% {
+        transform: scale(1);
     }
 
-    /* ── Centre stage ── */
-    .stage {
-      position: relative;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 220px;
-      height: 220px;
+    50% {
+        transform: scale(1.06);
+    }
+}
+
+@keyframes bounce {
+    0%,80%,100% {
+        transform: scale(.7);
+        opacity: .5;
     }
 
-    /* ── Bubble rings ── */
-    .ring {
-      position: absolute;
-      border-radius: 50%;
-      border: 1.5px solid rgba(139, 92, 246, 0.5);
-      animation: ringPulse 2.4s ease-in-out infinite;
+    40% {
+        transform: scale(1.2);
+        opacity: 1;
     }
-    .ring-1 { width: 130px; height: 130px; animation-delay: 0s;    border-color: rgba(139,92,246,0.55); }
-    .ring-2 { width: 170px; height: 170px; animation-delay: 0.5s;  border-color: rgba(99,102,241,0.40); }
-    .ring-3 { width: 210px; height: 210px; animation-delay: 1.0s;  border-color: rgba(59,130,246,0.30); }
-    .ring-4 { width: 250px; height: 250px; animation-delay: 1.5s;  border-color: rgba(14,165,233,0.20); }
-
-    @keyframes ringPulse {
-      0%   { transform: scale(0.88); opacity: 0.9; }
-      50%  { transform: scale(1.05); opacity: 0.5; }
-      100% { transform: scale(0.88); opacity: 0.9; }
-    }
-
-    /* ── Logo container ── */
-    .logo-wrap {
-      position: relative;
-      z-index: 10;
-      width: 88px;
-      height: 88px;
-      border-radius: 50%;
-      background: rgba(255,255,255,0.04);
-      backdrop-filter: blur(16px);
-      border: 1px solid rgba(255,255,255,0.12);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 0 40px rgba(139,92,246,0.35), 0 0 80px rgba(139,92,246,0.15);
-      animation: logoBreath 3s ease-in-out infinite;
-    }
-    .logo-wrap img {
-      width: 54px;
-      height: 54px;
-      object-fit: contain;
-      filter: drop-shadow(0 0 12px rgba(139,92,246,0.6));
-    }
-
-    @keyframes logoBreath {
-      0%, 100% { transform: scale(1);    box-shadow: 0 0 40px rgba(139,92,246,0.35), 0 0 80px rgba(139,92,246,0.15); }
-      50%       { transform: scale(1.06); box-shadow: 0 0 60px rgba(139,92,246,0.55), 0 0 120px rgba(139,92,246,0.25); }
-    }
-
-    /* ── Text beneath ── */
-    .label {
-      margin-top: 48px;
-      text-align: center;
-      color: rgba(255,255,255,0.85);
-      font-size: 1.25rem;
-      font-weight: 700;
-      letter-spacing: 0.06em;
-      text-shadow: 0 0 20px rgba(139,92,246,0.5);
-    }
-    .sublabel {
-      margin-top: 8px;
-      text-align: center;
-      color: rgba(148,163,184,0.7);
-      font-size: 0.72rem;
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-    }
-
-    /* ── Dot spinner ── */
-    .dots {
-      display: flex;
-      gap: 6px;
-      margin-top: 22px;
-      justify-content: center;
-    }
-    .dot {
-      width: 6px; height: 6px;
-      border-radius: 50%;
-      background: #7c3aed;
-      animation: dotBounce 1.4s ease-in-out infinite;
-    }
-    .dot:nth-child(2) { animation-delay: 0.2s; background: #6366f1; }
-    .dot:nth-child(3) { animation-delay: 0.4s; background: #3b82f6; }
-
-    @keyframes dotBounce {
-      0%, 80%, 100% { transform: scale(0.7); opacity: 0.5; }
-      40%            { transform: scale(1.2); opacity: 1; }
-    }
-
-    .wrapper {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-  </style>
+}
+</style>
 </head>
-<body>
-  <div class="bg-blob bg-blob-1"></div>
-  <div class="bg-blob bg-blob-2"></div>
-  <div class="bg-blob bg-blob-3"></div>
 
-  <div class="wrapper">
+<body>
+
+<div class="bg b1"></div>
+<div class="bg b2"></div>
+<div class="bg b3"></div>
+
+<div class="wrapper">
+
     <div class="stage">
-      <div class="ring ring-1"></div>
-      <div class="ring ring-2"></div>
-      <div class="ring ring-3"></div>
-      <div class="ring ring-4"></div>
-      <div class="logo-wrap">
-        <img src="/logo.png" alt="VultaCore" onerror="this.style.display='none';this.parentNode.innerHTML='<span style=\\'font-size:2rem\\'>⚡</span>'">
-      </div>
+
+        <div class="ring r1"></div>
+        <div class="ring r2"></div>
+        <div class="ring r3"></div>
+        <div class="ring r4"></div>
+
+        <div class="logo">
+            <img
+                src="/logo.png"
+                alt="VultaCore"
+                onerror="this.style.display='none';this.parentNode.innerHTML='<span style="font-size:2rem">⚡</span>'"
+            >
+        </div>
+
     </div>
 
     <div class="label">VultaCore</div>
-    <div class="sublabel">Initializing engines…</div>
+    <div class="sub">Initializing engines…</div>
+
     <div class="dots">
-      <div class="dot"></div>
-      <div class="dot"></div>
-      <div class="dot"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
     </div>
-  </div>
+
+</div>
+
 </body>
 </html>`);
 }
 
-// ─── Static Asset Shortcuts (bypass child proxy for speed) ──────────────────
-function tryServeStatic(req, res) {
-    let filePath = null;
 
-    if (req.url.startsWith('/_next/static/')) {
-        filePath = path.join(rootDir, 'web-dashboard', '.next', 'static',
-                            req.url.replace('/_next/static/', ''));
-    } else if (/\.(png|jpg|jpeg|gif|svg|ico|webp|woff2?|json|exe|dmg|AppImage|deb)$/i.test(req.url)) {
-        filePath = path.join(rootDir, 'web-dashboard', 'public', req.url);
-    }
+// ═══════════════════════════════════════════════════════════════════════════
+// HTTP PROXY
+// ═══════════════════════════════════════════════════════════════════════════
 
-    if (filePath && fs.existsSync(filePath)) {
-        const ext = path.extname(filePath).toLowerCase();
-        const mime = {
-            '.css':'text/css', '.js':'text/javascript', '.png':'image/png',
-            '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.svg':'image/svg+xml',
-            '.ico':'image/x-icon', '.webp':'image/webp',
-            '.woff':'font/woff', '.woff2':'font/woff2',
-            '.json':'application/json'
-        };
-        res.writeHead(200, { 'Content-Type': mime[ext] || 'application/octet-stream' });
-        fs.createReadStream(filePath).pipe(res);
-        return true;
-    }
-    return false;
+function proxyRequest(req, res, targetPort) {
+
+    const options = {
+        hostname: '127.0.0.1',
+        port: targetPort,
+        path: req.url,
+        method: req.method,
+
+        headers: {
+            ...req.headers,
+            host: `127.0.0.1:${targetPort}`
+        }
+    };
+
+    const proxyReq = http.request(options, (proxyRes) => {
+
+        res.writeHead(
+            proxyRes.statusCode || 502,
+            proxyRes.headers
+        );
+
+        proxyRes.pipe(res);
+    });
+
+    proxyReq.on('error', (error) => {
+
+        log(`⚠️ Proxy error → ${error.message}`);
+
+        if (!res.headersSent) {
+            sendBooting(res);
+        }
+    });
+
+    req.pipe(proxyReq);
 }
 
-// ─── /downloads/ — serve installer files directly from disk ─────────────────
-const DOWNLOADS_DIR = path.join(rootDir, 'public', 'downloads');
 
-// ─── /logs diagnostic route ─────────────────────────────────────────────────
-const server = http.createServer((req, res) => {
-    // ── /downloads/:filename → serve local installer file ──
-    if (req.url.startsWith('/downloads/')) {
-        const filename = decodeURIComponent(req.url.replace('/downloads/', '').split('?')[0]);
-        const filePath = path.join(DOWNLOADS_DIR, filename);
+// ═══════════════════════════════════════════════════════════════════════════
+// STATIC FILES
+// ═══════════════════════════════════════════════════════════════════════════
 
-        // Security: prevent path traversal
-        if (!filePath.startsWith(DOWNLOADS_DIR)) {
-            res.writeHead(403); return res.end('Forbidden');
-        }
+function tryServeStatic(req, res) {
 
-        if (!fs.existsSync(filePath)) {
-            res.writeHead(404, { 'Content-Type': 'text/plain' });
-            return res.end(`Installer not found: ${filename}`);
-        }
+    let filePath = null;
 
-        const stat = fs.statSync(filePath);
-        const ext  = path.extname(filename).toLowerCase();
-        const mimeMap = {
-            '.deb': 'application/vnd.debian.binary-package',
-            '.rpm': 'application/x-rpm',
-            '.exe': 'application/x-msdownload',
-            '.msi': 'application/x-msi',
-            '.dmg': 'application/x-apple-diskimage',
-            '.pkg': 'application/x-newton-compatible-pkg',
-            '.appimage': 'application/x-executable',
-        };
-        const contentType = mimeMap[ext] || 'application/octet-stream';
+    const cleanUrl = decodeURIComponent(
+        req.url.split('?')[0]
+    );
 
-        log(`⬇  Serving installer: ${filename} (${(stat.size / 1024 / 1024).toFixed(1)} MB)`);
-        res.writeHead(200, {
-            'Content-Type'        : contentType,
-            'Content-Disposition' : `attachment; filename="${filename}"`,
-            'Content-Length'      : stat.size,
-            'Cache-Control'       : 'public, max-age=86400',
+    if (cleanUrl.startsWith('/_next/static/')) {
+
+        filePath = path.join(
+            DASHBOARD_DIR,
+            '.next',
+            'static',
+            cleanUrl.replace('/_next/static/', '')
+        );
+
+    } else if (
+        /\.(png|jpg|jpeg|gif|svg|ico|webp|woff2?|json)$/i.test(cleanUrl)
+    ) {
+
+        filePath = path.join(
+            DASHBOARD_DIR,
+            'public',
+            cleanUrl
+        );
+    }
+
+    if (!filePath) {
+        return false;
+    }
+
+    const resolvedRoot = path.resolve(DASHBOARD_DIR);
+    const resolvedFile = path.resolve(filePath);
+
+    if (
+        !resolvedFile.startsWith(resolvedRoot + path.sep) &&
+        resolvedFile !== resolvedRoot
+    ) {
+        return false;
+    }
+
+    if (!fs.existsSync(resolvedFile)) {
+        return false;
+    }
+
+    const ext = path.extname(resolvedFile).toLowerCase();
+
+    const mime = {
+        '.css': 'text/css',
+        '.js': 'text/javascript',
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.gif': 'image/gif',
+        '.svg': 'image/svg+xml',
+        '.ico': 'image/x-icon',
+        '.webp': 'image/webp',
+        '.woff': 'font/woff',
+        '.woff2': 'font/woff2',
+        '.json': 'application/json'
+    };
+
+    res.writeHead(200, {
+        'Content-Type': mime[ext] || 'application/octet-stream',
+        'Cache-Control': 'public, max-age=31536000'
+    });
+
+    fs.createReadStream(resolvedFile).pipe(res);
+
+    return true;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DOWNLOADS
+// ═══════════════════════════════════════════════════════════════════════════
+
+function serveDownload(req, res) {
+
+    const filename = decodeURIComponent(
+        req.url
+            .replace('/downloads/', '')
+            .split('?')[0]
+    );
+
+    if (
+        !filename ||
+        filename.includes('..') ||
+        filename.includes('/') ||
+        filename.includes('\\')
+    ) {
+        res.writeHead(400);
+        return res.end('Invalid filename');
+    }
+
+    const filePath = path.join(
+        DOWNLOADS_DIR,
+        filename
+    );
+
+    if (!fs.existsSync(filePath)) {
+
+        res.writeHead(404, {
+            'Content-Type': 'text/plain'
         });
-        fs.createReadStream(filePath).pipe(res);
+
+        return res.end(
+            `Installer not found: ${filename}`
+        );
+    }
+
+    const stat = fs.statSync(filePath);
+
+    const ext = path.extname(filename).toLowerCase();
+
+    const mime = {
+        '.deb': 'application/vnd.debian.binary-package',
+        '.rpm': 'application/x-rpm',
+        '.exe': 'application/x-msdownload',
+        '.msi': 'application/x-msi',
+        '.dmg': 'application/x-apple-diskimage',
+        '.pkg': 'application/octet-stream',
+        '.appimage': 'application/x-executable'
+    };
+
+    log(
+        `⬇ Serving installer: ${filename} ` +
+        `(${(stat.size / 1024 / 1024).toFixed(1)} MB)`
+    );
+
+    res.writeHead(200, {
+
+        'Content-Type':
+            mime[ext] || 'application/octet-stream',
+
+        'Content-Disposition':
+            `attachment; filename="${filename}"`,
+
+        'Content-Length':
+            stat.size,
+
+        'Cache-Control':
+            'public, max-age=86400'
+    });
+
+    fs.createReadStream(filePath).pipe(res);
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HTTP SERVER
+// ═══════════════════════════════════════════════════════════════════════════
+
+const server = http.createServer((req, res) => {
+
+    const requestPath = req.url.split('?')[0];
+
+    // Downloads
+    if (requestPath.startsWith('/downloads/')) {
+        return serveDownload(req, res);
+    }
+
+    // Logs
+    if (
+        requestPath === '/logs' ||
+        requestPath === '/_logs'
+    ) {
+
+        res.writeHead(200, {
+            'Content-Type':
+                'text/plain; charset=utf-8',
+            'Cache-Control':
+                'no-store'
+        });
+
+        return res.end(
+            bootLogs.join('\n')
+        );
+    }
+
+    // Health
+    if (requestPath === '/health') {
+
+        res.writeHead(200, {
+            'Content-Type':
+                'application/json',
+            'Cache-Control':
+                'no-store'
+        });
+
+        return res.end(
+            JSON.stringify({
+
+                status: 'up',
+
+                ports: {
+                    backend: BACK_PORT,
+                    dashboard: DASH_PORT,
+                    ai: AI_PORT
+                },
+
+                backendEntry:
+                    fs.existsSync(BACKEND_ENTRY),
+
+                cookieParser:
+                    checkCookieParser(),
+
+                uptime:
+                    process.uptime(),
+
+                bootStarted
+
+            })
+        );
+    }
+
+    // Admin boot logs
+    if (requestPath === '/api/boot-logs') {
+
+        const hasErrors =
+            bootLogs.some(
+                line => line.includes('❌')
+            );
+
+        res.writeHead(200, {
+
+            'Content-Type':
+                'application/json',
+
+            'Access-Control-Allow-Origin':
+                '*',
+
+            'Cache-Control':
+                'no-store'
+        });
+
+        return res.end(
+            JSON.stringify({
+
+                logs: bootLogs,
+
+                hasErrors,
+
+                uptime:
+                    process.uptime(),
+
+                ports: {
+                    backend: BACK_PORT,
+                    dashboard: DASH_PORT,
+                    ai: AI_PORT
+                },
+
+                booted:
+                    !!(BACK_PORT && DASH_PORT),
+
+                ts:
+                    new Date().toISOString()
+
+            })
+        );
+    }
+
+    // Static assets
+    if (tryServeStatic(req, res)) {
         return;
     }
 
-    // Diagnostic endpoints — always available
-    if (req.url === '/logs' || req.url === '/_logs') {
-        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-        return res.end(bootLogs.join('\n'));
-    }
-    if (req.url === '/health') {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({
-            status: 'up',
-            ports : { backend: BACK_PORT, dashboard: DASH_PORT, ai: AI_PORT },
-            uptime: process.uptime()
-        }));
-    }
-    // Admin-only boot log endpoint (consumed by /admin/system-health page)
-    if (req.url === '/api/boot-logs') {
-        const hasErrors = bootLogs.some(l => l.includes('❌'));
-        res.writeHead(200, {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-        });
-        return res.end(JSON.stringify({
-            logs    : bootLogs,
-            hasErrors,
-            uptime  : process.uptime(),
-            ports   : { backend: BACK_PORT, dashboard: DASH_PORT, ai: AI_PORT },
-            booted  : !!(BACK_PORT && DASH_PORT),
-            ts      : new Date().toISOString(),
-        }));
-    }
-
-    if (tryServeStatic(req, res)) return;
-
+    // Engines not ready
     if (!BACK_PORT || !DASH_PORT) {
         return sendBooting(res);
     }
 
-    const targetPort = req.url.startsWith('/api') ? BACK_PORT : DASH_PORT;
-    proxyRequest(req, res, targetPort);
+    // API → Backend
+    // Everything else → Dashboard
+    const targetPort =
+        requestPath.startsWith('/api')
+            ? BACK_PORT
+            : DASH_PORT;
+
+    proxyRequest(
+        req,
+        res,
+        targetPort
+    );
 });
 
-server.listen(masterPort, () => {
-    log(`✨ Master Proxy listening on port ${masterPort}`);
-    // Spawn engines AFTER we are already listening, but ensure Ollama is installed first
-    ensureOllama().then(() => {
-        bootEngines().catch(err => {
-            log(`❌ Extent failure in bootEngines: ${err.message}`);
-        });
-    });
-});
 
-server.on('error', (err) => {
-    log(`❌ Master server error: ${err.message}`);
-    process.exit(1);
-});
-
-// ─── Engine Spawner ──────────────────────────────────────────────────────────
-const runningChildren = [];
+// ═══════════════════════════════════════════════════════════════════════════
+// CHILD PROCESS MANAGEMENT
+// ═══════════════════════════════════════════════════════════════════════════
 
 function killChildren() {
-    runningChildren.forEach(child => {
-        try { child.kill('SIGKILL'); } catch (_) {}
-    });
-}
-process.on('exit', killChildren);
-process.on('SIGINT', () => { killChildren(); process.exit(0); });
-process.on('SIGTERM', () => { killChildren(); process.exit(0); });
 
-/**
- * Kill leftover zombie child processes from previous crashed runs.
- * Hostinger shared hosting has a tight per-user process limit; stale
- * node/python procs from a previous boot exhaust those slots, causing
- * EAGAIN when we try to spawn the backend/dashboard on restart.
- */
-function killZombieChildren() {
-    const targets = [
-        path.join(rootDir, 'backend-api', 'dist', 'main.js'),
-        path.join(rootDir, 'web-dashboard', '.next', 'standalone', 'server.js'),
-        path.join(rootDir, 'web-dashboard', '.next', 'standalone', 'web-dashboard', 'server.js'),
-        'uvicorn',
-    ];
-    for (const target of targets) {
+    for (const child of runningChildren) {
+
         try {
-            // pkill -f matches against the full command line
-            execSync(`pkill -f "${target}" 2>/dev/null || true`, { shell: true, stdio: 'ignore' });
+            child.kill('SIGTERM');
+        } catch (_) {}
+
+    }
+}
+
+process.on('exit', killChildren);
+
+process.on('SIGINT', () => {
+    killChildren();
+    process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+    killChildren();
+    process.exit(0);
+});
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COOKIE-PARSER CHECK / AUTO INSTALL
+// ═══════════════════════════════════════════════════════════════════════════
+
+function checkCookieParser() {
+
+    try {
+
+        require.resolve(
+            'cookie-parser',
+            {
+                paths: [BACKEND_DIR]
+            }
+        );
+
+        return true;
+
+    } catch (_) {
+
+        return false;
+
+    }
+}
+
+
+function getNpmCandidates() {
+
+    const candidates = [];
+
+    // npm provided by Passenger / Hostinger
+    if (process.env.npm_execpath) {
+
+        candidates.push(
+            process.env.npm_execpath
+        );
+    }
+
+    // Common Hostinger Node paths
+    candidates.push(
+        '/opt/alt/alt-nodejs24/root/usr/bin/npm',
+        '/opt/alt/alt-nodejs22/root/usr/bin/npm',
+        '/opt/alt/alt-nodejs20/root/usr/bin/npm',
+        '/usr/bin/npm',
+        'npm'
+    );
+
+    return [
+        ...new Set(
+            candidates.filter(Boolean)
+        )
+    ];
+}
+
+
+async function ensureBackendDependencies() {
+
+    if (backendDependencyPromise) {
+        return backendDependencyPromise;
+    }
+
+    backendDependencyPromise = (async () => {
+
+        if (!fs.existsSync(BACKEND_ENTRY)) {
+
+            throw new Error(
+                `Backend entry does not exist: ${BACKEND_ENTRY}`
+            );
+        }
+
+        // Already installed
+        if (checkCookieParser()) {
+
+            log(
+                '✅ Backend dependency check: ' +
+                'cookie-parser is already available.'
+            );
+
+            return true;
+        }
+
+        log(
+            '⚠️ Backend dependency missing: ' +
+            'cookie-parser'
+        );
+
+        log(
+            '🔧 Attempting automatic npm installation...'
+        );
+
+        const candidates =
+            getNpmCandidates();
+
+        let lastError = null;
+
+        for (const npmPath of candidates) {
+
+            try {
+
+                log(
+                    `📦 Trying npm: ${npmPath}`
+                );
+
+                let command;
+
+                // npm_execpath can point to npm-cli.js
+                if (
+                    npmPath.endsWith('.js') &&
+                    fs.existsSync(npmPath)
+                ) {
+
+                    command =
+                        `"${process.execPath}" "${npmPath}"`;
+
+                } else {
+
+                    // Absolute path
+                    if (
+                        npmPath.startsWith('/') &&
+                        !fs.existsSync(npmPath)
+                    ) {
+                        continue;
+                    }
+
+                    command =
+                        `"${npmPath}"`;
+                }
+
+                execSync(
+
+                    `${command} install cookie-parser ` +
+                    `--save --no-audit --no-fund ` +
+                    `--prefix "${BACKEND_DIR}"`,
+
+                    {
+
+                        cwd: BACKEND_DIR,
+
+                        stdio: 'inherit',
+
+                        timeout: 180000,
+
+                        env: {
+                            ...process.env,
+                            NODE_ENV: 'production'
+                        }
+
+                    }
+                );
+
+                if (checkCookieParser()) {
+
+                    log(
+                        '════════════════════════════════════════'
+                    );
+
+                    log(
+                        '✅ cookie-parser installed successfully!'
+                    );
+
+                    log(
+                        '✅ Backend dependency repair complete.'
+                    );
+
+                    log(
+                        '════════════════════════════════════════'
+                    );
+
+                    return true;
+                }
+
+                lastError =
+                    new Error(
+                        'npm finished but cookie-parser ' +
+                        'cannot be resolved.'
+                    );
+
+            } catch (error) {
+
+                lastError = error;
+
+                log(
+                    `⚠️ npm attempt failed: ${error.message}`
+                );
+            }
+        }
+
+        throw new Error(
+
+            'Unable to automatically install ' +
+            'cookie-parser. ' +
+
+            (lastError
+                ? `Last error: ${lastError.message}`
+                : 'npm was not found.')
+
+        );
+
+    })();
+
+    try {
+
+        return await backendDependencyPromise;
+
+    } catch (error) {
+
+        backendDependencyPromise = null;
+
+        throw error;
+    }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ZOMBIE CLEANUP
+// ═══════════════════════════════════════════════════════════════════════════
+
+function killZombieChildren() {
+
+    const targets = [
+
+        path.join(
+            BACKEND_DIR,
+            'dist',
+            'main.js'
+        ),
+
+        path.join(
+            DASHBOARD_DIR,
+            '.next',
+            'standalone',
+            'server.js'
+        ),
+
+        path.join(
+            DASHBOARD_DIR,
+            '.next',
+            'standalone',
+            'web-dashboard',
+            'server.js'
+        )
+
+    ];
+
+    for (const target of targets) {
+
+        try {
+
+            execSync(
+                `pkill -f "${target}" 2>/dev/null || true`,
+                {
+                    shell: true,
+                    stdio: 'ignore',
+                    timeout: 3000
+                }
+            );
+
         } catch (_) {}
     }
-    log('🧹 Zombie cleanup done — cleared stale child processes.');
+
+    // DO NOT blindly kill uvicorn here.
+    //
+    // Previous code killed every uvicorn process during boot.
+    // On Hostinger this could interfere with another Passenger worker
+    // starting the AI service.
+
+    log(
+        '🧹 Zombie Node/Dashboard cleanup complete.'
+    );
 }
 
-function freePort(port) {
-    try { execSync(`fuser -k ${port}/tcp`, { stdio: 'ignore' }); } catch (_) {}
-}
 
-function startEngine(name, execBin, execArgs, port, cwd, envExtra = {}, delay = 0, retries = 0) {
+// ═══════════════════════════════════════════════════════════════════════════
+// ENGINE SPAWNER
+// ═══════════════════════════════════════════════════════════════════════════
+
+function startEngine(
+    name,
+    execBin,
+    execArgs,
+    port,
+    cwd,
+    envExtra = {},
+    delay = 0,
+    retries = 0
+) {
+
     const MAX_RETRIES = 8;
-    const BASE_DELAY  = 5000;
+    const BASE_DELAY = 5000;
 
-    setTimeout(() => {
-        // Only stat-check absolute paths — bare commands are resolved by the OS
-        const isAbsPath = execBin.startsWith('/');
-        if (isAbsPath && !fs.existsSync(execBin)) {
-            log(`❌ ${name}: executable not found → ${execBin}`);
-            return;
+    setTimeout(async () => {
+
+        try {
+
+            // Absolute executable check
+            if (
+                execBin.startsWith('/') &&
+                !fs.existsSync(execBin)
+            ) {
+
+                log(
+                    `❌ ${name}: executable not found → ${execBin}`
+                );
+
+                return;
+            }
+
+            // CRITICAL:
+            // If something is already serving the port,
+            // don't start a second copy.
+            if (
+                await isPortListening(port)
+            ) {
+
+                log(
+                    `ℹ️ ${name}: port ${port} is already ` +
+                    `serving. Duplicate start skipped.`
+                );
+
+                return;
+            }
+
+            log(
+                `📡 Starting ${name} on port ${port} ` +
+                `(attempt ${retries + 1}/${MAX_RETRIES})`
+            );
+
+            const child = spawn(
+                execBin,
+                execArgs,
+                {
+
+                    cwd:
+                        cwd || rootDir,
+
+                    env: {
+                        ...process.env,
+
+                        PORT:
+                            String(port),
+
+                        NODE_ENV:
+                            'production',
+
+                        ...envExtra
+                    },
+
+                    shell: false,
+
+                    stdio: [
+                        'ignore',
+                        'pipe',
+                        'pipe'
+                    ]
+                }
+            );
+
+            runningChildren.push(child);
+
+            child.stdout.on(
+                'data',
+                data => {
+
+                    const text =
+                        data.toString().trim();
+
+                    if (text) {
+                        log(
+                            `[${name}] ${text}`
+                        );
+                    }
+                }
+            );
+
+            child.stderr.on(
+                'data',
+                data => {
+
+                    const text =
+                        data.toString().trim();
+
+                    if (text) {
+                        log(
+                            `[${name}] ${text}`
+                        );
+                    }
+                }
+            );
+
+            child.on(
+                'error',
+                error => {
+
+                    log(
+                        `❌ [${name}] spawn error: ` +
+                        error.message
+                    );
+                }
+            );
+
+            child.on(
+                'exit',
+                (code, signal) => {
+
+                    const index =
+                        runningChildren.indexOf(child);
+
+                    if (index !== -1) {
+
+                        runningChildren.splice(
+                            index,
+                            1
+                        );
+                    }
+
+                    if (
+                        signal === 'SIGTERM' ||
+                        signal === 'SIGKILL'
+                    ) {
+
+                        log(
+                            `ℹ️ ${name} stopped ` +
+                            `(${code}/${signal}).`
+                        );
+
+                        return;
+                    }
+
+                    if (code === 0) {
+
+                        log(
+                            `🔄 ${name} exited normally. ` +
+                            `Restarting in 5 seconds...`
+                        );
+
+                        setTimeout(
+                            () => startEngine(
+                                name,
+                                execBin,
+                                execArgs,
+                                port,
+                                cwd,
+                                envExtra,
+                                0,
+                                0
+                            ),
+                            BASE_DELAY
+                        );
+
+                        return;
+                    }
+
+                    const newRetries =
+                        retries + 1;
+
+                    if (
+                        newRetries >= MAX_RETRIES
+                    ) {
+
+                        log(
+                            `🛑 ${name} crashed ` +
+                            `${MAX_RETRIES} times. ` +
+                            `Giving up.`
+                        );
+
+                        return;
+                    }
+
+                    const backoff =
+                        Math.min(
+                            BASE_DELAY *
+                            Math.pow(2, retries),
+                            300000
+                        );
+
+                    log(
+                        `⚠️ ${name} crashed ` +
+                        `(exit ${code}). ` +
+                        `Retrying in ` +
+                        `${Math.round(backoff / 1000)}s...`
+                    );
+
+                    setTimeout(
+                        () => startEngine(
+                            name,
+                            execBin,
+                            execArgs,
+                            port,
+                            cwd,
+                            envExtra,
+                            0,
+                            newRetries
+                        ),
+                        backoff
+                    );
+                }
+            );
+
+        } catch (error) {
+
+            log(
+                `❌ ${name} startup exception: ` +
+                error.message
+            );
+
         }
-        freePort(port);
-        log(`📡 Spawning ${name} on port ${port} [${execBin}]... (attempt ${retries + 1}/${MAX_RETRIES})`);
 
-        const child = spawn(execBin, execArgs, {
-            env  : { ...process.env, PORT: String(port), NODE_ENV: 'production', ...envExtra },
-            cwd  : cwd || rootDir,
-            shell: false
-        });
-        runningChildren.push(child);
-
-        child.stdout.on('data', d => log(`[${name}] ${d.toString().trim()}`));
-        child.stderr.on('data', d => log(`[${name}] ${d.toString().trim()}`));
-        child.on('error', err => {
-            log(`❌ [${name}] spawn error: ${err.message}`);
-        });
-        child.on('exit', (code, signal) => {
-            // Exit code 0 = clean shutdown (e.g. server restart), always re-launch
-            if (code === 0 || signal === 'SIGTERM' || signal === 'SIGKILL') {
-                log(`🔄 ${name} exited cleanly (${code}/${signal}) — restarting in 5s…`);
-                setTimeout(() => startEngine(name, execBin, execArgs, port, cwd, envExtra, 0, 0), BASE_DELAY);
-                return;
-            }
-
-            // Crash path — apply exponential backoff
-            const newRetries = retries + 1;
-            if (newRetries >= MAX_RETRIES) {
-                log(`🛑 ${name} has crashed ${MAX_RETRIES} times — giving up. Check logs above for the Python import error or missing dependency. Fix the issue and restart the server.`);
-                return;
-            }
-            const backoffMs = Math.min(BASE_DELAY * Math.pow(2, retries), 300000); // Max 5 min
-            log(`⚠️  ${name} crashed (exit ${code}) — restarting in ${Math.round(backoffMs / 1000)}s… (${newRetries}/${MAX_RETRIES})`);
-            setTimeout(() => startEngine(name, execBin, execArgs, port, cwd, envExtra, 0, newRetries), backoffMs);
-        });
     }, delay);
 }
 
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PYTHON
+// ═══════════════════════════════════════════════════════════════════════════
+
 function findSystemPython() {
-    const cmds = [
-        'python3',
-        'python',
+
+    const candidates = [
+
+        '/opt/alt/python311/bin/python3',
+        '/opt/alt/python310/bin/python3',
+        '/opt/alt/python39/bin/python3',
+
         '/usr/bin/python3',
         '/usr/local/bin/python3',
         '/bin/python3',
-        '/usr/bin/python',
-        '/opt/alt/python311/bin/python3',
-        '/opt/alt/python310/bin/python3',
-        '/opt/alt/python39/bin/python3'
+
+        'python3',
+        'python'
+
     ];
-    for (const cmd of cmds) {
+
+    for (const candidate of candidates) {
+
         try {
-            const { execSync } = require('child_process');
-            // Check if command is an absolute path or exists in PATH
-            let p = cmd;
-            if (!cmd.startsWith('/')) {
-                p = execSync(`which ${cmd} 2>/dev/null`, { encoding: 'utf8' }).trim();
+
+            let executable = candidate;
+
+            if (
+                !candidate.startsWith('/')
+            ) {
+
+                executable =
+                    execSync(
+                        `which ${candidate} 2>/dev/null`,
+                        {
+                            encoding: 'utf8'
+                        }
+                    ).trim();
             }
-            if (p && fs.existsSync(p)) {
-                // Verify it actually runs and is python 3 (optional but good)
-                execSync(`${p} --version`, { stdio: 'ignore' });
-                return p;
+
+            if (!executable) {
+                continue;
             }
+
+            if (
+                executable.startsWith('/') &&
+                !fs.existsSync(executable)
+            ) {
+                continue;
+            }
+
+            execSync(
+                `"${executable}" --version`,
+                {
+                    stdio: 'ignore'
+                }
+            );
+
+            return executable;
+
         } catch (_) {}
     }
+
     return null;
 }
 
-// Resolve python3 absolute path at boot time so we can log clearly if missing
+
 function resolvePython() {
-    const aiDir = path.join(rootDir, 'ai-services');
-    
-    // Check for local virtual environment first
-    const venvPython3 = path.join(aiDir, 'venv', 'bin', 'python3');
-    const venvPython  = path.join(aiDir, 'venv', 'bin', 'python');
-    let pythonBin = null;
 
-    if (fs.existsSync(venvPython3)) pythonBin = venvPython3;
-    else if (fs.existsSync(venvPython)) pythonBin = venvPython;
+    const venvPython3 =
+        path.join(
+            AI_DIR,
+            'venv',
+            'bin',
+            'python3'
+        );
 
-    if (pythonBin) {
-        log(`AI Engine: using virtualenv python → ${pythonBin}`);
+    const venvPython =
+        path.join(
+            AI_DIR,
+            'venv',
+            'bin',
+            'python'
+        );
+
+    if (fs.existsSync(venvPython3)) {
+
+        log(
+            `AI Engine: using virtualenv → ${venvPython3}`
+        );
+
         return {
-            bin: pythonBin,
-            args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
+
+            bin: venvPython3,
+
+            args: port => [
+                '-m',
+                'uvicorn',
+                'main:app',
+                '--host',
+                '127.0.0.1',
+                '--port',
+                String(port)
+            ],
+
             env: {}
         };
     }
 
-    // No venv — fall back to system python and auto-install packages into a local dir
-    const sysPython = findSystemPython();
-    if (!sysPython) {
-        log('❌ AI Engine: no python3/python found anywhere — AI bots will be unavailable');
+    if (fs.existsSync(venvPython)) {
+
+        log(
+            `AI Engine: using virtualenv → ${venvPython}`
+        );
+
+        return {
+
+            bin: venvPython,
+
+            args: port => [
+                '-m',
+                'uvicorn',
+                'main:app',
+                '--host',
+                '127.0.0.1',
+                '--port',
+                String(port)
+            ],
+
+            env: {}
+        };
+    }
+
+    const python =
+        findSystemPython();
+
+    if (!python) {
+
+        log(
+            '❌ AI Engine: Python 3 not found.'
+        );
+
         return null;
     }
 
-    log(`AI Engine: resolved system python → ${sysPython}`);
+    log(
+        `AI Engine: resolved Python → ${python}`
+    );
 
-    const localPackagesDir = path.join(aiDir, '.python_packages');
-    const requiredPackages = ['uvicorn', 'fastapi', 'httpx', 'python-dotenv', 'pydantic', 'google-genai', 'groq', 'openai', 'anthropic'];
+    const packages =
+        path.join(
+            AI_DIR,
+            '.python_packages'
+        );
 
-    const getImportName = (pkg) => {
-        if (pkg === 'google-genai') return 'google.genai';
-        if (pkg === 'google-generativeai') return 'google.generativeai';
-        if (pkg === 'python-dotenv') return 'dotenv';
-        return pkg.replace(/-/g, '_').split('[')[0];
+    const required = [
+
+        'uvicorn',
+        'fastapi',
+        'httpx',
+        'python-dotenv',
+        'pydantic',
+        'google-genai',
+        'groq',
+        'openai',
+        'anthropic'
+
+    ];
+
+    const importName = packageName => {
+
+        if (
+            packageName === 'google-genai'
+        ) {
+            return 'google.genai';
+        }
+
+        if (
+            packageName === 'python-dotenv'
+        ) {
+            return 'dotenv';
+        }
+
+        return packageName
+            .replace(/-/g, '_');
     };
 
-    // Install missing packages into local .python_packages dir (safe, no sudo needed)
-    const missingPkg = requiredPackages.filter(pkg => {
-        try {
-            execSync(`${sysPython} -c "import ${getImportName(pkg)}"`, { stdio: 'ignore' });
-            return false;
-        } catch (_) { return true; }
-    });
+    const missing = [];
 
-    if (missingPkg.length > 0) {
-        // Use a lock file to prevent multiple Passenger workers from running pip install at the same time
-        const lockFile = path.join(localPackagesDir, '.pip_installing.lock');
-        if (fs.existsSync(lockFile)) {
-            log('AI Engine: pip install already running in another process — skipping duplicate install.');
+    for (const pkg of required) {
+
+        try {
+
+            execSync(
+
+                `"${python}" -c "import ${importName(pkg)}"`,
+
+                {
+                    stdio: 'ignore'
+                }
+
+            );
+
+        } catch (_) {
+
+            missing.push(pkg);
+        }
+    }
+
+    if (missing.length > 0) {
+
+        const lock =
+            path.join(
+                packages,
+                '.pip_installing.lock'
+            );
+
+        if (
+            fs.existsSync(lock)
+        ) {
+
+            log(
+                'ℹ️ AI Engine: another process ' +
+                'is already installing Python packages.'
+            );
+
         } else {
-            log(`AI Engine: installing missing packages into .python_packages: ${missingPkg.join(', ')}`);
+
             try {
-                fs.mkdirSync(localPackagesDir, { recursive: true });
-                fs.writeFileSync(lockFile, String(process.pid));
-                execSync(
-                    `${sysPython} -m pip install --quiet --target=${localPackagesDir} ${missingPkg.join(' ')}`,
-                    { stdio: 'inherit', timeout: 120000 }
+
+                fs.mkdirSync(
+                    packages,
+                    {
+                        recursive: true
+                    }
                 );
-                fs.unlinkSync(lockFile);
-                log('✅ AI Engine: packages installed successfully into .python_packages');
-            } catch (pipErr) {
-                try { fs.unlinkSync(lockFile); } catch (_) {}
-                log(`⚠️ AI Engine: pip install failed — ${pipErr.message}. Bots may not respond.`);
+
+                fs.writeFileSync(
+                    lock,
+                    String(process.pid)
+                );
+
+                log(
+                    `📦 AI Engine: installing ` +
+                    `${missing.join(', ')}`
+                );
+
+                execSync(
+
+                    `"${python}" -m pip install ` +
+                    `--quiet --target="${packages}" ` +
+                    missing.join(' '),
+
+                    {
+                        stdio: 'inherit',
+                        timeout: 180000
+                    }
+                );
+
+                try {
+                    fs.unlinkSync(lock);
+                } catch (_) {}
+
+                log(
+                    '✅ AI Engine Python packages installed.'
+                );
+
+            } catch (error) {
+
+                try {
+                    fs.unlinkSync(lock);
+                } catch (_) {}
+
+                log(
+                    `⚠️ Python package installation failed: ` +
+                    error.message
+                );
             }
         }
     } else {
-        log('AI Engine: all required packages already available globally.');
+
+        log(
+            'AI Engine: Python packages available.'
+        );
     }
 
-    const pythonPath = fs.existsSync(localPackagesDir) ? localPackagesDir : '';
     return {
-        bin: sysPython,
-        args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
-        env: pythonPath ? { PYTHONPATH: pythonPath } : {}
+
+        bin: python,
+
+        args: port => [
+
+            '-m',
+            'uvicorn',
+            'main:app',
+            '--host',
+            '127.0.0.1',
+            '--port',
+            String(port)
+
+        ],
+
+        env: {
+
+            PYTHONPATH:
+                fs.existsSync(packages)
+                    ? packages
+                    : ''
+        }
     };
 }
 
+
+// ═══════════════════════════════════════════════════════════════════════════
+// OLLAMA
+// ═══════════════════════════════════════════════════════════════════════════
+
 async function ensureOllama() {
-    // Ollama is a Desktop-only feature — it requires GPU access and sudo to install.
-    // On cloud/VPS hosts (like Hostinger), skip this entirely to avoid boot delay.
-    // Set ENABLE_OLLAMA=true in env to force-enable on a capable Linux machine.
-    const homeDir = process.env.HOME || '';
-    const isHostingerHome = homeDir.startsWith('/home/u'); // Hostinger uses /home/u<uid>
-    const isCloudEnv = !process.env.ENABLE_OLLAMA && (
-        // Hostinger and shared hosts restrict package installs
-        isHostingerHome ||
+
+    const home =
+        process.env.HOME || '';
+
+    const isHostinger =
+        home.startsWith('/home/u');
+
+    const cloud =
+        isHostinger ||
         process.env.PASSENGER_APP_ENV ||
         process.env.HOSTINGER ||
         process.env.RENDER ||
         process.env.RAILWAY_ENVIRONMENT ||
         process.env.VERCEL ||
-        process.env.CLOUD_ENV
-    );
+        process.env.CLOUD_ENV;
 
-    if (isCloudEnv) {
-        log('☁️  Cloud/Hostinger environment detected — skipping Ollama (Desktop-only feature).');
+    if (
+        cloud &&
+        process.env.ENABLE_OLLAMA !== 'true'
+    ) {
+
+        log(
+            '☁️ Cloud/Hostinger detected. ' +
+            'Skipping Ollama.'
+        );
+
         return;
     }
 
     try {
-        execSync('ollama --version', { stdio: 'ignore' });
-        log('✅ Ollama is installed. Pulling local AI models in background...');
-        spawn('ollama', ['pull', 'llama3'], { stdio: 'ignore', detached: true }).unref();
-        spawn('ollama', ['pull', 'codellama'], { stdio: 'ignore', detached: true }).unref();
-    } catch (e) {
-        log('ℹ️  Ollama not installed. Offline GPU inference will be unavailable.');
-        if (process.platform === 'linux' || process.platform === 'darwin') {
-            log('🚀 Attempting Ollama auto-install (Desktop mode)...');
-            try {
-                execSync('curl -fsSL https://ollama.com/install.sh | sh', { stdio: 'inherit', timeout: 60000 });
-                log('✅ Ollama installed! Pulling models in background...');
-                spawn('ollama', ['pull', 'llama3'], { stdio: 'ignore', detached: true }).unref();
-                spawn('ollama', ['pull', 'codellama'], { stdio: 'ignore', detached: true }).unref();
-            } catch (installErr) {
-                log('⚠️  Ollama auto-install failed. Install manually from https://ollama.com if you need offline AI.');
+
+        execSync(
+            'ollama --version',
+            {
+                stdio: 'ignore'
             }
-        }
+        );
+
+        log(
+            '✅ Ollama detected.'
+        );
+
+    } catch (_) {
+
+        log(
+            'ℹ️ Ollama not available. ' +
+            'Continuing without Ollama.'
+        );
     }
 }
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ENGINE BOOT
+// ═══════════════════════════════════════════════════════════════════════════
 
 async function bootEngines() {
-    killZombieChildren();
 
-    try {
-        BACK_PORT = await findFreePort();
-        DASH_PORT = await findFreePort();
-        // AI_PORT is fixed so the backend always connects to the same address,
-        // even after a crash/restart. Randomising it caused ECONNREFUSED when
-        // server.js restarted and the old AI_SERVICE_URL became stale.
-        AI_PORT   = parseInt(process.env.AI_PORT || '8001');
-        log(`Allocated ports: Backend=${BACK_PORT}, Dashboard=${DASH_PORT}, AI=${AI_PORT} (fixed)`);
-    } catch (e) {
-        log(`❌ Failed to allocate ports: ${e.message}`);
+    if (bootStarted) {
+
+        log(
+            'ℹ️ Engine boot already started. ' +
+            'Skipping duplicate boot.'
+        );
+
         return;
     }
 
-    // ── AI Engine (FastAPI) ────────────────────────────────────────────────
-    const pythonResolved = resolvePython();
-    if (pythonResolved) {
+    bootStarted = true;
+
+    log(
+        '🚀 Starting VultaCore engines...'
+    );
+
+    try {
+
+        BACK_PORT =
+            await findFreePort();
+
+        DASH_PORT =
+            await findFreePort();
+
+        // Keep AI fixed because backend receives this URL.
+        AI_PORT =
+            parseInt(
+                process.env.AI_PORT || '8001',
+                10
+            );
+
+        log(
+            `Allocated ports: ` +
+            `Backend=${BACK_PORT}, ` +
+            `Dashboard=${DASH_PORT}, ` +
+            `AI=${AI_PORT}`
+        );
+
+    } catch (error) {
+
+        log(
+            `❌ Port allocation failed: ` +
+            error.message
+        );
+
+        return;
+    }
+
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // AI
+    // ═══════════════════════════════════════════════════════════════════════
+
+    const python =
+        resolvePython();
+
+    if (python) {
+
         startEngine(
+
             'AI Engine',
-            pythonResolved.bin,
-            pythonResolved.args(AI_PORT),
+
+            python.bin,
+
+            python.args(AI_PORT),
+
             AI_PORT,
-            path.join(rootDir, 'ai-services'),
-            pythonResolved.env || {},
+
+            AI_DIR,
+
+            python.env || {},
+
             0
         );
+
     } else {
-        log('⚠️  Skipping AI Engine — visit /logs to see diagnostics. Check python3 is installed on the host.');
+
+        log(
+            '⚠️ AI Engine skipped because Python is unavailable.'
+        );
     }
 
-    // ── Backend (NestJS dist) ─────────────────────────────────────────────
-    const backendEntry = path.join(rootDir, 'backend-api', 'dist', 'main.js');
-    startEngine('Backend', process.execPath, [backendEntry], BACK_PORT,
-                path.join(rootDir, 'backend-api'), { AI_SERVICE_URL: `http://127.0.0.1:${AI_PORT}` }, 0);
 
-    // ── Dashboard (Next.js standalone) ───────────────────────────────────
-    const standaloneA = path.join(rootDir, 'web-dashboard', '.next', 'standalone', 'web-dashboard', 'server.js');
-    const standaloneB = path.join(rootDir, 'web-dashboard', '.next', 'standalone', 'server.js');
-    const nextBinLocal = path.join(rootDir, 'web-dashboard', 'node_modules', 'next', 'dist', 'bin', 'next');
-    const nextBinRoot  = path.join(rootDir, 'node_modules', 'next', 'dist', 'bin', 'next');
+    // ═══════════════════════════════════════════════════════════════════════
+    // BACKEND
+    // ═══════════════════════════════════════════════════════════════════════
 
-    let dashEntry, dashCwd, dashArgs;
-    if (fs.existsSync(standaloneA)) {
-        dashEntry = standaloneA;
-        dashCwd   = path.dirname(standaloneA);
-        dashArgs  = [standaloneA];
-        startEngine('Dashboard', process.execPath, dashArgs, DASH_PORT, dashCwd, {}, 5000);
-    } else if (fs.existsSync(standaloneB)) {
-        dashEntry = standaloneB;
-        dashCwd   = path.dirname(standaloneB);
-        dashArgs  = [standaloneB];
-        startEngine('Dashboard', process.execPath, dashArgs, DASH_PORT, dashCwd, {}, 5000);
+    try {
+
+        log(
+            '🔍 Checking backend dependencies...'
+        );
+
+        await ensureBackendDependencies();
+
+        log(
+            '🚀 Starting NestJS Backend...'
+        );
+
+        startEngine(
+
+            'Backend',
+
+            process.execPath,
+
+            [BACKEND_ENTRY],
+
+            BACK_PORT,
+
+            BACKEND_DIR,
+
+            {
+                AI_SERVICE_URL:
+                    `http://127.0.0.1:${AI_PORT}`
+            },
+
+            1000
+        );
+
+    } catch (error) {
+
+        log(
+            `❌ Backend dependency setup failed: ` +
+            error.message
+        );
+
+        log(
+            '🛑 Backend was NOT started.'
+        );
+
+        log(
+            'Open /logs to see the exact npm error.'
+        );
+    }
+
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // DASHBOARD
+    // ═══════════════════════════════════════════════════════════════════════
+
+    const standaloneA =
+        path.join(
+            DASHBOARD_DIR,
+            '.next',
+            'standalone',
+            'web-dashboard',
+            'server.js'
+        );
+
+    const standaloneB =
+        path.join(
+            DASHBOARD_DIR,
+            '.next',
+            'standalone',
+            'server.js'
+        );
+
+    const nextLocal =
+        path.join(
+            DASHBOARD_DIR,
+            'node_modules',
+            'next',
+            'dist',
+            'bin',
+            'next'
+        );
+
+    const nextRoot =
+        path.join(
+            rootDir,
+            'node_modules',
+            'next',
+            'dist',
+            'bin',
+            'next'
+        );
+
+    if (
+        fs.existsSync(standaloneA)
+    ) {
+
+        log(
+            '🚀 Starting Next.js standalone Dashboard...'
+        );
+
+        startEngine(
+
+            'Dashboard',
+
+            process.execPath,
+
+            [standaloneA],
+
+            DASH_PORT,
+
+            path.dirname(standaloneA),
+
+            {},
+
+            3000
+        );
+
+    } else if (
+        fs.existsSync(standaloneB)
+    ) {
+
+        log(
+            '🚀 Starting Next.js standalone Dashboard...'
+        );
+
+        startEngine(
+
+            'Dashboard',
+
+            process.execPath,
+
+            [standaloneB],
+
+            DASH_PORT,
+
+            path.dirname(standaloneB),
+
+            {},
+
+            3000
+        );
+
     } else {
-        // No standalone build found — use `next dev` as fallback so we don't
-        // spin-crash every 5 s with "could not find a production build" which
-        // destabilises the whole server process.
-        const nextBin = fs.existsSync(nextBinLocal) ? nextBinLocal : nextBinRoot;
-        if (fs.existsSync(nextBin)) {
-            log('⚠️  No Next.js standalone build found — starting Dashboard in dev mode (run npm run build in web-dashboard for production).');
-            dashCwd  = path.join(rootDir, 'web-dashboard');
-            dashArgs = [nextBin, 'dev', '--port', String(DASH_PORT)];
-            startEngine('Dashboard', process.execPath, dashArgs, DASH_PORT, dashCwd, {}, 5000);
+
+        const nextBin =
+            fs.existsSync(nextLocal)
+                ? nextLocal
+                : nextRoot;
+
+        if (
+            fs.existsSync(nextBin)
+        ) {
+
+            log(
+                '⚠️ Next.js standalone build not found.'
+            );
+
+            log(
+                'Starting Next.js dev server as fallback.'
+            );
+
+            startEngine(
+
+                'Dashboard',
+
+                process.execPath,
+
+                [
+                    nextBin,
+                    'dev',
+                    '--port',
+                    String(DASH_PORT)
+                ],
+
+                DASH_PORT,
+
+                DASHBOARD_DIR,
+
+                {},
+
+                3000
+            );
+
         } else {
-            log('⚠️  Dashboard skipped — next binary not found. Run: cd web-dashboard && npm install && npm run build');
+
+            log(
+                '❌ Next.js binary not found. ' +
+                'Dashboard cannot start.'
+            );
         }
     }
+
+    log(
+        '════════════════════════════════════════'
+    );
+
+    log(
+        '✅ Engine boot sequence completed.'
+    );
+
+    log(
+        `Backend:    ${BACK_PORT}`
+    );
+
+    log(
+        `Dashboard:  ${DASH_PORT}`
+    );
+
+    log(
+        `AI Engine:  ${AI_PORT}`
+    );
+
+    log(
+        '════════════════════════════════════════'
+    );
 }
 
 
+// ═══════════════════════════════════════════════════════════════════════════
+// START MASTER SERVER
+// ═══════════════════════════════════════════════════════════════════════════
+
+server.listen(
+    masterPort,
+    '0.0.0.0',
+    () => {
+
+        log(
+            `✨ Master Proxy listening on ${masterPort}`
+        );
+
+        // Cleanup only old Node/Dashboard processes.
+        killZombieChildren();
+
+        // Give Passenger a moment before spawning children.
+        setTimeout(async () => {
+
+            try {
+
+                await ensureOllama();
+
+                await bootEngines();
+
+            } catch (error) {
+
+                log(
+                    `❌ Boot failure: ${error.message}`
+                );
+            }
+
+        }, 1000);
+    }
+);
+
+
+server.on(
+    'error',
+    error => {
+
+        log(
+            `❌ Master server error: ${error.message}`
+        );
+
+        process.exit(1);
+    }
+);
