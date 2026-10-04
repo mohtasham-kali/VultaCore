@@ -350,7 +350,7 @@ body {
             <img
                 src="/logo.png"
                 alt="VultaCore"
-                onerror="this.style.display='none';this.parentNode.innerHTML='<span style="font-size:2rem">⚡</span>'"
+                onerror="this.style.display='none'"
             >
         </div>
  
