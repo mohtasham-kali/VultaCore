@@ -10,6 +10,17 @@ import csurf from 'csurf';
 const CSRF_EXEMPT_PATHS = ['/api/billing/webhook'];
 
 async function bootstrap() {
+  // === DIAGNOSTIC: Runtime directory and sqlite3 resolution ===
+  console.log('[STARTUP] Current working directory:', process.cwd());
+  console.log('[STARTUP] Application directory (__dirname):', __dirname);
+  
+  try {
+    const sqlite3Path = require.resolve('sqlite3');
+    console.log('[STARTUP] sqlite3 resolved from:', sqlite3Path);
+  } catch (error: any) {
+    console.error('[STARTUP] ❌ sqlite3 cannot be resolved:', error.message);
+  }
+  
   try {
     const app = await NestFactory.create(AppModule, {
       // Capture raw body buffer — required for Lemon Squeezy webhook HMAC verification
