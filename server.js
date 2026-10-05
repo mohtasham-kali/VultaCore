@@ -823,7 +823,10 @@ function checkSqlite3() {
             {
                 cwd: typeormProjectDir(),
                 stdio: 'ignore',
-                timeout: 15000
+                timeout: 15000,
+                env: buildRuntimeEnv({
+                    NODE_ENV: 'production'
+                })
             }
         );
  
@@ -1161,9 +1164,7 @@ function startEngine(
                     cwd:
                         cwd || rootDir,
  
-                    env: {
-                        ...process.env,
- 
+                    env: buildRuntimeEnv({
                         PORT:
                             String(port),
  
@@ -1171,7 +1172,7 @@ function startEngine(
                             'production',
  
                         ...envExtra
-                    },
+                    }),
  
                     shell: false,
  
@@ -1372,7 +1373,8 @@ function findSystemPython() {
                     execSync(
                         `which ${candidate} 2>/dev/null`,
                         {
-                            encoding: 'utf8'
+                            encoding: 'utf8',
+                            env: buildRuntimeEnv()
                         }
                     ).trim();
             }
@@ -1391,7 +1393,8 @@ function findSystemPython() {
             execSync(
                 `"${executable}" --version`,
                 {
-                    stdio: 'ignore'
+                    stdio: 'ignore',
+                    env: buildRuntimeEnv()
                 }
             );
  
@@ -1535,7 +1538,12 @@ function resolvePython() {
                 `"${python}" -c "import ${importName(pkg)}"`,
  
                 {
-                    stdio: 'ignore'
+                    stdio: 'ignore',
+                    env: buildRuntimeEnv({
+                        PYTHONPATH: fs.existsSync(packages)
+                            ? packages
+                            : ''
+                    })
                 }
  
             );
@@ -1592,7 +1600,12 @@ function resolvePython() {
  
                     {
                         stdio: 'inherit',
-                        timeout: 180000
+                        timeout: 180000,
+                        env: buildRuntimeEnv({
+                            PYTHONPATH: fs.existsSync(packages)
+                                ? packages
+                                : ''
+                        })
                     }
                 );
  
