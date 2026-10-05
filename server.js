@@ -918,6 +918,18 @@ async function ensureBackendDependencies() {
             return true;
         }
  
+        // CRITICAL: Do NOT auto-install during startup.
+        // Dependencies MUST be installed during the Hostinger build step.
+        // If we reach here, the build failed and the app cannot run.
+        const missing_packages = missing.map(r => r.name).join(', ');
+        
+        throw new Error(
+            `❌ FATAL: Required backend dependencies are missing: ${missing_packages}. ` +
+            `These must be installed during the build phase via npm install in backend-api/. ` +
+            `The Hostinger build does not appear to have run npm install in the backend folder. ` +
+            `Please ensure your build script includes: cd backend-api && npm install`
+        );
+ 
         const candidates =
             getNpmCandidates();
  
