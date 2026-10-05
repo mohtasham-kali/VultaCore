@@ -157,7 +157,7 @@ export default function AuthPage() {
     if (isTauri) return "vultacore://auth-callback";
     // Mobile (Capacitor)
     if (typeof window !== "undefined" && (window as Window & { Capacitor?: { isNativePlatform: () => boolean } }).Capacitor?.isNativePlatform()) {
-      return "com.saas2.platform://auth-callback";
+      return "com.vultacore.app://auth-callback";
     }
     return `${window.location.origin}/`;
   };
