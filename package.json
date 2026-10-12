@@ -12,7 +12,7 @@
   ],
   "scripts": {
     "start": "node server.js",
-    "build": "cd web-dashboard && npm run build",
+    "build": "npm --prefix backend-api run build && npm --prefix web-dashboard run build",
     "postinstall": "node setup-python.js",
     "commit-installers": "node scripts/commit-installers.js"
   },
@@ -45,6 +45,7 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "clsx": "^2.1.1",
+    "cookie-parser": "^1.4.7",
     "csurf": "1.2.2",
     "eslint": "^9.39.4",
     "eslint-config-next": "^16.1.6",

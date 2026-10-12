@@ -36,6 +36,10 @@ let AI_PORT = parseInt(process.env.AI_PORT || '8001', 10);
 let bootLogs = [];
 let runningChildren = [];
 
+let isBackendReady = false;
+let isDashboardReady = false;
+let isAiReady = false;
+
 let backendDependencyPromise = null;
 let bootStarted = false;
 
@@ -95,58 +99,93 @@ log('═════════════════════════
 // PORT HELPERS
 // ═══════════════════════════════════════════════════════════════════════════
  
-function findFreePort() {
-    return new Promise((resolve, reject) => {
-        const server = net.createServer();
- 
-        server.once('error', reject);
- 
-        server.listen(0, '127.0.0.1', () => {
-            const address = server.address();
- 
-            if (!address || typeof address === 'string') {
-                server.close();
-                reject(new Error('Unable to determine free port'));
-                return;
-            }
- 
-            const port = address.port;
- 
-            server.close(() => resolve(port));
-        });
-    });
-}
- 
- 
-function isPortListening(port, timeout = 1200) {
+function isPortListening(port, timeout = 400) {
     return new Promise((resolve) => {
         const socket = new net.Socket();
- 
         let finished = false;
- 
+
         const finish = (value) => {
             if (finished) return;
- 
             finished = true;
- 
+
             try {
                 socket.destroy();
             } catch (_) {}
- 
+
             resolve(value);
         };
- 
+
         socket.setTimeout(timeout);
- 
         socket.once('connect', () => finish(true));
         socket.once('error', () => finish(false));
         socket.once('timeout', () => finish(false));
- 
+
         try {
             socket.connect(port, '127.0.0.1');
         } catch (_) {
             finish(false);
         }
+    });
+}
+
+/**
+ * Finds an available port starting at startPort, checking via non-destructive client connect.
+ * NEVER creates a listening socket, completely preventing Linux kernel TIME_WAIT / EADDRINUSE collisions.
+ */
+async function findAvailablePort(startPort, exclude = []) {
+    let port = startPort;
+    while (exclude.includes(port) || (await isPortListening(port, 250))) {
+        port++;
+    }
+    return port;
+}
+
+// Backward-compatible alias that never locks sockets
+async function findFreePort(startPort = 3001, exclude = []) {
+    return findAvailablePort(startPort, exclude);
+}
+
+
+function checkAiHealth(port, timeout = 1500) {
+    return new Promise((resolve) => {
+        const req = http.get(
+            `http://127.0.0.1:${port}/`,
+            { timeout },
+            (res) => {
+                let data = '';
+                res.on('data', chunk => { data += chunk; });
+                res.on('end', () => {
+                    resolve(data.includes('AI Service Online') || data.includes('VultaCore'));
+                });
+            }
+        );
+        req.on('error', () => resolve(false));
+        req.on('timeout', () => {
+            req.destroy();
+            resolve(false);
+        });
+    });
+}
+
+
+function waitForEngineReady(name, port, maxWaitMs = 60000) {
+    const startTime = Date.now();
+    return new Promise((resolve) => {
+        const check = async () => {
+            const listening = await isPortListening(port, 800);
+            if (listening) {
+                log(`✨ ${name} is ready and listening on port ${port} (${Math.round((Date.now() - startTime) / 100) / 10}s).`);
+                resolve(true);
+                return;
+            }
+            if (Date.now() - startTime > maxWaitMs) {
+                log(`⚠️ ${name} on port ${port} did not report ready within ${Math.round(maxWaitMs / 1000)}s.`);
+                resolve(false);
+                return;
+            }
+            setTimeout(check, 800);
+        };
+        check();
     });
 }
  
@@ -429,14 +468,19 @@ function proxyRequest(req, res, targetPort) {
     });
  
     proxyReq.on('error', (error) => {
- 
-        log(`⚠️ Proxy error → ${error.message}`);
- 
+        if (error.code === 'ECONNREFUSED') {
+            if (targetPort === DASH_PORT) isDashboardReady = false;
+            if (targetPort === BACK_PORT) isBackendReady = false;
+            log(`ℹ️ Target port ${targetPort} temporarily unavailable (${error.code}). Serving bootloader.`);
+        } else {
+            log(`⚠️ Proxy error → ${error.message}`);
+        }
+
         if (!res.headersSent) {
             sendBooting(res);
         }
     });
- 
+
     req.pipe(proxyReq);
 }
  
@@ -646,90 +690,137 @@ const server = http.createServer((req, res) => {
                     dashboard: DASH_PORT,
                     ai: AI_PORT
                 },
- 
+
+                ready: {
+                    backend: isBackendReady,
+                    dashboard: isDashboardReady,
+                    ai: isAiReady
+                },
+
                 backendEntry:
                     fs.existsSync(BACKEND_ENTRY),
- 
+
                 cookieParser:
                     checkCookieParser(),
- 
+
                 uptime:
                     process.uptime(),
- 
+
                 bootStarted
- 
+
             })
         );
     }
- 
+
     // Admin boot logs
     if (requestPath === '/api/boot-logs') {
- 
+
         const hasErrors =
             bootLogs.some(
                 line => line.includes('❌')
             );
- 
+
         res.writeHead(200, {
- 
+
             'Content-Type':
                 'application/json',
- 
+
             'Access-Control-Allow-Origin':
                 '*',
- 
+
             'Cache-Control':
                 'no-store'
         });
- 
+
         return res.end(
             JSON.stringify({
- 
+
                 logs: bootLogs,
- 
+
                 hasErrors,
- 
+
                 uptime:
                     process.uptime(),
- 
+
                 ports: {
                     backend: BACK_PORT,
                     dashboard: DASH_PORT,
                     ai: AI_PORT
                 },
- 
+
+                ready: {
+                    backend: isBackendReady,
+                    dashboard: isDashboardReady,
+                    ai: isAiReady
+                },
+
                 booted:
-                    !!(BACK_PORT && DASH_PORT),
- 
+                    !!(isDashboardReady && isBackendReady),
+
                 ts:
                     new Date().toISOString()
- 
+
             })
         );
     }
- 
+
     // Static assets
     if (tryServeStatic(req, res)) {
         return;
     }
- 
-    // Engines not ready
-    if (!BACK_PORT || !DASH_PORT) {
+
+    // Route API and socket.io to Backend, everything else to Dashboard
+    const isApi =
+        requestPath.startsWith('/api') ||
+        requestPath.startsWith('/socket.io');
+
+    const targetPort = isApi ? BACK_PORT : DASH_PORT;
+    const targetReady = isApi ? isBackendReady : isDashboardReady;
+
+    // Hold request with bootloader until target service is confirmed ready
+    if (!targetPort || !targetReady) {
         return sendBooting(res);
     }
- 
-    // API → Backend
-    // Everything else → Dashboard
-    const targetPort =
-        requestPath.startsWith('/api')
-            ? BACK_PORT
-            : DASH_PORT;
- 
+
     proxyRequest(
         req,
         res,
         targetPort
     );
+});
+
+// Proxy WebSocket / Socket.io upgrades
+server.on('upgrade', (req, clientSocket, head) => {
+    const requestPath = req.url.split('?')[0];
+    const isApi =
+        requestPath.startsWith('/api') ||
+        requestPath.startsWith('/socket.io');
+
+    const targetPort = isApi ? BACK_PORT : DASH_PORT;
+    const targetReady = isApi ? isBackendReady : isDashboardReady;
+
+    if (!targetPort || !targetReady) {
+        clientSocket.destroy();
+        return;
+    }
+
+    const proxySocket = net.connect(targetPort, '127.0.0.1', () => {
+        proxySocket.write(
+            `${req.method} ${req.url} HTTP/${req.httpVersion}\r\n` +
+            Object.entries(req.headers)
+                .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
+                .join('\r\n') +
+            '\r\n\r\n'
+        );
+        if (head && head.length > 0) {
+            proxySocket.write(head);
+        }
+        proxySocket.pipe(clientSocket);
+        clientSocket.pipe(proxySocket);
+    });
+
+    proxySocket.on('error', () => clientSocket.destroy());
+    clientSocket.on('error', () => proxySocket.destroy());
 });
  
  
@@ -918,18 +1009,9 @@ async function ensureBackendDependencies() {
             return true;
         }
  
-        // CRITICAL: Do NOT auto-install during startup.
-        // Dependencies MUST be installed during the Hostinger build step.
-        // If we reach here, the build failed and the app cannot run.
         const missing_packages = missing.map(r => r.name).join(', ');
-        
-        throw new Error(
-            `❌ FATAL: Required backend dependencies are missing: ${missing_packages}. ` +
-            `These must be installed during the build phase via npm install in backend-api/. ` +
-            `The Hostinger build does not appear to have run npm install in the backend folder. ` +
-            `Please ensure your build script includes: cd backend-api && npm install`
-        );
- 
+        log(`⚠️ Backend dependencies missing: ${missing_packages}. Attempting automatic recovery...`);
+
         const candidates =
             getNpmCandidates();
  
@@ -1059,36 +1141,17 @@ async function ensureBackendDependencies() {
 // ═══════════════════════════════════════════════════════════════════════════
  
 function killZombieChildren() {
- 
+
     const targets = [
- 
-        path.join(
-            BACKEND_DIR,
-            'dist',
-            'main.js'
-        ),
- 
-        path.join(
-            DASHBOARD_DIR,
-            '.next',
-            'standalone',
-            'server.js'
-        ),
- 
-        path.join(
-            DASHBOARD_DIR,
-            '.next',
-            'standalone',
-            'web-dashboard',
-            'server.js'
-        )
- 
+        path.join(BACKEND_DIR, 'dist', 'main.js'),
+        'web-dashboard/server.js',
+        'standalone.*server.js'
     ];
- 
+
     for (const target of targets) {
- 
+
         try {
- 
+
             execSync(
                 `pkill -f "${target}" 2>/dev/null || true`,
                 {
@@ -1097,16 +1160,10 @@ function killZombieChildren() {
                     timeout: 3000
                 }
             );
- 
+
         } catch (_) {}
     }
- 
-    // DO NOT blindly kill uvicorn here.
-    //
-    // Previous code killed every uvicorn process during boot.
-    // On Hostinger this could interfere with another Passenger worker
-    // starting the AI service.
- 
+
     log(
         '🧹 Zombie Node/Dashboard cleanup complete.'
     );
@@ -1241,41 +1298,124 @@ function startEngine(
  
             child.on(
                 'exit',
-                (code, signal) => {
- 
+                async (code, signal) => {
+
+                    if (name === 'Dashboard') isDashboardReady = false;
+                    if (name === 'Backend') isBackendReady = false;
+                    if (name === 'AI Engine') isAiReady = false;
+
                     const index =
                         runningChildren.indexOf(child);
- 
+
                     if (index !== -1) {
- 
+
                         runningChildren.splice(
                             index,
                             1
                         );
                     }
- 
+
                     if (
                         signal === 'SIGTERM' ||
                         signal === 'SIGKILL'
                     ) {
- 
+
                         log(
                             `ℹ️ ${name} stopped ` +
                             `(${code}/${signal}).`
                         );
- 
+
                         return;
                     }
- 
+
                     if (code === 0) {
- 
+
                         log(
                             `🔄 ${name} exited normally. ` +
                             `Restarting in 5 seconds...`
                         );
- 
+
                         setTimeout(
-                            () => startEngine(
+                            () => {
+                                startEngine(
+                                    name,
+                                    execBin,
+                                    execArgs,
+                                    port,
+                                    cwd,
+                                    envExtra,
+                                    0,
+                                    0
+                                );
+                                waitForEngineReady(name, port).then(ok => {
+                                    if (ok) {
+                                        if (name === 'Dashboard') isDashboardReady = true;
+                                        if (name === 'Backend') isBackendReady = true;
+                                        if (name === 'AI Engine') isAiReady = true;
+                                    }
+                                });
+                            },
+                            BASE_DELAY
+                        );
+
+                        return;
+                    }
+
+                    // Special recovery for AI Engine if port binding failed (Errno 98 / exit 3 / exit 1)
+                    if (name === 'AI Engine' && (code === 3 || code === 1)) {
+                        try {
+                            const newPort = await findAvailablePort(AI_PORT + 1, [masterPort, BACK_PORT, DASH_PORT]);
+                            log(
+                                `⚠️ AI Engine port ${port} was in-use/refused (exit ${code}). ` +
+                                `Switching to dynamically allocated free port ${newPort}...`
+                            );
+                            port = newPort;
+                            AI_PORT = newPort;
+                            const py = resolvePython();
+                            const newArgs = py ? py.args(newPort) : execArgs;
+                            setTimeout(() => {
+                                startEngine(name, execBin, newArgs, newPort, cwd, envExtra, 0, retries + 1);
+                                waitForEngineReady(name, newPort).then(ok => {
+                                    if (ok) isAiReady = true;
+                                });
+                            }, 1500);
+                            return;
+                        } catch (_) {}
+                    }
+
+                    const newRetries =
+                        retries + 1;
+
+                    if (
+                        newRetries >= MAX_RETRIES
+                    ) {
+
+                        log(
+                            `🛑 ${name} crashed ` +
+                            `${MAX_RETRIES} times. ` +
+                            `Giving up.`
+                        );
+
+                        return;
+                    }
+
+                    const backoff =
+                        Math.min(
+                            BASE_DELAY *
+                            Math.pow(2, retries),
+                            300000
+                        );
+
+                    log(
+                        `⚠️ ${name} crashed ` +
+                        `(exit ${code}). ` +
+                        `Retrying in ` +
+                        `${Math.round(backoff / 1000)}s...`
+                    );
+
+                    setTimeout(
+                        () => {
+                            startEngine(
                                 name,
                                 execBin,
                                 execArgs,
@@ -1283,55 +1423,16 @@ function startEngine(
                                 cwd,
                                 envExtra,
                                 0,
-                                0
-                            ),
-                            BASE_DELAY
-                        );
- 
-                        return;
-                    }
- 
-                    const newRetries =
-                        retries + 1;
- 
-                    if (
-                        newRetries >= MAX_RETRIES
-                    ) {
- 
-                        log(
-                            `🛑 ${name} crashed ` +
-                            `${MAX_RETRIES} times. ` +
-                            `Giving up.`
-                        );
- 
-                        return;
-                    }
- 
-                    const backoff =
-                        Math.min(
-                            BASE_DELAY *
-                            Math.pow(2, retries),
-                            300000
-                        );
- 
-                    log(
-                        `⚠️ ${name} crashed ` +
-                        `(exit ${code}). ` +
-                        `Retrying in ` +
-                        `${Math.round(backoff / 1000)}s...`
-                    );
- 
-                    setTimeout(
-                        () => startEngine(
-                            name,
-                            execBin,
-                            execArgs,
-                            port,
-                            cwd,
-                            envExtra,
-                            0,
-                            newRetries
-                        ),
+                                newRetries
+                            );
+                            waitForEngineReady(name, port).then(ok => {
+                                if (ok) {
+                                    if (name === 'Dashboard') isDashboardReady = true;
+                                    if (name === 'Backend') isBackendReady = true;
+                                    if (name === 'AI Engine') isAiReady = true;
+                                }
+                            });
+                        },
                         backoff
                     );
                 }
@@ -1733,168 +1834,218 @@ async function ensureOllama() {
  
  
 // ═══════════════════════════════════════════════════════════════════════════
+// STANDALONE DASHBOARD DISCOVERY
+// ═══════════════════════════════════════════════════════════════════════════
+
+function findStandaloneServer() {
+    const directA = path.join(
+        DASHBOARD_DIR,
+        '.next',
+        'standalone',
+        'web-dashboard',
+        'server.js'
+    );
+    if (fs.existsSync(directA)) return directA;
+
+    const directB = path.join(
+        DASHBOARD_DIR,
+        '.next',
+        'standalone',
+        'server.js'
+    );
+    if (fs.existsSync(directB)) return directB;
+
+    const standaloneDir = path.join(DASHBOARD_DIR, '.next', 'standalone');
+    if (!fs.existsSync(standaloneDir)) return null;
+
+    function searchDir(current, depth = 0) {
+        if (depth > 12) return null;
+        try {
+            const entries = fs.readdirSync(current, { withFileTypes: true });
+            for (const entry of entries) {
+                if (entry.isFile() && entry.name === 'server.js') {
+                    return path.join(current, entry.name);
+                }
+            }
+            for (const entry of entries) {
+                if (
+                    entry.isDirectory() &&
+                    entry.name !== 'node_modules' &&
+                    !entry.name.startsWith('.')
+                ) {
+                    const found = searchDir(
+                        path.join(current, entry.name),
+                        depth + 1
+                    );
+                    if (found) return found;
+                }
+            }
+        } catch (_) {}
+        return null;
+    }
+
+    return searchDir(standaloneDir);
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
 // ENGINE BOOT
 // ═══════════════════════════════════════════════════════════════════════════
- 
+
 async function bootEngines() {
- 
+
     if (bootStarted) {
- 
         log(
             'ℹ️ Engine boot already started. ' +
             'Skipping duplicate boot.'
         );
- 
         return;
     }
- 
+
     bootStarted = true;
- 
+
     log(
         '🚀 Starting VultaCore engines...'
     );
- 
+
     try {
- 
-        BACK_PORT =
-            await findFreePort();
- 
-        DASH_PORT =
-            await findFreePort();
- 
-        // Keep AI fixed because backend receives this URL.
-        AI_PORT =
-            parseInt(
-                process.env.AI_PORT || '8001',
-                10
-            );
- 
+        const exclude = [masterPort];
+
+        // Allocate Backend port (starting around 3001)
+        BACK_PORT = await findAvailablePort(3001, exclude);
+        exclude.push(BACK_PORT);
+
+        // Allocate Dashboard port (starting around 3002)
+        DASH_PORT = await findAvailablePort(3002, exclude);
+        exclude.push(DASH_PORT);
+
+        // Check if preferred AI_PORT (8001) is already serving our engine or is free to bind
+        const preferredAiPort = parseInt(
+            process.env.AI_PORT || '8001',
+            10
+        );
+
+        if (await checkAiHealth(preferredAiPort)) {
+            AI_PORT = preferredAiPort;
+            isAiReady = true;
+            log(`ℹ️ AI Engine is already running and healthy on port ${AI_PORT}. Reusing.`);
+        } else if (await isPortListening(preferredAiPort, 300)) {
+            // Port is in use: try killing orphaned uvicorn process owned by this user
+            try {
+                execSync('pkill -f "uvicorn main:app" 2>/dev/null || true', { stdio: 'ignore', timeout: 2000 });
+                await new Promise(r => setTimeout(r, 600));
+            } catch (_) {}
+
+            if (!(await isPortListening(preferredAiPort, 300)) && !exclude.includes(preferredAiPort)) {
+                AI_PORT = preferredAiPort;
+                log(`🧹 Cleaned up orphaned AI Engine process on port ${preferredAiPort}.`);
+            } else {
+                AI_PORT = await findAvailablePort(8002, exclude);
+                log(`⚠️ Preferred port ${preferredAiPort} is in use by another service on this host.`);
+                log(`✨ Dynamically allocated free port ${AI_PORT} for AI Engine.`);
+            }
+        } else {
+            AI_PORT = exclude.includes(preferredAiPort) ? await findAvailablePort(8002, exclude) : preferredAiPort;
+        }
+        exclude.push(AI_PORT);
+
         log(
             `Allocated ports: ` +
             `Backend=${BACK_PORT}, ` +
             `Dashboard=${DASH_PORT}, ` +
             `AI=${AI_PORT}`
         );
- 
+
     } catch (error) {
- 
         log(
             `❌ Port allocation failed: ` +
             error.message
         );
- 
         return;
     }
- 
- 
+
+
     // ═══════════════════════════════════════════════════════════════════════
     // AI
     // ═══════════════════════════════════════════════════════════════════════
- 
-    const python =
-        resolvePython();
- 
+
+    const python = resolvePython();
+
     if (python) {
- 
-        startEngine(
- 
-            'AI Engine',
- 
-            python.bin,
- 
-            python.args(AI_PORT),
- 
-            AI_PORT,
- 
-            AI_DIR,
- 
-            python.env || {},
- 
-            0
-        );
- 
+        if (!isAiReady) {
+            startEngine(
+                'AI Engine',
+                python.bin,
+                python.args(AI_PORT),
+                AI_PORT,
+                AI_DIR,
+                python.env || {},
+                0
+            );
+
+            waitForEngineReady('AI Engine', AI_PORT).then(ok => {
+                if (ok) isAiReady = true;
+            });
+        }
     } else {
- 
         log(
             '⚠️ AI Engine skipped because Python is unavailable.'
         );
     }
- 
- 
+
+
     // ═══════════════════════════════════════════════════════════════════════
     // BACKEND
     // ═══════════════════════════════════════════════════════════════════════
- 
+
     try {
- 
         log(
             '🔍 Checking backend dependencies...'
         );
- 
+
         await ensureBackendDependencies();
- 
+
         log(
             '🚀 Starting NestJS Backend...'
         );
- 
+
         startEngine(
- 
             'Backend',
- 
             process.execPath,
- 
             [BACKEND_ENTRY],
- 
             BACK_PORT,
- 
             BACKEND_DIR,
- 
             {
                 AI_SERVICE_URL:
                     `http://127.0.0.1:${AI_PORT}`
             },
- 
-            1000
+            500
         );
- 
+
+        waitForEngineReady('Backend', BACK_PORT).then(ok => {
+            if (ok) isBackendReady = true;
+        });
+
     } catch (error) {
- 
         log(
             `❌ Backend dependency setup failed: ` +
             error.message
         );
- 
         log(
             '🛑 Backend was NOT started.'
         );
- 
         log(
             'Open /logs to see the exact npm error.'
         );
     }
- 
- 
+
+
     // ═══════════════════════════════════════════════════════════════════════
     // DASHBOARD
     // ═══════════════════════════════════════════════════════════════════════
- 
-    const standaloneA =
-        path.join(
-            DASHBOARD_DIR,
-            '.next',
-            'standalone',
-            'web-dashboard',
-            'server.js'
-        );
- 
-    const standaloneB =
-        path.join(
-            DASHBOARD_DIR,
-            '.next',
-            'standalone',
-            'server.js'
-        );
- 
+
+    const standaloneServer = findStandaloneServer();
+
     const nextLocal =
         path.join(
             DASHBOARD_DIR,
@@ -1904,7 +2055,7 @@ async function bootEngines() {
             'bin',
             'next'
         );
- 
+
     const nextRoot =
         path.join(
             rootDir,
@@ -1914,124 +2065,102 @@ async function bootEngines() {
             'bin',
             'next'
         );
- 
-    if (
-        fs.existsSync(standaloneA)
-    ) {
- 
+
+    const nextBin =
+        fs.existsSync(nextLocal)
+            ? nextLocal
+            : nextRoot;
+
+    if (standaloneServer) {
         log(
-            '🚀 Starting Next.js standalone Dashboard...'
+            `🚀 Starting Next.js standalone Dashboard → ${standaloneServer}`
         );
- 
+
         startEngine(
- 
             'Dashboard',
- 
             process.execPath,
- 
-            [standaloneA],
- 
+            [standaloneServer],
             DASH_PORT,
- 
-            path.dirname(standaloneA),
- 
-            {},
- 
-            3000
+            path.dirname(standaloneServer),
+            {
+                HOSTNAME: '127.0.0.1'
+            },
+            500
         );
- 
-    } else if (
-        fs.existsSync(standaloneB)
-    ) {
- 
-        log(
-            '🚀 Starting Next.js standalone Dashboard...'
-        );
- 
-        startEngine(
- 
-            'Dashboard',
- 
-            process.execPath,
- 
-            [standaloneB],
- 
-            DASH_PORT,
- 
-            path.dirname(standaloneB),
- 
-            {},
- 
-            3000
-        );
- 
+
     } else {
- 
-        const nextBin =
-            fs.existsSync(nextLocal)
-                ? nextLocal
-                : nextRoot;
- 
-        if (
-            fs.existsSync(nextBin)
-        ) {
- 
+        const buildIdPath = path.join(DASHBOARD_DIR, '.next', 'BUILD_ID');
+
+        if (fs.existsSync(buildIdPath) && fs.existsSync(nextBin)) {
             log(
-                '⚠️ Next.js standalone build not found.'
+                '🚀 Starting Next.js production server (next start)...'
             );
- 
-            log(
-                'Starting Next.js dev server as fallback.'
-            );
- 
+
             startEngine(
- 
                 'Dashboard',
- 
                 process.execPath,
- 
+                [
+                    nextBin,
+                    'start',
+                    '-p',
+                    String(DASH_PORT)
+                ],
+                DASH_PORT,
+                DASHBOARD_DIR,
+                {
+                    HOSTNAME: '127.0.0.1'
+                },
+                500
+            );
+
+        } else if (fs.existsSync(nextBin)) {
+            log(
+                '⚠️ Next.js production build not found. Starting Next.js dev server as fallback...'
+            );
+
+            startEngine(
+                'Dashboard',
+                process.execPath,
                 [
                     nextBin,
                     'dev',
-                    '--port',
+                    '-p',
                     String(DASH_PORT)
                 ],
- 
                 DASH_PORT,
                 DASHBOARD_DIR,
-                {},
-                3000
+                {
+                    HOSTNAME: '127.0.0.1'
+                },
+                500
             );
- 
+
         } else {
- 
             log(
-                '❌ Next.js binary not found. ' +
-                'Dashboard cannot start.'
+                '❌ Next.js binary not found. Dashboard cannot start.'
             );
         }
     }
- 
+
+    waitForEngineReady('Dashboard', DASH_PORT).then(ok => {
+        if (ok) isDashboardReady = true;
+    });
+
     log(
         '════════════════════════════════════════'
     );
- 
     log(
-        '✅ Engine boot sequence completed.'
+        '✅ Engine boot sequence initiated.'
     );
- 
     log(
-        `Backend:    ${BACK_PORT}`
+        `Backend port:    ${BACK_PORT}`
     );
- 
     log(
-        `Dashboard:  ${DASH_PORT}`
+        `Dashboard port:  ${DASH_PORT}`
     );
- 
     log(
-        `AI Engine:  ${AI_PORT}`
+        `AI Engine port:  ${AI_PORT}`
     );
- 
     log(
         '════════════════════════════════════════'
     );
