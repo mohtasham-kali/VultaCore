@@ -79,7 +79,7 @@ exports.AppModule = AppModule = __decorate([
             }),
             typeorm_1.TypeOrmModule.forRootAsync({
                 useFactory: () => {
-                    const dbUrl = process.env.DATABASE_URL;
+                    const dbUrl = process.env.DATABASE_URL || process.env.SUPABASE_DATABASE_URL;
                     const isPostgres = dbUrl &&
                         (dbUrl.startsWith('postgres://') ||
                             dbUrl.startsWith('postgresql://'));

@@ -70,9 +70,26 @@ export class ForumSchedulerService {
             systemUser.id,
           );
 
+          // Guard: skip if AI returned an error or empty content
+          const content: string | undefined =
+            typeof aiResponse?.response === 'string'
+              ? aiResponse.response.trim()
+              : undefined;
+
+          if (!content || aiResponse?.error) {
+            this.logger.warn(
+              `AI response was empty or errored for post ${post.id}. ` +
+              `Reason: ${aiResponse?.error ?? 'empty response'}. Skipping comment.`,
+            );
+            // Mark as responded so we don't retry indefinitely when AI is down
+            post.aiResponded = true;
+            await this.postRepository.save(post);
+            continue;
+          }
+
           await this.forumService.createComment(
             post.id,
-            { content: aiResponse.response },
+            { content },
             systemUser,
           );
 

@@ -67,7 +67,17 @@ let ForumSchedulerService = ForumSchedulerService_1 = class ForumSchedulerServic
                     const prompt = `Please provide a helpful, detailed, and professional response to this forum post. Title: "${post.title}". Content: "${post.content}"`;
                     this.logger.log(`Generating AI response for post ID: ${post.id}`);
                     const aiResponse = await this.botsService.executeBot(aiBot.id, prompt, systemUser.id);
-                    await this.forumService.createComment(post.id, { content: aiResponse.response }, systemUser);
+                    const content = typeof aiResponse?.response === 'string'
+                        ? aiResponse.response.trim()
+                        : undefined;
+                    if (!content || aiResponse?.error) {
+                        this.logger.warn(`AI response was empty or errored for post ${post.id}. ` +
+                            `Reason: ${aiResponse?.error ?? 'empty response'}. Skipping comment.`);
+                        post.aiResponded = true;
+                        await this.postRepository.save(post);
+                        continue;
+                    }
+                    await this.forumService.createComment(post.id, { content }, systemUser);
                     post.aiResponded = true;
                     await this.postRepository.save(post);
                     this.logger.log(`Successfully replied to post ID: ${post.id}`);

@@ -2,32 +2,54 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
-import random
 import time
 import os
 from dotenv import load_dotenv
-
-# SDKs
-from google import genai
-# pyrefly: ignore [missing-import]
-from groq import AsyncGroq
-# pyrefly: ignore [missing-import]
-from openai import AsyncOpenAI
 import httpx
 
 load_dotenv()
 
-# Configure Clients
-gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-groq_api_key = os.getenv("GROQ_API_KEY", "")
-groq_client = AsyncGroq(api_key=groq_api_key, timeout=15.0, max_retries=0) if groq_api_key else None
-openrouter_api_key = os.getenv("OPENROUTER_API_KEY", "")
-openrouter_client = AsyncOpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=openrouter_api_key,
-    timeout=15.0,
-    max_retries=0,
-) if openrouter_api_key else None
+# ---------------------------------------------------------------------------
+# Lazy / fault-tolerant client initialisation.
+# We construct each client inside a try/except so that a missing or invalid
+# API key never crashes the uvicorn process before it starts listening.
+# ---------------------------------------------------------------------------
+
+_init_errors: list[str] = []
+
+# Gemini
+try:
+    from google import genai as _genai
+    gemini_client = _genai.Client(api_key=os.getenv("GEMINI_API_KEY", ""))
+except Exception as _e:
+    gemini_client = None
+    _init_errors.append(f"Gemini init failed: {_e}")
+
+# Groq
+try:
+    from groq import AsyncGroq
+    groq_api_key = os.getenv("GROQ_API_KEY", "")
+    groq_client = AsyncGroq(api_key=groq_api_key, timeout=15.0, max_retries=0) if groq_api_key else None
+except Exception as _e:
+    groq_client = None
+    _init_errors.append(f"Groq init failed: {_e}")
+
+# OpenRouter (via openai SDK)
+try:
+    from openai import AsyncOpenAI
+    openrouter_api_key = os.getenv("OPENROUTER_API_KEY", "")
+    openrouter_client = AsyncOpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=openrouter_api_key,
+        timeout=15.0,
+        max_retries=0,
+    ) if openrouter_api_key else None
+except Exception as _e:
+    openrouter_client = None
+    _init_errors.append(f"OpenRouter init failed: {_e}")
+
+if _init_errors:
+    print(f"[AI Engine] Startup warnings: {'; '.join(_init_errors)}")
 
 app = FastAPI(title="VultaCore AI Engine", version="2.0")
 
@@ -46,6 +68,8 @@ class BotResponse(BaseModel):
     metadata: dict
 
 async def call_gemini(prompt: str, model_name: str = "gemini-2.0-flash"):
+    if gemini_client is None:
+        return "Gemini Error: client not initialised (missing GEMINI_API_KEY)"
     try:
         response = await gemini_client.aio.models.generate_content(
             model=model_name,
@@ -56,6 +80,8 @@ async def call_gemini(prompt: str, model_name: str = "gemini-2.0-flash"):
         return f"Gemini Error: {str(e)}"
 
 async def call_groq(prompt: str, model_name: str = "llama-3.3-70b-versatile"):
+    if groq_client is None:
+        return "Groq Error: client not initialised (missing GROQ_API_KEY)"
     try:
         chat_completion = await groq_client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
@@ -66,6 +92,8 @@ async def call_groq(prompt: str, model_name: str = "llama-3.3-70b-versatile"):
         return f"Groq Error: {str(e)}"
 
 async def call_openrouter(prompt: str, model: str = "anthropic/claude-3-haiku"):
+    if openrouter_client is None:
+        return f"OpenRouter Error ({model}): client not initialised (missing OPENROUTER_API_KEY)"
     try:
         response = await openrouter_client.chat.completions.create(
             model=model,
@@ -95,7 +123,17 @@ async def call_ollama(prompt: str, model: str = "llama3"):
 
 @app.get("/")
 def read_root():
-    return {"status": "AI Service Online", "engine": "Multi-Provider (Gemini/Groq/Claude/Ollama)"}
+    providers = {
+        "gemini": gemini_client is not None,
+        "groq": groq_client is not None,
+        "openrouter": openrouter_client is not None,
+    }
+    return {
+        "status": "AI Service Online",
+        "engine": "Multi-Provider (Gemini/Groq/Claude/Ollama)",
+        "providers": providers,
+        "warnings": _init_errors if _init_errors else None,
+    }
 
 @app.post("/execute", response_model=BotResponse)
 async def execute_bot(request: BotRequest):
