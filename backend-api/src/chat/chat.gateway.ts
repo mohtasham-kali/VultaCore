@@ -89,7 +89,7 @@ export class ChatGateway
     }
   }
 
-  // --- REVENUECAT / USER EVENT LOGIC --- //
+  // --- LEMONSQUEEZY / USER EVENT LOGIC --- //
 
   @SubscribeMessage('subscribeToUserEvents')
   handleSubscribeToUserEvents(
@@ -102,7 +102,7 @@ export class ChatGateway
     console.log(`Client ${client.id} listening for events on: ${userRoom}`);
   }
 
-  // Public method called by your RevenueCat Webhook Controller
+  // Public method called by your LEMONSQUEEZY Webhook Controller
   notifyUserSubscriptionUpdated(userId: string, newRank: string) {
     const userRoom = `user_events_${userId}`;
     console.log(`📡 Emitting subscriptionUpdated to ${userRoom} -> ${newRank}`);

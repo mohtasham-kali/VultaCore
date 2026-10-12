@@ -9,15 +9,13 @@
     "predeploy": "npm run build",
     "deploy": "gh-pages -d out",
     "start": "next start",
-    "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "lint": "next lint"
   },
   "dependencies": {
     "@capacitor/app": "^8.1.0",
     "@capacitor/browser": "^8.0.3",
     "@capacitor/core": "^8.3.1",
     "@mlc-ai/web-llm": "^0.2.84",
-    "@revenuecat/purchases-js": "^1.41.2",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.105.3",
     "@tauri-apps/api": "^2.11.0",

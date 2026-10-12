@@ -31,7 +31,6 @@
     "@nestjs/serve-static": "^5.0.5",
     "@nestjs/typeorm": "^11.0.1",
     "@nestjs/websockets": "^11.1.24",
-    "@revenuecat/purchases-js": "^1.41.2",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.105.3",
     "@tailwindcss/postcss": "^4",
