@@ -1070,34 +1070,23 @@ async function ensureBackendDependencies() {
                             `"${npmPath}"`;
                     }
  
+                                        const extraFlags = requirement.name === 'sqlite3' ? ' --build-from-source' : '';
                     execSync(
- 
                         `${command} install ${requirement.name} ` +
-                        `--save --no-audit --no-fund ` +
+                        `--save --no-audit --no-fund${extraFlags} ` +
                         `--prefix "${requirement.dir}"`,
- 
                         {
- 
                             cwd: requirement.dir,
- 
                             stdio: 'inherit',
- 
                             timeout: 240000,
- 
                             env: buildRuntimeEnv({
                                 NODE_ENV: 'production'
                             })
- 
                         }
                     );
 
                     installed = true;
-
-                    lastError =
-                        new Error(
-                            `npm finished but ${requirement.name} ` +
-                            `cannot be loaded.`
-                        );
+                    break;
  
                 } catch (error) {
  
@@ -1368,6 +1357,27 @@ function startEngine(
                         );
 
                         return;
+                    }
+
+                    // Special recovery for Dashboard if port binding failed (EADDRINUSE / exit 1)
+                    if (name === 'Dashboard' && code === 1) {
+                        try {
+                            const newPort = await findAvailablePort(DASH_PORT + 1, [masterPort, BACK_PORT, AI_PORT]);
+                            log(
+                                `⚠️ Dashboard port ${port} was in-use/refused (exit ${code}). ` +
+                                `Switching to dynamically allocated free port ${newPort}...`
+                            );
+                            port = newPort;
+                            DASH_PORT = newPort;
+                            const newEnv = Object.assign({}, envExtra, { PORT: String(newPort) });
+                            setTimeout(() => {
+                                startEngine(name, execBin, execArgs, newPort, cwd, newEnv, 0, retries + 1);
+                                waitForEngineReady(name, newPort).then(ok => {
+                                    if (ok) isDashboardReady = true;
+                                });
+                            }, 1500);
+                            return;
+                        } catch (_) {}
                     }
 
                     // Special recovery for AI Engine if port binding failed (Errno 98 / exit 3 / exit 1)
