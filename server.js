@@ -49,6 +49,15 @@ function loadEnv() {
             } catch (_) {}
         }
     }
+    if (process.env.DATABASE_URL) {
+        process.env.DATABASE_URL = process.env.DATABASE_URL.replace(
+            /^(postgres(?:ql)?:\/\/[^:]+:)(.*)(@[^@]+)$/,
+            (_m, prefix, password, hostPart) => {
+                const encodedPassword = encodeURIComponent(decodeURIComponent(password));
+                return `${prefix}${encodedPassword}${hostPart}`;
+            }
+        );
+    }
 }
 loadEnv();
 

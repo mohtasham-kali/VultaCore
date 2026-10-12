@@ -92,7 +92,22 @@ exports.AppModule = AppModule = __decorate([
                     };
                     if (isPostgres) {
                         dbConfig.type = 'postgres';
-                        dbConfig.url = dbUrl;
+                        const sanitized = dbUrl.replace(/^(postgres(?:ql)?:\/\/[^:]+:)(.*)(@[^@]+)$/, (_m, prefix, password, hostPart) => {
+                            const encodedPassword = encodeURIComponent(decodeURIComponent(password));
+                            return `${prefix}${encodedPassword}${hostPart}`;
+                        });
+                        try {
+                            const parsed = new URL(sanitized);
+                            dbConfig.host = parsed.hostname;
+                            dbConfig.port = parseInt(parsed.port || '5432', 10);
+                            dbConfig.username = decodeURIComponent(parsed.username);
+                            dbConfig.password = decodeURIComponent(parsed.password);
+                            dbConfig.database = parsed.pathname.replace(/^\//, '') || 'postgres';
+                            console.log(`[Database] 🚀 Connecting to PostgreSQL/Supabase at ${dbConfig.host}:${dbConfig.port} (db: ${dbConfig.database}, user: ${dbConfig.username})`);
+                        }
+                        catch (_) {
+                            dbConfig.url = sanitized;
+                        }
                         dbConfig.ssl = { rejectUnauthorized: false };
                     }
                     else if (isMysql) {
