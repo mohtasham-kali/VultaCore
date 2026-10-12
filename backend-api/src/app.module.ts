@@ -36,7 +36,7 @@ const staticModuleOptions = fs.existsSync(join(process.cwd(), 'out'))
     }),
     TypeOrmModule.forRootAsync({
       useFactory: () => {
-        const dbUrl = process.env.DATABASE_URL;
+        const dbUrl = process.env.DATABASE_URL || process.env.SUPABASE_DATABASE_URL;
         const isPostgres =
           dbUrl &&
           (dbUrl.startsWith('postgres://') ||

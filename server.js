@@ -49,6 +49,10 @@ function loadEnv() {
             } catch (_) {}
         }
     }
+    // Accept SUPABASE_DATABASE_URL as an alias for DATABASE_URL
+    if (!process.env.DATABASE_URL && process.env.SUPABASE_DATABASE_URL) {
+        process.env.DATABASE_URL = process.env.SUPABASE_DATABASE_URL;
+    }
     if (process.env.DATABASE_URL) {
         process.env.DATABASE_URL = process.env.DATABASE_URL.replace(
             /^(postgres(?:ql)?:\/\/[^:]+:)(.*)(@[^@]+)$/,
