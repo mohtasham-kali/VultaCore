@@ -72,7 +72,11 @@ const DASHBOARD_DIR = path.join(rootDir, 'web-dashboard');
 const AI_DIR = path.join(rootDir, 'ai-services');
  
 const DOWNLOADS_DIR = path.join(rootDir, 'public', 'downloads');
- 
+
+// Lock file that ensures only ONE Passenger worker runs bootEngines().
+// Scoped to rootDir so it's naturally per-deployment-version.
+const BOOT_LOCK_FILE = path.join(rootDir, '.vultacore_boot.lock');
+
 let BACK_PORT = null;
 let DASH_PORT = null;
 let AI_PORT = parseInt(process.env.AI_PORT || '8001', 10);
@@ -134,6 +138,50 @@ function buildRuntimeEnv(extra = {}) {
         ].join(path.delimiter)
     };
 }
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOOT LOCK — ensures only one Passenger worker runs bootEngines()
+// ═══════════════════════════════════════════════════════════════════════════
+
+function tryAcquireBootLock() {
+    try {
+        if (fs.existsSync(BOOT_LOCK_FILE)) {
+            const raw = fs.readFileSync(BOOT_LOCK_FILE, 'utf8').trim();
+            const lockedPid = parseInt(raw, 10);
+            if (lockedPid && lockedPid !== process.pid) {
+                try {
+                    // signal 0 = existence check only, no actual signal sent
+                    process.kill(lockedPid, 0);
+                    // PID is alive → another worker holds the lock
+                    return false;
+                } catch (_) {
+                    // PID is dead → stale lock, take over
+                }
+            }
+        }
+        fs.writeFileSync(BOOT_LOCK_FILE, String(process.pid));
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
+function releaseBootLock() {
+    try {
+        if (fs.existsSync(BOOT_LOCK_FILE)) {
+            const raw = fs.readFileSync(BOOT_LOCK_FILE, 'utf8').trim();
+            if (parseInt(raw, 10) === process.pid) {
+                fs.unlinkSync(BOOT_LOCK_FILE);
+            }
+        }
+    } catch (_) {}
+}
+
+// Clean up lock on all exit paths
+process.on('exit', releaseBootLock);
+process.on('SIGTERM', () => { releaseBootLock(); process.exit(0); });
+process.on('SIGINT',  () => { releaseBootLock(); process.exit(0); });
 
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1283,19 +1331,34 @@ async function ensureBackendDependencies() {
  
 async function killZombieChildren() {
 
-    // If Dashboard or Backend is already alive and serving traffic on 3001 or 3002,
-    // DO NOT kill them! They may be owned by another active Passenger worker.
-    const isBackAlive = await checkHttpHealth(3001, '/');
-    const isDashAlive = await checkHttpHealth(3002, '/');
+    // Proxy-only workers must NEVER kill any processes — they don't own the engines.
+    if (fs.existsSync(BOOT_LOCK_FILE)) {
+        try {
+            const holderPid = parseInt(fs.readFileSync(BOOT_LOCK_FILE, 'utf8').trim(), 10);
+            if (holderPid && holderPid !== process.pid) {
+                let holderAlive = false;
+                try { process.kill(holderPid, 0); holderAlive = true; } catch (_) {}
+                if (holderAlive) {
+                    log('🧹 Zombie Node/Dashboard cleanup complete.');
+                    return; // another worker is alive and owns the engines
+                }
+            }
+        } catch (_) {}
+    }
 
-    if (isBackAlive && isDashAlive) {
-        log('ℹ️ Dashboard and Backend are already healthy and running. Skipping process termination.');
+    // Use TCP listening check (not HTTP) so we don't kill engines that are
+    // still initialising and haven't started serving HTTP yet.
+    const isBackListening = await isPortListening(3001, 800);
+    const isDashListening = await isPortListening(3002, 800);
+
+    if (isBackListening && isDashListening) {
+        log('ℹ️ Dashboard and Backend are already listening. Skipping process termination.');
         return;
     }
 
     const targets = [];
-    if (!isBackAlive) targets.push(path.join(BACKEND_DIR, 'dist', 'main.js'));
-    if (!isDashAlive) {
+    if (!isBackListening) targets.push(path.join(BACKEND_DIR, 'dist', 'main.js'));
+    if (!isDashListening) {
         targets.push('web-dashboard/server.js');
         targets.push('standalone.*server.js');
     }
@@ -2078,6 +2141,22 @@ function findStandaloneServer() {
 // ═══════════════════════════════════════════════════════════════════════════
 
 async function bootEngines() {
+
+    // ── Cross-worker guard ──────────────────────────────────────────────────
+    // Passenger spawns 4+ independent server.js worker processes. Only ONE
+    // should manage the engine child processes; the others act as pure proxies.
+    if (!tryAcquireBootLock()) {
+        try {
+            const holderPid = fs.readFileSync(BOOT_LOCK_FILE, 'utf8').trim();
+            log(
+                `ℹ️ Worker PID ${holderPid} is managing the engines. ` +
+                `This worker (PID ${process.pid}) will proxy only.`
+            );
+        } catch (_) {
+            log('ℹ️ Another worker is managing the engines. This worker will proxy only.');
+        }
+        return;
+    }
 
     if (bootStarted) {
         log(
