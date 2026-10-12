@@ -905,28 +905,37 @@ function typeormProjectDir() {
  
  
 // sqlite3 is a native addon: actually load it instead of only resolving it.
+// Try multiple search paths because on Hostinger the monorepo root node_modules
+// is the canonical location, but typeorm resolution can vary.
 function checkSqlite3() {
- 
-    try {
- 
-        execSync(
-            `"${process.execPath}" -e "require('sqlite3')"`,
-            {
-                cwd: typeormProjectDir(),
-                stdio: 'ignore',
-                timeout: 15000,
-                env: buildRuntimeEnv({
-                    NODE_ENV: 'production'
-                })
-            }
-        );
- 
-        return true;
- 
-    } catch (_) {
- 
-        return false;
+    const searchDirs = [
+        rootDir,
+        typeormProjectDir(),
+        BACKEND_DIR
+    ];
+
+    for (const dir of [...new Set(searchDirs)]) {
+        try {
+            execSync(
+                `"${process.execPath}" -e "require('sqlite3')"`,
+                {
+                    cwd: dir,
+                    stdio: 'ignore',
+                    timeout: 15000,
+                    env: buildRuntimeEnv({
+                        NODE_ENV: 'production'
+                    })
+                }
+            );
+
+            return true;
+
+        } catch (_) {
+            // try next dir
+        }
     }
+
+    return false;
 }
  
  
