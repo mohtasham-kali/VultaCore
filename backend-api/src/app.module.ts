@@ -57,6 +57,20 @@ const staticModuleOptions = fs.existsSync(join(process.cwd(), 'out'))
         } else if (isMysql) {
           dbConfig.type = 'mysql';
           dbConfig.url = dbUrl;
+          try {
+            const parsed = new URL(dbUrl);
+            const rawDb = (parsed.pathname || '').replace(/^\//, '');
+            if (rawDb.toLowerCase() === 'database' || !rawDb) {
+              console.error('================================================================');
+              console.error('[Database] 🛑 CRITICAL CONFIGURATION ERROR:');
+              console.error('[Database] Current database name in DATABASE_URL is "' + rawDb + '".');
+              console.error('[Database] On Hostinger, database names always include your account prefix!');
+              console.error('[Database] Example: u879979656_vultacore (check Hostinger -> Databases)');
+              console.error('[Database] Update DATABASE_URL in Hostinger Environment Variables:');
+              console.error('[Database]   mysql://' + (parsed.username || 'user') + ':PASSWORD@' + (parsed.host || '127.0.0.1:3306') + '/u879979656_YOUR_ACTUAL_DB_NAME');
+              console.error('================================================================');
+            }
+          } catch (_) {}
         } else {
           try {
             require('sqlite3');
