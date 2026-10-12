@@ -50,6 +50,9 @@ function buildRuntimeEnv(extra = {}) {
 
     const pathEntries = [
         nodeBinDir,
+        '/opt/alt/python311/bin',
+        '/opt/alt/python310/bin',
+        '/opt/alt/python39/bin',
         '/opt/alt/alt-nodejs24/root/usr/bin',
         '/opt/alt/alt-nodejs22/root/usr/bin',
         '/opt/alt/alt-nodejs20/root/usr/bin',
@@ -62,8 +65,25 @@ function buildRuntimeEnv(extra = {}) {
         pathEntries.push(...process.env.PATH.split(path.delimiter));
     }
 
+    let pyBin = null;
+    const pyCandidates = [
+        '/opt/alt/python311/bin/python3',
+        '/opt/alt/python310/bin/python3',
+        '/opt/alt/python39/bin/python3',
+        '/usr/bin/python3',
+        '/usr/local/bin/python3'
+    ];
+    for (const p of pyCandidates) {
+        if (fs.existsSync(p)) {
+            pyBin = p;
+            break;
+        }
+    }
+
     return {
         ...process.env,
+        ...(pyBin ? { PYTHON: pyBin, npm_config_python: pyBin } : {}),
+        npm_config_build_from_source: 'true',
         ...extra,
         PATH: [
             ...new Set(pathEntries.filter(Boolean))
@@ -940,22 +960,29 @@ function checkSqlite3() {
  
  
 function getBackendRequirements() {
- 
-    return [
- 
+    const dbUrl = process.env.DATABASE_URL || '';
+    const isRemoteDb = dbUrl.startsWith('postgres://') ||
+                       dbUrl.startsWith('postgresql://') ||
+                       dbUrl.startsWith('mysql://') ||
+                       dbUrl.startsWith('mariadb://');
+
+    const reqs = [
         {
             name: 'cookie-parser',
             ok: checkCookieParser,
             dir: BACKEND_DIR
-        },
- 
-        {
+        }
+    ];
+
+    if (!isRemoteDb) {
+        reqs.push({
             name: 'sqlite3',
             ok: checkSqlite3,
             dir: typeormProjectDir()
-        }
- 
-    ];
+        });
+    }
+
+    return reqs;
 }
  
  
@@ -1070,20 +1097,36 @@ async function ensureBackendDependencies() {
                             `"${npmPath}"`;
                     }
  
-                                        const extraFlags = requirement.name === 'sqlite3' ? ' --build-from-source' : '';
-                    execSync(
-                        `${command} install ${requirement.name} ` +
-                        `--save --no-audit --no-fund${extraFlags} ` +
-                        `--prefix "${requirement.dir}"`,
-                        {
-                            cwd: requirement.dir,
-                            stdio: 'inherit',
-                            timeout: 240000,
-                            env: buildRuntimeEnv({
-                                NODE_ENV: 'production'
-                            })
-                        }
-                    );
+                    if (requirement.name === 'sqlite3') {
+                        log('🔨 Attempting npm rebuild sqlite3 --build-from-source for host OS...');
+                        execSync(
+                            `${command} rebuild sqlite3 --build-from-source`,
+                            {
+                                cwd: rootDir,
+                                stdio: 'inherit',
+                                timeout: 60000,
+                                env: buildRuntimeEnv({
+                                    NODE_ENV: 'production',
+                                    npm_config_build_from_source: 'true',
+                                    BUILD_FROM_SOURCE: '1'
+                                })
+                            }
+                        );
+                    } else {
+                        execSync(
+                            `${command} install ${requirement.name} ` +
+                            `--save --no-audit --no-fund ` +
+                            `--prefix "${requirement.dir}"`,
+                            {
+                                cwd: requirement.dir,
+                                stdio: 'inherit',
+                                timeout: 60000,
+                                env: buildRuntimeEnv({
+                                    NODE_ENV: 'production'
+                                })
+                            }
+                        );
+                    }
 
                     installed = true;
                     break;
@@ -1099,17 +1142,18 @@ async function ensureBackendDependencies() {
             }
  
             if (!installed) {
- 
-                throw new Error(
- 
-                    `Unable to automatically install ` +
-                    `${requirement.name}. ` +
- 
-                    (lastError
-                        ? `Last error: ${lastError.message}`
-                        : 'npm was not found.')
- 
-                );
+                if (requirement.name === 'sqlite3') {
+                    log('⚠️ sqlite3 native module could not be compiled at runtime.');
+                    log('💡 Tip: Configure DATABASE_URL in .env (Hostinger MySQL or PostgreSQL) for zero-compilation stability.');
+                } else {
+                    throw new Error(
+                        `Unable to automatically install ` +
+                        `${requirement.name}. ` +
+                        (lastError
+                            ? `Last error: ${lastError.message}`
+                            : 'npm was not found.')
+                    );
+                }
             }
         }
  
@@ -2014,52 +2058,6 @@ async function bootEngines() {
 
 
     // ═══════════════════════════════════════════════════════════════════════
-    // BACKEND
-    // ═══════════════════════════════════════════════════════════════════════
-
-    try {
-        log(
-            '🔍 Checking backend dependencies...'
-        );
-
-        await ensureBackendDependencies();
-
-        log(
-            '🚀 Starting NestJS Backend...'
-        );
-
-        startEngine(
-            'Backend',
-            process.execPath,
-            [BACKEND_ENTRY],
-            BACK_PORT,
-            BACKEND_DIR,
-            {
-                AI_SERVICE_URL:
-                    `http://127.0.0.1:${AI_PORT}`
-            },
-            500
-        );
-
-        waitForEngineReady('Backend', BACK_PORT).then(ok => {
-            if (ok) isBackendReady = true;
-        });
-
-    } catch (error) {
-        log(
-            `❌ Backend dependency setup failed: ` +
-            error.message
-        );
-        log(
-            '🛑 Backend was NOT started.'
-        );
-        log(
-            'Open /logs to see the exact npm error.'
-        );
-    }
-
-
-    // ═══════════════════════════════════════════════════════════════════════
     // DASHBOARD
     // ═══════════════════════════════════════════════════════════════════════
 
@@ -2104,7 +2102,7 @@ async function bootEngines() {
             {
                 HOSTNAME: '127.0.0.1'
             },
-            500
+            200
         );
 
     } else {
@@ -2129,7 +2127,7 @@ async function bootEngines() {
                 {
                     HOSTNAME: '127.0.0.1'
                 },
-                500
+                200
             );
 
         } else if (fs.existsSync(nextBin)) {
@@ -2151,7 +2149,7 @@ async function bootEngines() {
                 {
                     HOSTNAME: '127.0.0.1'
                 },
-                500
+                200
             );
 
         } else {
@@ -2164,6 +2162,52 @@ async function bootEngines() {
     waitForEngineReady('Dashboard', DASH_PORT).then(ok => {
         if (ok) isDashboardReady = true;
     });
+
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // BACKEND
+    // ═══════════════════════════════════════════════════════════════════════
+
+    try {
+        log(
+            '🔍 Checking backend dependencies...'
+        );
+
+        await ensureBackendDependencies();
+
+        log(
+            '🚀 Starting NestJS Backend...'
+        );
+
+        startEngine(
+            'Backend',
+            process.execPath,
+            [BACKEND_ENTRY],
+            BACK_PORT,
+            BACKEND_DIR,
+            {
+                AI_SERVICE_URL:
+                    `http://127.0.0.1:${AI_PORT}`
+            },
+            500
+        );
+
+        waitForEngineReady('Backend', BACK_PORT).then(ok => {
+            if (ok) isBackendReady = true;
+        });
+
+    } catch (error) {
+        log(
+            `❌ Backend dependency setup failed: ` +
+            error.message
+        );
+        log(
+            '🛑 Backend was NOT started.'
+        );
+        log(
+            'Open /logs to see the exact npm error.'
+        );
+    }
 
     log(
         '════════════════════════════════════════'

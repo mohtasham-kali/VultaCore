@@ -41,6 +41,10 @@ const staticModuleOptions = fs.existsSync(join(process.cwd(), 'out'))
           dbUrl &&
           (dbUrl.startsWith('postgres://') ||
             dbUrl.startsWith('postgresql://'));
+        const isMysql =
+          dbUrl &&
+          (dbUrl.startsWith('mysql://') ||
+            dbUrl.startsWith('mariadb://'));
         const dbConfig: any = {
           autoLoadEntities: true,
           synchronize: true,
@@ -50,7 +54,20 @@ const staticModuleOptions = fs.existsSync(join(process.cwd(), 'out'))
           dbConfig.type = 'postgres';
           dbConfig.url = dbUrl;
           dbConfig.ssl = { rejectUnauthorized: false };
+        } else if (isMysql) {
+          dbConfig.type = 'mysql';
+          dbConfig.url = dbUrl;
         } else {
+          try {
+            require('sqlite3');
+          } catch (sqliteErr) {
+            console.error('================================================================');
+            console.error('[Database] ⚠️ sqlite3 native library failed to load:', sqliteErr.message);
+            console.error('[Database] 👉 On Hostinger or Cloud Linux, you can configure a free database:');
+            console.error('[Database]    • Hostinger MySQL: DATABASE_URL=mysql://user:pass@127.0.0.1:3306/dbname');
+            console.error('[Database]    • Cloud PostgreSQL (Neon/Supabase): DATABASE_URL=postgres://user:pass@host/dbname');
+            console.error('================================================================');
+          }
           dbConfig.type = 'sqlite';
           if (dbUrl && dbUrl.startsWith('sqlite:')) {
             // Remove 'sqlite:///' or 'sqlite://' or 'sqlite:'

@@ -53,11 +53,11 @@ if (process.env.CI && !process.env.SETUP_PYTHON) {
   process.exit(0);
 }
 
-// Skip if a venv already exists (local dev)
+// Check virtualenv (local dev)
 const venvPy = path.join(aiDir, 'venv', 'bin', 'python3');
-if (fs.existsSync(venvPy)) {
+const hasLocalVenv = fs.existsSync(venvPy);
+if (hasLocalVenv) {
   console.log('[setup-python] Local virtualenv found — skipping cloud package install.');
-  process.exit(0);
 }
 
 const python = findPython();
@@ -84,26 +84,65 @@ const missing = REQUIRED.filter(pkg => {
   } catch (_) { return true; }
 });
 
-if (missing.length === 0) {
-  console.log('[setup-python] ✅ All Python packages already available globally.');
-  process.exit(0);
-}
-
-console.log(`[setup-python] Installing missing packages: ${missing.join(', ')}`);
-console.log(`[setup-python] Target directory: ${targetDir}`);
-
-try {
-  fs.mkdirSync(targetDir, { recursive: true });
-  const result = spawnSync(
-    python,
-    ['-m', 'pip', 'install', '--quiet', '--target', targetDir, ...missing],
-    { stdio: 'inherit', timeout: 180000, encoding: 'utf8' }
-  );
-  if (result.status === 0) {
-    console.log('[setup-python] ✅ Python packages installed successfully into .python_packages');
-  } else {
-    console.error('[setup-python] ⚠️  pip install exited with error. AI Engine may not start.');
+function ensureSqliteModule(pythonBin) {
+  console.log('[setup-sqlite] Testing sqlite3 native module compatibility...');
+  try {
+    require('sqlite3');
+    console.log('[setup-sqlite] ✅ sqlite3 native module is compatible with host GLIBC.');
+    return;
+  } catch (err) {
+    console.warn(`[setup-sqlite] ⚠️ sqlite3 failed to load (${err.message}).`);
+    console.log('[setup-sqlite] 🔨 Rebuilding sqlite3 from source for host OS (GLIBC link)...');
   }
-} catch (err) {
-  console.error(`[setup-python] ❌ Failed to install packages: ${err.message}`);
+
+  const pythonDir = pythonBin ? path.dirname(pythonBin) : '';
+  const rebuildEnv = {
+    ...process.env,
+    PATH: [pythonDir, '/opt/alt/python311/bin', '/opt/alt/python310/bin', process.env.PATH].filter(Boolean).join(path.delimiter),
+    ...(pythonBin ? { PYTHON: pythonBin, npm_config_python: pythonBin } : {}),
+    npm_config_build_from_source: 'true',
+    BUILD_FROM_SOURCE: '1',
+  };
+
+  try {
+    execSync('npm rebuild sqlite3 --build-from-source', {
+      cwd: rootDir,
+      stdio: 'inherit',
+      timeout: 300000,
+      env: rebuildEnv,
+    });
+    console.log('[setup-sqlite] ✅ sqlite3 rebuild from source completed.');
+  } catch (rebuildErr) {
+    console.warn(`[setup-sqlite] ⚠️ npm rebuild sqlite3 failed: ${rebuildErr.message}`);
+  }
 }
+
+// 1. Python AI dependencies
+if (hasLocalVenv) {
+  console.log('[setup-python] Using local virtual environment for Python packages.');
+} else if (missing.length === 0) {
+  console.log('[setup-python] ✅ All Python packages already available globally.');
+} else {
+  console.log(`[setup-python] Installing missing packages: ${missing.join(', ')}`);
+  console.log(`[setup-python] Target directory: ${targetDir}`);
+
+  try {
+    fs.mkdirSync(targetDir, { recursive: true });
+    const result = spawnSync(
+      python,
+      ['-m', 'pip', 'install', '--quiet', '--target', targetDir, ...missing],
+      { stdio: 'inherit', timeout: 180000, encoding: 'utf8' }
+    );
+    if (result.status === 0) {
+      console.log('[setup-python] ✅ Python packages installed successfully into .python_packages');
+    } else {
+      console.error('[setup-python] ⚠️ pip install exited with error. AI Engine may not start.');
+    }
+  } catch (err) {
+    console.error(`[setup-python] ❌ Failed to install packages: ${err.message}`);
+  }
+}
+
+// 2. Host SQLite3 compatibility
+ensureSqliteModule(python);
+
