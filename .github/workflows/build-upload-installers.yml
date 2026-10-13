@@ -74,7 +74,9 @@ jobs:
           path: web-dashboard/out
 
       - name: Install desktop-app dependencies
-        run: npm install
+        run: |
+          rm -f ../package-lock.json package-lock.json
+          npm install --no-package-lock
         working-directory: desktop-app
 
       - name: Build Tauri app executable & installers
@@ -119,7 +121,10 @@ jobs:
           path: web-dashboard/out
 
       - name: Install desktop-app dependencies
-        run: npm install
+        run: |
+          rm -f ../package-lock.json package-lock.json
+          npm install --no-package-lock
+          npm install --no-package-lock @tauri-apps/cli-win32-x64-msvc@^2.10.1
         working-directory: desktop-app
 
       - name: Build Tauri app executable & installers (Windows)
@@ -162,7 +167,10 @@ jobs:
           path: web-dashboard/out
 
       - name: Install desktop-app dependencies
-        run: npm install
+        run: |
+          rm -f ../package-lock.json package-lock.json
+          npm install --no-package-lock
+          npm install --no-package-lock @tauri-apps/cli-darwin-arm64@^2.10.1
         working-directory: desktop-app
 
       - name: Build Tauri app executable & installers (macOS)
