@@ -91,6 +91,7 @@ let isAiReady = false;
 
 let backendDependencyPromise = null;
 let bootStarted = false;
+let isProcessExiting = false;
 
 function updateEngineState() {
     try {
@@ -247,7 +248,7 @@ log('═════════════════════════
 // PORT HELPERS
 // ═══════════════════════════════════════════════════════════════════════════
  
-function checkTcpConnect(port, host, timeout) {
+function checkTcpConnect(port, host = '127.0.0.1', timeout = 500) {
     return new Promise((resolve) => {
         const socket = new net.Socket();
         let finished = false;
@@ -259,14 +260,21 @@ function checkTcpConnect(port, host, timeout) {
             resolve(value);
         };
 
-        socket.setTimeout(timeout);
-        socket.once('connect', () => finish(true));
-        socket.once('error', () => finish(false));
-        socket.once('timeout', () => finish(false));
+        const timer = setTimeout(() => finish(false), timeout);
+
+        socket.once('connect', () => {
+            clearTimeout(timer);
+            finish(true);
+        });
+        socket.once('error', () => {
+            clearTimeout(timer);
+            finish(false);
+        });
 
         try {
             socket.connect(port, host);
         } catch (_) {
+            clearTimeout(timer);
             finish(false);
         }
     });
@@ -276,9 +284,7 @@ async function isPortListening(port, timeout = 400) {
     if (!port) return false;
     // 1. Fast IPv4 TCP check
     if (await checkTcpConnect(port, '127.0.0.1', timeout)) return true;
-    // 2. Localhost fallback (covers IPv6 ::1)
-    if (await checkTcpConnect(port, 'localhost', timeout)) return true;
-    // 3. HTTP GET fallback
+    // 2. HTTP GET fallback
     if (await checkHttpHealth(port, '/', Math.max(timeout, 600))) return true;
     return false;
 }
@@ -301,44 +307,76 @@ async function findFreePort(startPort = 3001, exclude = []) {
 }
 
 
-function checkAiHealth(port, timeout = 1500) {
+function checkAiHealth(port, timeout = 2500) {
+    if (!port) return Promise.resolve(false);
     return new Promise((resolve) => {
-        const req = http.get(
-            `http://127.0.0.1:${port}/`,
-            { timeout },
-            (res) => {
-                let data = '';
-                res.on('data', chunk => { data += chunk; });
-                res.on('end', () => {
-                    resolve(data.includes('AI Service Online') || data.includes('VultaCore'));
-                });
-            }
-        );
-        req.on('error', () => resolve(false));
-        req.on('timeout', () => {
-            req.destroy();
-            resolve(false);
-        });
+        let finished = false;
+        const finish = (val) => {
+            if (finished) return;
+            finished = true;
+            resolve(val);
+        };
+
+        const timer = setTimeout(() => {
+            finish(false);
+        }, timeout);
+
+        try {
+            const req = http.get(
+                `http://127.0.0.1:${port}/`,
+                (res) => {
+                    clearTimeout(timer);
+                    let data = '';
+                    res.on('data', chunk => { data += chunk; });
+                    res.on('end', () => {
+                        finish(data.includes('AI Service Online') || data.includes('VultaCore') || res.statusCode === 200);
+                    });
+                }
+            );
+            req.on('error', () => {
+                clearTimeout(timer);
+                finish(false);
+            });
+        } catch (_) {
+            clearTimeout(timer);
+            finish(false);
+        }
     });
 }
 
 
-function checkHttpHealth(port, path = '/', timeout = 1200) {
+function checkHttpHealth(port, path = '/', timeout = 2000) {
     if (!port) return Promise.resolve(false);
     return new Promise((resolve) => {
-        const req = http.get(
-            `http://127.0.0.1:${port}${path}`,
-            { timeout },
-            (res) => {
-                res.resume();
-                resolve(true);
-            }
-        );
-        req.on('error', () => resolve(false));
-        req.on('timeout', () => {
-            req.destroy();
-            resolve(false);
-        });
+        let finished = false;
+        const finish = (val) => {
+            if (finished) return;
+            finished = true;
+            resolve(val);
+        };
+
+        const timer = setTimeout(() => {
+            finish(false);
+        }, timeout);
+
+        try {
+            const req = http.get(
+                `http://127.0.0.1:${port}${path}`,
+                (res) => {
+                    clearTimeout(timer);
+                    res.resume();
+                    // Any HTTP status code below 500 confirms the server is accepting HTTP connections
+                    finish(res.statusCode < 500);
+                }
+            );
+            req.on('error', () => {
+                clearTimeout(timer);
+                finish(false);
+            });
+        } catch (_) {
+            clearTimeout(timer);
+            finish(false);
+        }
     });
 }
 
@@ -347,20 +385,18 @@ function waitForEngineReady(name, port, maxWaitMs = 60000) {
     const startTime = Date.now();
     return new Promise((resolve) => {
         const check = async () => {
-            // Instant resolution if child stdout already confirmed readiness
-            if (
-                (name === 'Dashboard' && isDashboardReady) ||
-                (name === 'Backend' && isBackendReady) ||
-                (name === 'AI Engine' && isAiReady)
-            ) {
-                log(`✨ ${name} is confirmed ready on port ${port} (${Math.round((Date.now() - startTime) / 100) / 10}s).`);
-                resolve(true);
-                return;
+            let isReady = false;
+            if (name === 'AI Engine') {
+                isReady = await checkAiHealth(port, 2000);
+            } else if (name === 'Dashboard') {
+                isReady = await checkHttpHealth(port, '/', 2000);
+            } else if (name === 'Backend') {
+                isReady = (await checkHttpHealth(port, '/api/health', 2000)) || (await checkHttpHealth(port, '/', 2000));
             }
 
-            const listening = await isPortListening(port, 800);
-            if (listening) {
-                log(`✨ ${name} is ready and listening on port ${port} (${Math.round((Date.now() - startTime) / 100) / 10}s).`);
+            if (isReady) {
+                const elapsed = Math.round((Date.now() - startTime) / 100) / 10;
+                log(`✨ ${name} passed HTTP health check on port ${port} (${elapsed}s). Ready for traffic.`);
                 if (name === 'Dashboard') isDashboardReady = true;
                 if (name === 'Backend') isBackendReady = true;
                 if (name === 'AI Engine') isAiReady = true;
@@ -368,12 +404,13 @@ function waitForEngineReady(name, port, maxWaitMs = 60000) {
                 resolve(true);
                 return;
             }
+
             if (Date.now() - startTime > maxWaitMs) {
-                log(`⚠️ ${name} on port ${port} did not report ready within ${Math.round(maxWaitMs / 1000)}s.`);
+                log(`⚠️ ${name} on port ${port} did not pass HTTP health check within ${Math.round(maxWaitMs / 1000)}s.`);
                 resolve(false);
                 return;
             }
-            setTimeout(check, 800);
+            setTimeout(check, 600);
         };
         check();
     });
@@ -982,16 +1019,17 @@ const server = http.createServer(async (req, res) => {
         requestPath.startsWith('/socket.io');
 
     // Sync state across Passenger workers
-    if (!isBackendReady || !isDashboardReady || !BACK_PORT || !DASH_PORT) {
-        syncEngineState();
-    }
+    syncEngineState();
 
     const targetPort = isApi ? (BACK_PORT || 3001) : (DASH_PORT || 3002);
     let targetReady = isApi ? isBackendReady : isDashboardReady;
 
-    // Fast inline verification: if flag is false but target port is actually listening, promote to ready!
+    // Fast inline verification: if flag is false but target port is actually responding to HTTP, promote to ready!
     if (!targetReady && targetPort) {
-        if (await isPortListening(targetPort, 150)) {
+        const ok = isApi
+            ? ((await checkHttpHealth(targetPort, '/api/health', 350)) || (await checkHttpHealth(targetPort, '/', 350)))
+            : (await checkHttpHealth(targetPort, '/', 350));
+        if (ok) {
             if (isApi) isBackendReady = true;
             else isDashboardReady = true;
             targetReady = true;
@@ -1068,13 +1106,11 @@ server.on('upgrade', (req, clientSocket, head) => {
 // ═══════════════════════════════════════════════════════════════════════════
  
 function killChildren() {
- 
+    isProcessExiting = true;
     for (const child of runningChildren) {
- 
         try {
             child.kill('SIGTERM');
         } catch (_) {}
- 
     }
 }
  
@@ -1554,27 +1590,33 @@ function startEngine(
                             `[${name}] ${text}`
                         );
 
-                        // Instant readiness promotion on engine startup confirmation
+                        // Fast inline health check trigger on engine startup confirmation
                         if (name === 'Backend' && (text.includes('Application is running on') || text.includes('Nest application successfully started'))) {
-                            if (!isBackendReady) {
-                                isBackendReady = true;
-                                log('✨ Backend marked ready via startup output confirmation.');
-                                updateEngineState();
-                            }
+                            checkHttpHealth(port, '/api/health', 1500).then(ok => {
+                                if (ok && !isBackendReady) {
+                                    isBackendReady = true;
+                                    log(`✨ Backend passed HTTP health check on port ${port}.`);
+                                    updateEngineState();
+                                }
+                            });
                         }
-                        if (name === 'Dashboard' && (text.includes('Ready in') || text.includes('Local:') || text.includes('Starting...'))) {
-                            if (!isDashboardReady) {
-                                isDashboardReady = true;
-                                log('✨ Dashboard marked ready via startup output confirmation.');
-                                updateEngineState();
-                            }
+                        if (name === 'Dashboard' && text.includes('Ready in')) {
+                            checkHttpHealth(port, '/', 1500).then(ok => {
+                                if (ok && !isDashboardReady) {
+                                    isDashboardReady = true;
+                                    log(`✨ Dashboard passed HTTP health check on port ${port}.`);
+                                    updateEngineState();
+                                }
+                            });
                         }
                         if (name === 'AI Engine' && (text.includes('Application startup complete') || text.includes('Uvicorn running on'))) {
-                            if (!isAiReady) {
-                                isAiReady = true;
-                                log('✨ AI Engine marked ready via startup output confirmation.');
-                                updateEngineState();
-                            }
+                            checkAiHealth(port, 1500).then(ok => {
+                                if (ok && !isAiReady) {
+                                    isAiReady = true;
+                                    log(`✨ AI Engine passed HTTP health check on port ${port}.`);
+                                    updateEngineState();
+                                }
+                            });
                         }
 
                         if (text.includes('ER_DBACCESS_DENIED_ERROR') || (text.includes('Access denied') && text.includes("'Database'"))) {
@@ -1590,14 +1632,25 @@ function startEngine(
             child.stderr.on(
                 'data',
                 data => {
- 
+
                     const text =
                         data.toString().trim();
- 
+
                     if (text) {
                         log(
                             `[${name}] ${text}`
                         );
+
+                        if (name === 'AI Engine' && (text.includes('Application startup complete') || text.includes('Uvicorn running on'))) {
+                            checkAiHealth(port, 1500).then(ok => {
+                                if (ok && !isAiReady) {
+                                    isAiReady = true;
+                                    log(`✨ AI Engine passed HTTP health check on port ${port}.`);
+                                    updateEngineState();
+                                }
+                            });
+                        }
+
                         if (text.includes('ER_DBACCESS_DENIED_ERROR') || (text.includes('Access denied') && text.includes("'Database'"))) {
                             log('🛑 DATABASE CONFIG ERROR: MySQL rejected connection to database "Database"!');
                             log('👉 The word "Database" in your DATABASE_URL is an unreplaced placeholder.');
@@ -1611,7 +1664,7 @@ function startEngine(
             child.on(
                 'error',
                 error => {
- 
+
                     log(
                         `❌ [${name}] spawn error: ` +
                         error.message
@@ -1639,14 +1692,42 @@ function startEngine(
                         );
                     }
 
+                    if (isProcessExiting) {
+                        log(`ℹ️ ${name} stopped as master proxy is shutting down (${code}/${signal}).`);
+                        return;
+                    }
+
                     if (
                         signal === 'SIGTERM' ||
                         signal === 'SIGKILL'
                     ) {
-
                         log(
-                            `ℹ️ ${name} stopped ` +
-                            `(${code}/${signal}).`
+                            `⚠️ ${name} received ${signal} (code ${code}). ` +
+                            `Auto-restarting in 3 seconds...`
+                        );
+
+                        setTimeout(
+                            () => {
+                                startEngine(
+                                    name,
+                                    execBin,
+                                    execArgs,
+                                    port,
+                                    cwd,
+                                    envExtra,
+                                    0,
+                                    0
+                                );
+                                waitForEngineReady(name, port).then(ok => {
+                                    if (ok) {
+                                        if (name === 'Dashboard') isDashboardReady = true;
+                                        if (name === 'Backend') isBackendReady = true;
+                                        if (name === 'AI Engine') isAiReady = true;
+                                        updateEngineState();
+                                    }
+                                });
+                            },
+                            3000
                         );
 
                         return;
@@ -1676,6 +1757,7 @@ function startEngine(
                                         if (name === 'Dashboard') isDashboardReady = true;
                                         if (name === 'Backend') isBackendReady = true;
                                         if (name === 'AI Engine') isAiReady = true;
+                                        updateEngineState();
                                     }
                                 });
                             },
@@ -1695,11 +1777,15 @@ function startEngine(
                             );
                             port = newPort;
                             DASH_PORT = newPort;
+                            updateEngineState();
                             const newEnv = Object.assign({}, envExtra, { PORT: String(newPort) });
                             setTimeout(() => {
                                 startEngine(name, execBin, execArgs, newPort, cwd, newEnv, 0, retries + 1);
                                 waitForEngineReady(name, newPort).then(ok => {
-                                    if (ok) isDashboardReady = true;
+                                    if (ok) {
+                                        isDashboardReady = true;
+                                        updateEngineState();
+                                    }
                                 });
                             }, 1500);
                             return;
@@ -1716,12 +1802,16 @@ function startEngine(
                             );
                             port = newPort;
                             AI_PORT = newPort;
+                            updateEngineState();
                             const py = resolvePython();
                             const newArgs = py ? py.args(newPort) : execArgs;
                             setTimeout(() => {
                                 startEngine(name, execBin, newArgs, newPort, cwd, envExtra, 0, retries + 1);
                                 waitForEngineReady(name, newPort).then(ok => {
-                                    if (ok) isAiReady = true;
+                                    if (ok) {
+                                        isAiReady = true;
+                                        updateEngineState();
+                                    }
                                 });
                             }, 1500);
                             return;
@@ -1775,6 +1865,7 @@ function startEngine(
                                     if (name === 'Dashboard') isDashboardReady = true;
                                     if (name === 'Backend') isBackendReady = true;
                                     if (name === 'AI Engine') isAiReady = true;
+                                    updateEngineState();
                                 }
                             });
                         },
@@ -2359,7 +2450,10 @@ async function bootEngines() {
             );
 
             waitForEngineReady('AI Engine', AI_PORT).then(ok => {
-                if (ok) isAiReady = true;
+                if (ok) {
+                    isAiReady = true;
+                    updateEngineState();
+                }
             });
         }
     } else {
@@ -2477,7 +2571,10 @@ async function bootEngines() {
         }
 
         waitForEngineReady('Dashboard', DASH_PORT).then(ok => {
-            if (ok) isDashboardReady = true;
+            if (ok) {
+                isDashboardReady = true;
+                updateEngineState();
+            }
         });
     }
 
@@ -2516,7 +2613,10 @@ async function bootEngines() {
             );
 
             waitForEngineReady('Backend', BACK_PORT).then(ok => {
-                if (ok) isBackendReady = true;
+                if (ok) {
+                    isBackendReady = true;
+                    updateEngineState();
+                }
             });
 
         } catch (error) {
@@ -2555,6 +2655,68 @@ async function bootEngines() {
  
  
 // ═══════════════════════════════════════════════════════════════════════════
+// SUPERVISOR WATCHDOG (MULTI-WORKER RESILIENCE)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function runSupervisorWatchdog() {
+    setInterval(async () => {
+        if (isProcessExiting) return;
+
+        // 1. Sync state across workers
+        syncEngineState();
+
+        // 2. Check if the boot lock holder is alive
+        let isManagerAlive = false;
+        let holderPid = null;
+        try {
+            if (fs.existsSync(BOOT_LOCK_FILE)) {
+                holderPid = parseInt(fs.readFileSync(BOOT_LOCK_FILE, 'utf8').trim(), 10);
+                if (holderPid === process.pid) {
+                    isManagerAlive = true;
+                } else if (holderPid) {
+                    try { process.kill(holderPid, 0); isManagerAlive = true; } catch (_) {}
+                }
+            }
+        } catch (_) {}
+
+        // If the managing worker died, this worker acquires the lock and restores engines
+        if (!isManagerAlive) {
+            log(`⚠️ Engine manager (PID ${holderPid || 'none'}) is inactive. Worker PID ${process.pid} is claiming boot lock.`);
+            releaseBootLock();
+            if (tryAcquireBootLock()) {
+                bootStarted = false;
+                await bootEngines();
+                return;
+            }
+        }
+
+        // 3. Fast non-intrusive HTTP health checks to keep state fresh
+        if (DASH_PORT) {
+            const ok = await checkHttpHealth(DASH_PORT, '/', 1500);
+            if (ok !== isDashboardReady) {
+                isDashboardReady = ok;
+                updateEngineState();
+            }
+        }
+        if (BACK_PORT) {
+            const ok = (await checkHttpHealth(BACK_PORT, '/api/health', 1500)) || (await checkHttpHealth(BACK_PORT, '/', 1500));
+            if (ok !== isBackendReady) {
+                isBackendReady = ok;
+                updateEngineState();
+            }
+        }
+        if (AI_PORT) {
+            const ok = await checkAiHealth(AI_PORT, 2000);
+            if (ok !== isAiReady) {
+                isAiReady = ok;
+                updateEngineState();
+            }
+        }
+    }, 6000);
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
 // START MASTER SERVER
 // ═══════════════════════════════════════════════════════════════════════════
  
@@ -2578,6 +2740,9 @@ server.listen(
                 await ensureOllama();
  
                 await bootEngines();
+
+                // Start background supervisor watchdog
+                runSupervisorWatchdog();
  
             } catch (error) {
  

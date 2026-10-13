@@ -78,7 +78,7 @@ jobs:
         working-directory: desktop-app
 
       - name: Build Tauri app executable & installers
-        run: npx tauri build
+        run: npx tauri build --bundles deb,appimage --no-sign
         working-directory: desktop-app
 
       - name: Collect built Linux installers
@@ -123,12 +123,13 @@ jobs:
         working-directory: desktop-app
 
       - name: Build Tauri app executable & installers (Windows)
-        run: npx tauri build
+        run: npx tauri build --bundles nsis --no-sign
         working-directory: desktop-app
 
       - name: Collect built Windows installers
         run: |
           mkdir -p dist-installers
+          find desktop-app/src-tauri/target -type f -name "*setup*.exe" -o -name "*.msi" 2>/dev/null | xargs -I{} cp {} dist-installers/ || true
           find desktop-app/src-tauri/target/release/bundle -type f \( -name "*.msi" -o -name "*.exe" \) 2>/dev/null | xargs -I{} cp {} dist-installers/ || true
           ls -lh dist-installers/
 
@@ -165,7 +166,7 @@ jobs:
         working-directory: desktop-app
 
       - name: Build Tauri app executable & installers (macOS)
-        run: npx tauri build
+        run: npx tauri build --bundles dmg --no-sign
         working-directory: desktop-app
 
       - name: Collect built macOS installers
