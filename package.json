@@ -13,6 +13,7 @@
   "scripts": {
     "start": "node server.js",
     "build": "npm --prefix backend-api run build && npm --prefix web-dashboard run build",
+    "typecheck": "npm --prefix web-dashboard run typecheck && npm --prefix backend-api run typecheck",
     "postinstall": "node setup-python.js",
     "commit-installers": "node scripts/commit-installers.js"
   },
