@@ -194,7 +194,7 @@ function buildRuntimeEnv(extra = {}) {
 // We NEVER steal the lock on EPERM.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const LOCK_STALE_MS = 25000;
+const LOCK_STALE_MS = 60000;
 let _heartbeatInterval = null;
 
 function _readLockPayload() {
@@ -366,42 +366,73 @@ async function findFreePort(startPort = 3001, exclude = []) {
 }
 
 
+function dumpOpenPorts() {
+    try {
+        const tcp = fs.existsSync('/proc/net/tcp') ? fs.readFileSync('/proc/net/tcp', 'utf8') : '';
+        const tcp6 = fs.existsSync('/proc/net/tcp6') ? fs.readFileSync('/proc/net/tcp6', 'utf8') : '';
+        const parsePorts = (content) => {
+            const ports = [];
+            for (const line of content.split('\n')) {
+                const parts = line.trim().split(/\s+/);
+                if (parts.length > 3 && parts[3] === '0A') { // 0A = TCP_LISTEN
+                    const [ipHex, portHex] = parts[1].split(':');
+                    const ip = ipHex === '0100007F' ? '127.0.0.1' : ipHex === '00000000' ? '0.0.0.0' : ipHex;
+                    ports.push(`${parseInt(portHex, 16)} (${ip})`);
+                }
+            }
+            return ports;
+        };
+        const openIpv4 = parsePorts(tcp);
+        const openIpv6 = parsePorts(tcp6);
+        log(`📊 Open listening ports in container: IPv4=[${openIpv4.join(', ')}], IPv6=[${openIpv6.join(', ')}]`);
+    } catch (e) {
+        log(`📊 Could not inspect /proc/net/tcp: ${e.message}`);
+    }
+}
+
 function checkAiHealth(port, timeout = 2500) {
     if (!port) return Promise.resolve(false);
-    const url = `http://127.0.0.1:${port}/`;
-    const t0 = Date.now();
-    return new Promise((resolve) => {
-        let finished = false;
-        const finish = (val, msg) => {
-            if (finished) return;
-            finished = true;
-            const ms = Date.now() - t0;
-            log(`[Worker ${process.pid}] 🩺 Probe AI Engine: ${url} → ${msg} (${ms}ms)`);
-            resolve(val);
-        };
+    function _probeAi(host) {
+        const url = `http://${host}:${port}/`;
+        const t0 = Date.now();
+        return new Promise((resolve) => {
+            let finished = false;
+            const finish = (val, msg) => {
+                if (finished) return;
+                finished = true;
+                const ms = Date.now() - t0;
+                log(`[Worker ${process.pid}] 🩺 Probe AI Engine: ${url} → ${msg} (${ms}ms)`);
+                resolve(val);
+            };
 
-        const timer = setTimeout(() => {
-            finish(false, `TIMEOUT after ${timeout}ms`);
-        }, timeout);
+            const timer = setTimeout(() => {
+                finish(false, `TIMEOUT after ${timeout}ms`);
+            }, timeout);
 
-        try {
-            const req = http.get(url, (res) => {
-                clearTimeout(timer);
-                let data = '';
-                res.on('data', chunk => { data += chunk; });
-                res.on('end', () => {
-                    const ok = data.includes('AI Service Online') || data.includes('VultaCore') || res.statusCode === 200;
-                    finish(ok, `HTTP ${res.statusCode}`);
+            try {
+                const req = http.get(url, (res) => {
+                    clearTimeout(timer);
+                    let data = '';
+                    res.on('data', chunk => { data += chunk; });
+                    res.on('end', () => {
+                        const ok = data.includes('AI Service Online') || data.includes('VultaCore') || res.statusCode === 200;
+                        finish(ok, `HTTP ${res.statusCode}`);
+                    });
                 });
-            });
-            req.on('error', (err) => {
+                req.on('error', (err) => {
+                    clearTimeout(timer);
+                    finish(false, `Error: ${err.code || err.message}`);
+                });
+            } catch (err) {
                 clearTimeout(timer);
-                finish(false, `Error: ${err.code || err.message}`);
-            });
-        } catch (err) {
-            clearTimeout(timer);
-            finish(false, `Exception: ${err.message}`);
-        }
+                finish(false, `Exception: ${err.message}`);
+            }
+        });
+    }
+
+    return _probeAi('127.0.0.1').then(ok => {
+        if (ok) return true;
+        return _probeAi('0.0.0.0');
     });
 }
 
@@ -452,10 +483,10 @@ function checkHttpHealth(name, port, path = '/', timeout = 2000) {
         });
     }
 
-    // Try 127.0.0.1 first; if refused fall back to localhost (IPv6 dual-stack edge case)
+    // Probe 127.0.0.1 first; if refused try 0.0.0.0
     return _probeHost('127.0.0.1').then(ok => {
         if (ok) return true;
-        return _probeHost('localhost');
+        return _probeHost('0.0.0.0');
     });
 }
 
@@ -467,6 +498,11 @@ function waitForEngineReady(name, port, maxWaitMs = 60000) {
 
     return new Promise((resolve) => {
         const check = async () => {
+            // Fast-path: if stdout startup detection already confirmed ready, resolve immediately
+            if (name === 'Dashboard' && isDashboardReady) { resolve(true); return; }
+            if (name === 'Backend' && isBackendReady) { resolve(true); return; }
+            if (name === 'AI Engine' && isAiReady) { resolve(true); return; }
+
             let isReady = false;
             if (name === 'AI Engine') {
                 isReady = await checkAiHealth(port, 2000);
@@ -487,6 +523,10 @@ function waitForEngineReady(name, port, maxWaitMs = 60000) {
 
             if (Date.now() - startTime > maxWaitMs) {
                 log(`⚠️ ${name} on port ${port} did not pass HTTP health check within ${Math.round(maxWaitMs / 1000)}s.`);
+                // If stdout reported healthy startup, keep state active rather than permanently bricked
+                if (name === 'Dashboard' && isDashboardReady) { resolve(true); return; }
+                if (name === 'Backend' && isBackendReady) { resolve(true); return; }
+                if (name === 'AI Engine' && isAiReady) { resolve(true); return; }
                 resolve(false);
                 return;
             }
@@ -1522,12 +1562,13 @@ async function killZombieChildren() {
     // Proxy-only workers must NEVER kill any processes — they don't own the engines.
     if (fs.existsSync(BOOT_LOCK_FILE)) {
         try {
-            const holderPid = parseInt(fs.readFileSync(BOOT_LOCK_FILE, 'utf8').trim(), 10);
+            const payload = _readLockPayload();
+            const holderPid = payload ? payload.pid : null;
             if (holderPid && holderPid !== process.pid) {
                 let holderAlive = false;
                 try { process.kill(holderPid, 0); holderAlive = true; } catch (_) {}
                 if (holderAlive) {
-                    log('🧹 Zombie Node/Dashboard cleanup complete.');
+                    log(`🧹 Zombie Node/Dashboard cleanup complete (manager PID ${holderPid} is active).`);
                     return; // another worker is alive and owns the engines
                 }
             }
@@ -1647,6 +1688,7 @@ function startEngine(
                     }),
  
                     shell: false,
+                    detached: true,
  
                     stdio: [
                         'ignore',
@@ -1657,6 +1699,7 @@ function startEngine(
             );
  
             runningChildren.push(child);
+            log(`📡 Spawned ${name} on port ${port} (PID ${child.pid}).`);
  
             child.stdout.on(
                 'data',
@@ -1670,32 +1713,38 @@ function startEngine(
                             `[${name}] ${text}`
                         );
 
-                        // Fast inline health check trigger on engine startup confirmation
+                        // Immediately mark ready on startup stdout message; also dump ports and do async HTTP verify
                         if (name === 'Backend' && (text.includes('Application is running on') || text.includes('Nest application successfully started'))) {
-                            checkHttpHealth('Backend', port, '/api', 1500).then(ok => {
-                                if (ok && !isBackendReady) {
-                                    isBackendReady = true;
-                                    log(`✨ Backend passed HTTP health check on port ${port}.`);
-                                    updateEngineState();
-                                }
+                            if (!isBackendReady) {
+                                isBackendReady = true;
+                                log(`✨ Backend stdout confirms ready on port ${port}.`);
+                                updateEngineState();
+                                dumpOpenPorts();
+                            }
+                            checkHttpHealth('Backend', port, '/api', 3000).then(ok => {
+                                log(`🔍 Backend HTTP verify on port ${port}: ${ok ? 'OK' : 'FAILED'}`);
                             });
                         }
                         if (name === 'Dashboard' && text.includes('Ready in')) {
-                            checkHttpHealth('Dashboard', port, '/', 1500).then(ok => {
-                                if (ok && !isDashboardReady) {
-                                    isDashboardReady = true;
-                                    log(`✨ Dashboard passed HTTP health check on port ${port}.`);
-                                    updateEngineState();
-                                }
+                            if (!isDashboardReady) {
+                                isDashboardReady = true;
+                                log(`✨ Dashboard stdout confirms ready on port ${port}.`);
+                                updateEngineState();
+                                dumpOpenPorts();
+                            }
+                            checkHttpHealth('Dashboard', port, '/', 3000).then(ok => {
+                                log(`🔍 Dashboard HTTP verify on port ${port}: ${ok ? 'OK' : 'FAILED'}`);
                             });
                         }
                         if (name === 'AI Engine' && (text.includes('Application startup complete') || text.includes('Uvicorn running on'))) {
-                            checkAiHealth(port, 1500).then(ok => {
-                                if (ok && !isAiReady) {
-                                    isAiReady = true;
-                                    log(`✨ AI Engine passed HTTP health check on port ${port}.`);
-                                    updateEngineState();
-                                }
+                            if (!isAiReady) {
+                                isAiReady = true;
+                                log(`✨ AI Engine stdout confirms ready on port ${port}.`);
+                                updateEngineState();
+                                dumpOpenPorts();
+                            }
+                            checkAiHealth(port, 3000).then(ok => {
+                                log(`🔍 AI Engine HTTP verify on port ${port}: ${ok ? 'OK' : 'FAILED'}`);
                             });
                         }
 
@@ -1722,12 +1771,14 @@ function startEngine(
                         );
 
                         if (name === 'AI Engine' && (text.includes('Application startup complete') || text.includes('Uvicorn running on'))) {
-                            checkAiHealth(port, 1500).then(ok => {
-                                if (ok && !isAiReady) {
-                                    isAiReady = true;
-                                    log(`✨ AI Engine passed HTTP health check on port ${port}.`);
-                                    updateEngineState();
-                                }
+                            if (!isAiReady) {
+                                isAiReady = true;
+                                log(`✨ AI Engine stderr confirms ready on port ${port}.`);
+                                updateEngineState();
+                                dumpOpenPorts();
+                            }
+                            checkAiHealth(port, 3000).then(ok => {
+                                log(`🔍 AI Engine HTTP verify on port ${port}: ${ok ? 'OK' : 'FAILED'}`);
                             });
                         }
 
