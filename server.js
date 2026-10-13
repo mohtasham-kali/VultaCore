@@ -179,38 +179,97 @@ function buildRuntimeEnv(extra = {}) {
 
 // ═══════════════════════════════════════════════════════════════════════════
 // BOOT LOCK — ensures only one Passenger worker runs bootEngines()
+//
+// Uses an atomic O_EXCL file create for acquisition so two workers racing
+// simultaneously cannot both succeed. The managing worker writes a JSON
+// heartbeat (pid + ts) and refreshes it every 3 s so that proxy workers can
+// reliably detect a dead manager.
+//
+// A lock is considered stale ONLY when BOTH conditions are true:
+//   1. The heartbeat timestamp is older than LOCK_STALE_MS (25 s), AND
+//   2. process.kill(pid, 0) throws ESRCH ("no such process").
+//
+// EPERM ("operation not permitted") means the process EXISTS but is in a
+// different security namespace — Passenger sets this up for worker isolation.
+// We NEVER steal the lock on EPERM.
 // ═══════════════════════════════════════════════════════════════════════════
 
-function tryAcquireBootLock() {
+const LOCK_STALE_MS = 25000;
+let _heartbeatInterval = null;
+
+function _readLockPayload() {
     try {
-        if (fs.existsSync(BOOT_LOCK_FILE)) {
-            const raw = fs.readFileSync(BOOT_LOCK_FILE, 'utf8').trim();
-            const lockedPid = parseInt(raw, 10);
-            if (lockedPid && lockedPid !== process.pid) {
-                try {
-                    // signal 0 = existence check only, no actual signal sent
-                    process.kill(lockedPid, 0);
-                    // PID is alive → another worker holds the lock
-                    return false;
-                } catch (_) {
-                    // PID is dead → stale lock, take over
-                }
-            }
-        }
-        fs.writeFileSync(BOOT_LOCK_FILE, String(process.pid));
-        return true;
+        const raw = fs.readFileSync(BOOT_LOCK_FILE, 'utf8').trim();
+        return JSON.parse(raw);
     } catch (_) {
-        return false;
+        return null;
     }
 }
 
-function releaseBootLock() {
+function _writeLockPayload(pid) {
+    fs.writeFileSync(BOOT_LOCK_FILE, JSON.stringify({ pid, ts: Date.now() }));
+}
+
+function _isLockStale(payload) {
+    if (!payload || !payload.pid || !payload.ts) return true;
+    if (payload.pid === process.pid) return false;         // we own it
+    const age = Date.now() - payload.ts;
+    if (age < LOCK_STALE_MS) return false;                 // fresh heartbeat
+    // Only steal if the process is truly gone (ESRCH); never on EPERM.
     try {
-        if (fs.existsSync(BOOT_LOCK_FILE)) {
-            const raw = fs.readFileSync(BOOT_LOCK_FILE, 'utf8').trim();
-            if (parseInt(raw, 10) === process.pid) {
-                fs.unlinkSync(BOOT_LOCK_FILE);
-            }
+        process.kill(payload.pid, 0);
+        return false; // process is alive (or EPERM = alive in other ns)
+    } catch (err) {
+        return err.code === 'ESRCH';                       // truly dead
+    }
+}
+
+function tryAcquireBootLock() {
+    // Fast path: check existing lock first
+    if (fs.existsSync(BOOT_LOCK_FILE)) {
+        const payload = _readLockPayload();
+        if (payload && payload.pid === process.pid) {
+            // We already own it — just refresh heartbeat
+            try { _writeLockPayload(process.pid); } catch (_) {}
+            return true;
+        }
+        if (!_isLockStale(payload)) {
+            return false; // another healthy worker holds the lock
+        }
+        // Stale lock — remove it before attempting atomic create
+        try { fs.unlinkSync(BOOT_LOCK_FILE); } catch (_) {}
+    }
+
+    // Atomic exclusive create: only ONE worker wins the race
+    try {
+        const fd = fs.openSync(BOOT_LOCK_FILE, 'wx');
+        const payload = JSON.stringify({ pid: process.pid, ts: Date.now() });
+        fs.writeSync(fd, payload);
+        fs.closeSync(fd);
+    } catch (err) {
+        if (err.code === 'EEXIST') return false; // another worker won the race
+        return false;
+    }
+
+    // Start heartbeat so proxy workers know we're alive
+    if (_heartbeatInterval) clearInterval(_heartbeatInterval);
+    _heartbeatInterval = setInterval(() => {
+        try { _writeLockPayload(process.pid); } catch (_) {}
+    }, 3000);
+    if (_heartbeatInterval.unref) _heartbeatInterval.unref();
+
+    return true;
+}
+
+function releaseBootLock() {
+    if (_heartbeatInterval) {
+        clearInterval(_heartbeatInterval);
+        _heartbeatInterval = null;
+    }
+    try {
+        const payload = _readLockPayload();
+        if (payload && payload.pid === process.pid) {
+            fs.unlinkSync(BOOT_LOCK_FILE);
         }
     } catch (_) {}
 }
@@ -309,89 +368,110 @@ async function findFreePort(startPort = 3001, exclude = []) {
 
 function checkAiHealth(port, timeout = 2500) {
     if (!port) return Promise.resolve(false);
+    const url = `http://127.0.0.1:${port}/`;
+    const t0 = Date.now();
     return new Promise((resolve) => {
         let finished = false;
-        const finish = (val) => {
+        const finish = (val, msg) => {
             if (finished) return;
             finished = true;
+            const ms = Date.now() - t0;
+            log(`[Worker ${process.pid}] 🩺 Probe AI Engine: ${url} → ${msg} (${ms}ms)`);
             resolve(val);
         };
 
         const timer = setTimeout(() => {
-            finish(false);
+            finish(false, `TIMEOUT after ${timeout}ms`);
         }, timeout);
 
         try {
-            const req = http.get(
-                `http://127.0.0.1:${port}/`,
-                (res) => {
-                    clearTimeout(timer);
-                    let data = '';
-                    res.on('data', chunk => { data += chunk; });
-                    res.on('end', () => {
-                        finish(data.includes('AI Service Online') || data.includes('VultaCore') || res.statusCode === 200);
-                    });
-                }
-            );
-            req.on('error', () => {
+            const req = http.get(url, (res) => {
                 clearTimeout(timer);
-                finish(false);
+                let data = '';
+                res.on('data', chunk => { data += chunk; });
+                res.on('end', () => {
+                    const ok = data.includes('AI Service Online') || data.includes('VultaCore') || res.statusCode === 200;
+                    finish(ok, `HTTP ${res.statusCode}`);
+                });
             });
-        } catch (_) {
+            req.on('error', (err) => {
+                clearTimeout(timer);
+                finish(false, `Error: ${err.code || err.message}`);
+            });
+        } catch (err) {
             clearTimeout(timer);
-            finish(false);
+            finish(false, `Exception: ${err.message}`);
         }
     });
 }
 
 
-function checkHttpHealth(port, path = '/', timeout = 2000) {
+function checkHttpHealth(name, port, path = '/', timeout = 2000) {
+    // Overloaded signature: checkHttpHealth(port, path, timeout) is the legacy form.
+    // Detect: if first arg is a number treat as legacy (name = derived from port).
+    if (typeof name === 'number') {
+        timeout = path;
+        path    = port;
+        port    = name;
+        name    = `port-${port}`;
+    }
     if (!port) return Promise.resolve(false);
-    return new Promise((resolve) => {
-        let finished = false;
-        const finish = (val) => {
-            if (finished) return;
-            finished = true;
-            resolve(val);
-        };
 
-        const timer = setTimeout(() => {
-            finish(false);
-        }, timeout);
+    function _probeHost(host) {
+        const url = `http://${host}:${port}${path}`;
+        const t0 = Date.now();
+        return new Promise((resolve) => {
+            let finished = false;
+            const finish = (val, msg) => {
+                if (finished) return;
+                finished = true;
+                const ms = Date.now() - t0;
+                log(`[Worker ${process.pid}] 🩺 Probe ${name}: ${url} → ${msg} (${ms}ms)`);
+                resolve(val);
+            };
 
-        try {
-            const req = http.get(
-                `http://127.0.0.1:${port}${path}`,
-                (res) => {
+            const timer = setTimeout(() => {
+                finish(false, `TIMEOUT after ${timeout}ms`);
+            }, timeout);
+
+            try {
+                const req = http.get({ hostname: host, port, path, timeout }, (res) => {
                     clearTimeout(timer);
                     res.resume();
-                    // Any HTTP status code below 500 confirms the server is accepting HTTP connections
-                    finish(res.statusCode < 500);
-                }
-            );
-            req.on('error', () => {
+                    // Any HTTP response below 500 means the server is accepting HTTP
+                    finish(res.statusCode < 500, `HTTP ${res.statusCode}`);
+                });
+                req.on('error', (err) => {
+                    clearTimeout(timer);
+                    finish(false, `Error: ${err.code || err.message}`);
+                });
+            } catch (err) {
                 clearTimeout(timer);
-                finish(false);
-            });
-        } catch (_) {
-            clearTimeout(timer);
-            finish(false);
-        }
+                finish(false, `Exception: ${err.message}`);
+            }
+        });
+    }
+
+    // Try 127.0.0.1 first; if refused fall back to localhost (IPv6 dual-stack edge case)
+    return _probeHost('127.0.0.1').then(ok => {
+        if (ok) return true;
+        return _probeHost('localhost');
     });
 }
 
 
 function waitForEngineReady(name, port, maxWaitMs = 60000) {
     const startTime = Date.now();
+    // Backend's real health endpoint: NestJS setGlobalPrefix('api') + @Get() → GET /api
+    const probePath = name === 'Backend' ? '/api' : '/';
+
     return new Promise((resolve) => {
         const check = async () => {
             let isReady = false;
             if (name === 'AI Engine') {
                 isReady = await checkAiHealth(port, 2000);
-            } else if (name === 'Dashboard') {
-                isReady = await checkHttpHealth(port, '/', 2000);
-            } else if (name === 'Backend') {
-                isReady = (await checkHttpHealth(port, '/api/health', 2000)) || (await checkHttpHealth(port, '/', 2000));
+            } else {
+                isReady = await checkHttpHealth(name, port, probePath, 2000);
             }
 
             if (isReady) {
@@ -1027,8 +1107,8 @@ const server = http.createServer(async (req, res) => {
     // Fast inline verification: if flag is false but target port is actually responding to HTTP, promote to ready!
     if (!targetReady && targetPort) {
         const ok = isApi
-            ? ((await checkHttpHealth(targetPort, '/api/health', 350)) || (await checkHttpHealth(targetPort, '/', 350)))
-            : (await checkHttpHealth(targetPort, '/', 350));
+            ? (await checkHttpHealth('Backend', targetPort, '/api', 350))
+            : (await checkHttpHealth('Dashboard', targetPort, '/', 350));
         if (ok) {
             if (isApi) isBackendReady = true;
             else isDashboardReady = true;
@@ -1592,7 +1672,7 @@ function startEngine(
 
                         // Fast inline health check trigger on engine startup confirmation
                         if (name === 'Backend' && (text.includes('Application is running on') || text.includes('Nest application successfully started'))) {
-                            checkHttpHealth(port, '/api/health', 1500).then(ok => {
+                            checkHttpHealth('Backend', port, '/api', 1500).then(ok => {
                                 if (ok && !isBackendReady) {
                                     isBackendReady = true;
                                     log(`✨ Backend passed HTTP health check on port ${port}.`);
@@ -1601,7 +1681,7 @@ function startEngine(
                             });
                         }
                         if (name === 'Dashboard' && text.includes('Ready in')) {
-                            checkHttpHealth(port, '/', 1500).then(ok => {
+                            checkHttpHealth('Dashboard', port, '/', 1500).then(ok => {
                                 if (ok && !isDashboardReady) {
                                     isDashboardReady = true;
                                     log(`✨ Dashboard passed HTTP health check on port ${port}.`);
@@ -2365,7 +2445,7 @@ async function bootEngines() {
         const exclude = [masterPort];
 
         // Check if preferred Dashboard port (3002) is already running and healthy
-        if (await checkHttpHealth(3002, '/')) {
+        if (await checkHttpHealth('Dashboard', 3002, '/', 1500)) {
             DASH_PORT = 3002;
             isDashboardReady = true;
             log(`ℹ️ Dashboard is already running and healthy on port ${DASH_PORT}. Reusing existing process.`);
@@ -2375,7 +2455,8 @@ async function bootEngines() {
         exclude.push(DASH_PORT);
 
         // Check if preferred Backend port (3001) is already running and healthy
-        if (await checkHttpHealth(3001, '/')) {
+        // Backend's real health route: NestJS globalPrefix='api' + @Get() → GET /api
+        if (await checkHttpHealth('Backend', 3001, '/api', 1500)) {
             BACK_PORT = 3001;
             isBackendReady = true;
             log(`ℹ️ Backend is already running and healthy on port ${BACK_PORT}. Reusing existing process.`);
@@ -2665,24 +2746,18 @@ function runSupervisorWatchdog() {
         // 1. Sync state across workers
         syncEngineState();
 
-        // 2. Check if the boot lock holder is alive
-        let isManagerAlive = false;
-        let holderPid = null;
-        try {
-            if (fs.existsSync(BOOT_LOCK_FILE)) {
-                holderPid = parseInt(fs.readFileSync(BOOT_LOCK_FILE, 'utf8').trim(), 10);
-                if (holderPid === process.pid) {
-                    isManagerAlive = true;
-                } else if (holderPid) {
-                    try { process.kill(holderPid, 0); isManagerAlive = true; } catch (_) {}
-                }
-            }
-        } catch (_) {}
+        // 2. Check if the boot lock holder is alive using the heartbeat-aware check.
+        // We only consider the manager gone when _isLockStale returns true, which
+        // requires BOTH an expired heartbeat (>25 s old) AND ESRCH (process not found).
+        // EPERM (Passenger cross-namespace) is treated as "manager alive".
+        const lockPayload = _readLockPayload();
+        const holderPid = lockPayload ? lockPayload.pid : null;
+        const isManagerAlive = holderPid === process.pid || !_isLockStale(lockPayload);
 
         // If the managing worker died, this worker acquires the lock and restores engines
         if (!isManagerAlive) {
-            log(`⚠️ Engine manager (PID ${holderPid || 'none'}) is inactive. Worker PID ${process.pid} is claiming boot lock.`);
-            releaseBootLock();
+            log(`⚠️ Engine manager (PID ${holderPid || 'none'}) heartbeat stale/gone. Worker PID ${process.pid} claiming boot lock.`);
+            try { fs.unlinkSync(BOOT_LOCK_FILE); } catch (_) {}
             if (tryAcquireBootLock()) {
                 bootStarted = false;
                 await bootEngines();
@@ -2690,16 +2765,17 @@ function runSupervisorWatchdog() {
             }
         }
 
-        // 3. Fast non-intrusive HTTP health checks to keep state fresh
+        // 3. Fast non-intrusive HTTP health checks to keep state fresh.
+        // Note: Backend's only real route is GET /api (NestJS globalPrefix='api' + @Get()).
         if (DASH_PORT) {
-            const ok = await checkHttpHealth(DASH_PORT, '/', 1500);
+            const ok = await checkHttpHealth('Dashboard', DASH_PORT, '/', 1500);
             if (ok !== isDashboardReady) {
                 isDashboardReady = ok;
                 updateEngineState();
             }
         }
         if (BACK_PORT) {
-            const ok = (await checkHttpHealth(BACK_PORT, '/api/health', 1500)) || (await checkHttpHealth(BACK_PORT, '/', 1500));
+            const ok = await checkHttpHealth('Backend', BACK_PORT, '/api', 1500);
             if (ok !== isBackendReady) {
                 isBackendReady = ok;
                 updateEngineState();
