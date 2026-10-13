@@ -76,9 +76,10 @@ const DOWNLOADS_DIR = path.join(rootDir, 'public', 'downloads');
 // Lock file that ensures only ONE Passenger worker runs bootEngines().
 // Scoped to rootDir so it's naturally per-deployment-version.
 const BOOT_LOCK_FILE = path.join(rootDir, '.vultacore_boot.lock');
+const ENGINE_STATE_FILE = path.join(rootDir, '.vultacore_state.json');
 
-let BACK_PORT = null;
-let DASH_PORT = null;
+let BACK_PORT = 3001;
+let DASH_PORT = 3002;
 let AI_PORT = parseInt(process.env.AI_PORT || '8001', 10);
  
 let bootLogs = [];
@@ -90,6 +91,41 @@ let isAiReady = false;
 
 let backendDependencyPromise = null;
 let bootStarted = false;
+
+function updateEngineState() {
+    try {
+        const state = {
+            backendPort: BACK_PORT,
+            dashboardPort: DASH_PORT,
+            aiPort: AI_PORT,
+            backendReady: isBackendReady,
+            dashboardReady: isDashboardReady,
+            aiReady: isAiReady,
+            pid: process.pid,
+            updatedAt: Date.now()
+        };
+        fs.writeFileSync(ENGINE_STATE_FILE, JSON.stringify(state));
+    } catch (_) {}
+}
+
+function syncEngineState() {
+    try {
+        if (fs.existsSync(ENGINE_STATE_FILE)) {
+            const raw = fs.readFileSync(ENGINE_STATE_FILE, 'utf8');
+            const state = JSON.parse(raw);
+            if (state) {
+                if (state.backendPort) BACK_PORT = state.backendPort;
+                if (state.dashboardPort) DASH_PORT = state.dashboardPort;
+                if (state.aiPort) AI_PORT = state.aiPort;
+                if (state.backendReady !== undefined) isBackendReady = state.backendReady;
+                if (state.dashboardReady !== undefined) isDashboardReady = state.dashboardReady;
+                if (state.aiReady !== undefined) isAiReady = state.aiReady;
+                return state;
+            }
+        }
+    } catch (_) {}
+    return null;
+}
 
 function buildRuntimeEnv(extra = {}) {
     const nodeBinDir = process.execPath
@@ -211,7 +247,7 @@ log('═════════════════════════
 // PORT HELPERS
 // ═══════════════════════════════════════════════════════════════════════════
  
-function isPortListening(port, timeout = 400) {
+function checkTcpConnect(port, host, timeout) {
     return new Promise((resolve) => {
         const socket = new net.Socket();
         let finished = false;
@@ -219,11 +255,7 @@ function isPortListening(port, timeout = 400) {
         const finish = (value) => {
             if (finished) return;
             finished = true;
-
-            try {
-                socket.destroy();
-            } catch (_) {}
-
+            try { socket.destroy(); } catch (_) {}
             resolve(value);
         };
 
@@ -233,11 +265,22 @@ function isPortListening(port, timeout = 400) {
         socket.once('timeout', () => finish(false));
 
         try {
-            socket.connect(port, '127.0.0.1');
+            socket.connect(port, host);
         } catch (_) {
             finish(false);
         }
     });
+}
+
+async function isPortListening(port, timeout = 400) {
+    if (!port) return false;
+    // 1. Fast IPv4 TCP check
+    if (await checkTcpConnect(port, '127.0.0.1', timeout)) return true;
+    // 2. Localhost fallback (covers IPv6 ::1)
+    if (await checkTcpConnect(port, 'localhost', timeout)) return true;
+    // 3. HTTP GET fallback
+    if (await checkHttpHealth(port, '/', Math.max(timeout, 600))) return true;
+    return false;
 }
 
 /**
@@ -304,9 +347,24 @@ function waitForEngineReady(name, port, maxWaitMs = 60000) {
     const startTime = Date.now();
     return new Promise((resolve) => {
         const check = async () => {
+            // Instant resolution if child stdout already confirmed readiness
+            if (
+                (name === 'Dashboard' && isDashboardReady) ||
+                (name === 'Backend' && isBackendReady) ||
+                (name === 'AI Engine' && isAiReady)
+            ) {
+                log(`✨ ${name} is confirmed ready on port ${port} (${Math.round((Date.now() - startTime) / 100) / 10}s).`);
+                resolve(true);
+                return;
+            }
+
             const listening = await isPortListening(port, 800);
             if (listening) {
                 log(`✨ ${name} is ready and listening on port ${port} (${Math.round((Date.now() - startTime) / 100) / 10}s).`);
+                if (name === 'Dashboard') isDashboardReady = true;
+                if (name === 'Backend') isBackendReady = true;
+                if (name === 'AI Engine') isAiReady = true;
+                updateEngineState();
                 resolve(true);
                 return;
             }
@@ -577,6 +635,7 @@ body {
  
 function proxyRequest(req, res, targetPort) {
  
+    const clientHost = req.headers.host || `127.0.0.1:${targetPort}`;
     const options = {
         hostname: '127.0.0.1',
         port: targetPort,
@@ -585,7 +644,10 @@ function proxyRequest(req, res, targetPort) {
  
         headers: {
             ...req.headers,
-            host: `127.0.0.1:${targetPort}`
+            host: clientHost,
+            'x-forwarded-host': clientHost,
+            'x-forwarded-proto': req.headers['x-forwarded-proto'] || 'https',
+            'x-forwarded-for': req.headers['x-forwarded-for'] || req.socket.remoteAddress
         }
     };
  
@@ -919,15 +981,21 @@ const server = http.createServer(async (req, res) => {
         requestPath.startsWith('/api') ||
         requestPath.startsWith('/socket.io');
 
-    const targetPort = isApi ? BACK_PORT : DASH_PORT;
+    // Sync state across Passenger workers
+    if (!isBackendReady || !isDashboardReady || !BACK_PORT || !DASH_PORT) {
+        syncEngineState();
+    }
+
+    const targetPort = isApi ? (BACK_PORT || 3001) : (DASH_PORT || 3002);
     let targetReady = isApi ? isBackendReady : isDashboardReady;
 
     // Fast inline verification: if flag is false but target port is actually listening, promote to ready!
     if (!targetReady && targetPort) {
-        if (await isPortListening(targetPort, 120)) {
+        if (await isPortListening(targetPort, 150)) {
             if (isApi) isBackendReady = true;
             else isDashboardReady = true;
             targetReady = true;
+            updateEngineState();
         }
     }
 
@@ -963,7 +1031,11 @@ server.on('upgrade', (req, clientSocket, head) => {
         requestPath.startsWith('/api') ||
         requestPath.startsWith('/socket.io');
 
-    const targetPort = isApi ? BACK_PORT : DASH_PORT;
+    if (!isBackendReady || !isDashboardReady || !BACK_PORT || !DASH_PORT) {
+        syncEngineState();
+    }
+
+    const targetPort = isApi ? (BACK_PORT || 3001) : (DASH_PORT || 3002);
     const targetReady = isApi ? isBackendReady : isDashboardReady;
 
     if (!targetPort || !targetReady) {
@@ -1481,6 +1553,30 @@ function startEngine(
                         log(
                             `[${name}] ${text}`
                         );
+
+                        // Instant readiness promotion on engine startup confirmation
+                        if (name === 'Backend' && (text.includes('Application is running on') || text.includes('Nest application successfully started'))) {
+                            if (!isBackendReady) {
+                                isBackendReady = true;
+                                log('✨ Backend marked ready via startup output confirmation.');
+                                updateEngineState();
+                            }
+                        }
+                        if (name === 'Dashboard' && (text.includes('Ready in') || text.includes('Local:') || text.includes('Starting...'))) {
+                            if (!isDashboardReady) {
+                                isDashboardReady = true;
+                                log('✨ Dashboard marked ready via startup output confirmation.');
+                                updateEngineState();
+                            }
+                        }
+                        if (name === 'AI Engine' && (text.includes('Application startup complete') || text.includes('Uvicorn running on'))) {
+                            if (!isAiReady) {
+                                isAiReady = true;
+                                log('✨ AI Engine marked ready via startup output confirmation.');
+                                updateEngineState();
+                            }
+                        }
+
                         if (text.includes('ER_DBACCESS_DENIED_ERROR') || (text.includes('Access denied') && text.includes("'Database'"))) {
                             log('🛑 DATABASE CONFIG ERROR: MySQL rejected connection to database "Database"!');
                             log('👉 The word "Database" in your DATABASE_URL is an unreplaced placeholder.');
@@ -1530,6 +1626,7 @@ function startEngine(
                     if (name === 'Dashboard') isDashboardReady = false;
                     if (name === 'Backend') isBackendReady = false;
                     if (name === 'AI Engine') isAiReady = false;
+                    updateEngineState();
 
                     const index =
                         runningChildren.indexOf(child);
@@ -2146,14 +2243,15 @@ async function bootEngines() {
     // Passenger spawns 4+ independent server.js worker processes. Only ONE
     // should manage the engine child processes; the others act as pure proxies.
     if (!tryAcquireBootLock()) {
+        syncEngineState();
         try {
             const holderPid = fs.readFileSync(BOOT_LOCK_FILE, 'utf8').trim();
             log(
                 `ℹ️ Worker PID ${holderPid} is managing the engines. ` +
-                `This worker (PID ${process.pid}) will proxy only.`
+                `This worker (PID ${process.pid}) will proxy only (Dashboard:${DASH_PORT}, Backend:${BACK_PORT}).`
             );
         } catch (_) {
-            log('ℹ️ Another worker is managing the engines. This worker will proxy only.');
+            log(`ℹ️ Another worker is managing the engines. This worker will proxy only (Dashboard:${DASH_PORT}, Backend:${BACK_PORT}).`);
         }
         return;
     }
@@ -2231,6 +2329,7 @@ async function bootEngines() {
             `Dashboard=${DASH_PORT}, ` +
             `AI=${AI_PORT}`
         );
+        updateEngineState();
 
     } catch (error) {
         log(

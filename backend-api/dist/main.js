@@ -46,13 +46,6 @@ async function bootstrap() {
     console.log('[STARTUP] Current working directory:', process.cwd());
     console.log('[STARTUP] Application directory (__dirname):', __dirname);
     try {
-        const sqlite3Path = require.resolve('sqlite3');
-        console.log('[STARTUP] sqlite3 resolved from:', sqlite3Path);
-    }
-    catch (error) {
-        console.error('[STARTUP] ❌ sqlite3 cannot be resolved:', error.message);
-    }
-    try {
         const app = await core_1.NestFactory.create(app_module_1.AppModule, {
             rawBody: true,
         });
