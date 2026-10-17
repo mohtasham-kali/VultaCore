@@ -44,7 +44,12 @@ async function bootstrap() {
         app.enableCors();
         app.setGlobalPrefix('api');
         const port = process.env.PORT || 3001;
-        await app.listen(port);
+        if (typeof port === 'string' && isNaN(Number(port))) {
+            await app.listen(port);
+        }
+        else {
+            await app.listen(Number(port), '0.0.0.0');
+        }
         console.log(`Application is running on: ${port}`);
         const { BotsService } = require('./bots/bots.service');
         const botsService = app.get(BotsService);

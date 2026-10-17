@@ -12,8 +12,12 @@ async function bootstrap() {
     app.setGlobalPrefix('api');
     const port = process.env.PORT || 3001;
     
-    // Support Unix sockets from Hostinger/Passenger natively
-    await app.listen(port);
+    // Support Unix sockets or explicit 0.0.0.0 IPv4 binding for reliable reverse proxying
+    if (typeof port === 'string' && isNaN(Number(port))) {
+      await app.listen(port);
+    } else {
+      await app.listen(Number(port), '0.0.0.0');
+    }
     console.log(`Application is running on: ${port}`);
 
     // Auto-seed if database is empty (important for Hostinger)

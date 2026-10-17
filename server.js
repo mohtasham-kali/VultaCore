@@ -2,33 +2,29 @@
 /**
  * VultaCore Master Proxy
  * Zero external dependencies — uses only Node built-ins.
- * Passenger must see this process bind to process.env.PORT quickly.
+ * Supports Phusion Passenger multi-worker pooling with Singleton Engine Management.
  */
 const http  = require('http');
 const https = require('https');
-const { spawn, execSync } = require('child_process');
+const { spawn, execSync, execFileSync } = require('child_process');
 const path  = require('path');
 const fs    = require('fs');
+const net   = require('net');
 
 const rootDir    = __dirname;
 const masterPort = process.env.PORT || 3000;
 
-// Child ports — assigned dynamically on boot to prevent Zombie process EADDRINUSE errors
-let BACK_PORT = null;
-let DASH_PORT = null;
-let AI_PORT   = null;
+// State files for multi-worker coordination
+const stateFile = path.join(rootDir, '.engine-state.json');
+const lockFile  = path.join(rootDir, '.engine.lock');
 
-function findFreePort() {
-    return new Promise((resolve, reject) => {
-        const net = require('net');
-        const srv = net.createServer();
-        srv.listen(0, '127.0.0.1', () => {
-            const port = srv.address().port;
-            srv.close((err) => err ? reject(err) : resolve(port));
-        });
-        srv.on('error', reject);
-    });
-}
+// Engine ports and readiness flags
+let BACK_PORT  = null;
+let DASH_PORT  = null;
+let AI_PORT    = null;
+let BACK_READY = false;
+let DASH_READY = false;
+let isPrimaryManager = false;
 
 let bootLogs = [];
 
@@ -39,7 +35,39 @@ function log(msg) {
     console.log(line);
 }
 
-log('Master Proxy Booting...');
+log(`Master Proxy Booting (PID ${process.pid})...`);
+
+// ─── Fast TCP Port Availability Check ───────────────────────────────────────
+function checkTcpPort(port, host = '127.0.0.1', timeoutMs = 800) {
+    return new Promise((resolve) => {
+        if (!port) return resolve(false);
+        const socket = new net.Socket();
+        let called = false;
+        const done = (result) => {
+            if (!called) {
+                called = true;
+                socket.destroy();
+                resolve(result);
+            }
+        };
+        socket.setTimeout(timeoutMs);
+        socket.once('connect', () => done(true));
+        socket.once('error', () => done(false));
+        socket.once('timeout', () => done(false));
+        socket.connect(port, host);
+    });
+}
+
+function findFreePort() {
+    return new Promise((resolve, reject) => {
+        const srv = net.createServer();
+        srv.listen(0, '127.0.0.1', () => {
+            const port = srv.address().port;
+            srv.close((err) => err ? reject(err) : resolve(port));
+        });
+        srv.on('error', reject);
+    });
+}
 
 // ─── Built-in HTTP Proxy ────────────────────────────────────────────────────
 function proxyRequest(req, res, targetPort) {
@@ -48,7 +76,12 @@ function proxyRequest(req, res, targetPort) {
         port     : targetPort,
         path     : req.url,
         method   : req.method,
-        headers  : { ...req.headers, host: `127.0.0.1:${targetPort}` }
+        headers  : {
+            ...req.headers,
+            host: `127.0.0.1:${targetPort}`,
+            'x-forwarded-host': req.headers.host || 'vultacore.techprogression.com',
+            'x-forwarded-proto': req.headers['x-forwarded-proto'] || 'https'
+        }
     };
 
     const proxyReq = http.request(options, (proxyRes) => {
@@ -56,13 +89,30 @@ function proxyRequest(req, res, targetPort) {
         proxyRes.pipe(res, { end: true });
     });
 
-    proxyReq.on('error', () => {
+    proxyReq.on('error', (err) => {
+        log(`❌ Proxy connection failed [${req.method} ${req.url} -> :${targetPort}]: ${err.code || err.message}`);
+        if (targetPort === DASH_PORT) DASH_READY = false;
+        if (targetPort === BACK_PORT) BACK_READY = false;
+
         if (req.url.startsWith('/api')) {
-            res.writeHead(503, { 'Content-Type': 'application/json' });
-            return res.end(JSON.stringify({ error: 'Backend engine is starting up. Please retry shortly.' }));
+            if (!res.headersSent) {
+                res.writeHead(503, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Backend engine is starting up. Please retry shortly.' }));
+            }
+        } else {
+            if (!res.headersSent) {
+                sendBooting(res);
+            }
         }
-        sendBooting(res);
     });
+
+    req.on('error', () => {
+        try { proxyReq.destroy(); } catch (_) {}
+    });
+    res.on('error', () => {
+        try { proxyReq.destroy(); } catch (_) {}
+    });
+
     req.pipe(proxyReq, { end: true });
 }
 
@@ -73,7 +123,7 @@ function sendBooting(res) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="refresh" content="6">
+  <meta http-equiv="refresh" content="3">
   <title>VultaCore — Starting</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -88,7 +138,6 @@ function sendBooting(res) {
       font-family: 'Segoe UI', system-ui, sans-serif;
     }
 
-    /* ── Blurred ambient background blobs ── */
     .bg-blob {
       position: fixed;
       border-radius: 50%;
@@ -105,7 +154,6 @@ function sendBooting(res) {
       to   { transform: translate(30px, 20px) scale(1.08); }
     }
 
-    /* ── Centre stage ── */
     .stage {
       position: relative;
       display: flex;
@@ -115,7 +163,6 @@ function sendBooting(res) {
       height: 220px;
     }
 
-    /* ── Bubble rings ── */
     .ring {
       position: absolute;
       border-radius: 50%;
@@ -133,7 +180,6 @@ function sendBooting(res) {
       100% { transform: scale(0.88); opacity: 0.9; }
     }
 
-    /* ── Logo container ── */
     .logo-wrap {
       position: relative;
       z-index: 10;
@@ -161,7 +207,6 @@ function sendBooting(res) {
       50%       { transform: scale(1.06); box-shadow: 0 0 60px rgba(139,92,246,0.55), 0 0 120px rgba(139,92,246,0.25); }
     }
 
-    /* ── Text beneath ── */
     .label {
       margin-top: 48px;
       text-align: center;
@@ -180,7 +225,6 @@ function sendBooting(res) {
       text-transform: uppercase;
     }
 
-    /* ── Dot spinner ── */
     .dots {
       display: flex;
       gap: 6px;
@@ -239,12 +283,13 @@ function sendBooting(res) {
 // ─── Static Asset Shortcuts (bypass child proxy for speed) ──────────────────
 function tryServeStatic(req, res) {
     let filePath = null;
+    const cleanUrl = (req.url || '').split('?')[0];
 
-    if (req.url.startsWith('/_next/static/')) {
+    if (cleanUrl.startsWith('/_next/static/')) {
         filePath = path.join(rootDir, 'web-dashboard', '.next', 'static',
-                            req.url.replace('/_next/static/', ''));
-    } else if (/\.(png|jpg|jpeg|gif|svg|ico|webp|woff2?|json|exe|dmg|AppImage|deb)$/i.test(req.url)) {
-        filePath = path.join(rootDir, 'web-dashboard', 'public', req.url);
+                            cleanUrl.replace('/_next/static/', ''));
+    } else if (/\.(png|jpg|jpeg|gif|svg|ico|webp|woff2?|json|exe|dmg|AppImage|deb)$/i.test(cleanUrl)) {
+        filePath = path.join(rootDir, 'web-dashboard', 'public', cleanUrl);
     }
 
     if (filePath && fs.existsSync(filePath)) {
@@ -263,7 +308,7 @@ function tryServeStatic(req, res) {
     return false;
 }
 
-// ─── /logs diagnostic route ─────────────────────────────────────────────────
+// ─── Master HTTP Server ─────────────────────────────────────────────────────
 const server = http.createServer((req, res) => {
     // Diagnostic endpoints — always available
     if (req.url === '/logs' || req.url === '/_logs') {
@@ -274,11 +319,14 @@ const server = http.createServer((req, res) => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({
             status: 'up',
+            ready: { backend: BACK_READY, dashboard: DASH_READY },
             ports : { backend: BACK_PORT, dashboard: DASH_PORT, ai: AI_PORT },
+            isPrimary: isPrimaryManager,
+            pid: process.pid,
             uptime: process.uptime()
         }));
     }
-    // Admin-only boot log endpoint (consumed by /admin/system-health page)
+    // Admin boot log endpoint
     if (req.url === '/api/boot-logs') {
         const hasErrors = bootLogs.some(l => l.includes('❌'));
         res.writeHead(200, {
@@ -290,33 +338,42 @@ const server = http.createServer((req, res) => {
             hasErrors,
             uptime  : process.uptime(),
             ports   : { backend: BACK_PORT, dashboard: DASH_PORT, ai: AI_PORT },
-            booted  : !!(BACK_PORT && DASH_PORT),
+            booted  : !!(BACK_READY && DASH_READY),
+            ready   : { backend: BACK_READY, dashboard: DASH_READY },
+            isPrimary: isPrimaryManager,
+            pid: process.pid,
             ts      : new Date().toISOString(),
         }));
     }
 
     if (tryServeStatic(req, res)) return;
 
-    if (!BACK_PORT || !DASH_PORT) {
-        if (req.url.startsWith('/api')) {
-            res.writeHead(503, { 'Content-Type': 'application/json' });
-            return res.end(JSON.stringify({ error: 'Backend engine initializing...' }));
-        }
-        return sendBooting(res);
-    }
+    const isApi = req.url.startsWith('/api') || req.url.startsWith('/socket.io');
 
-    const targetPort = (req.url.startsWith('/api') || req.url.startsWith('/socket.io')) ? BACK_PORT : DASH_PORT;
-    proxyRequest(req, res, targetPort);
+    if (isApi) {
+        if (!BACK_READY || !BACK_PORT) {
+            res.writeHead(503, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Backend engine initializing... Please retry shortly.' }));
+        }
+        return proxyRequest(req, res, BACK_PORT);
+    } else {
+        if (!DASH_READY || !DASH_PORT) {
+            return sendBooting(res);
+        }
+        return proxyRequest(req, res, DASH_PORT);
+    }
 });
 
 // ─── WebSocket Upgrade Tunneling ────────────────────────────────────────────
 server.on('upgrade', (req, socket, head) => {
-    const targetPort = (req.url.startsWith('/socket.io') || req.url.startsWith('/api')) ? BACK_PORT : DASH_PORT;
-    if (!targetPort) {
+    const isApi = req.url.startsWith('/socket.io') || req.url.startsWith('/api');
+    const targetPort = isApi ? BACK_PORT : DASH_PORT;
+    const isReady = isApi ? BACK_READY : DASH_READY;
+
+    if (!targetPort || !isReady) {
         socket.destroy();
         return;
     }
-    const net = require('net');
     const proxySocket = net.connect(targetPort, '127.0.0.1', () => {
         proxySocket.write(
             `${req.method} ${req.url} HTTP/${req.httpVersion}\r\n` +
@@ -333,9 +390,8 @@ server.on('upgrade', (req, socket, head) => {
 
 server.listen(masterPort, () => {
     log(`✨ Master Proxy listening on port ${masterPort}`);
-    // Spawn engines AFTER we are already listening
     bootEngines().catch(err => {
-        log(`❌ Extent failure in bootEngines: ${err.message}`);
+        log(`❌ Failure in bootEngines: ${err.message}`);
     });
 });
 
@@ -344,42 +400,28 @@ server.on('error', (err) => {
     process.exit(1);
 });
 
-// ─── Engine Spawner ──────────────────────────────────────────────────────────
+// ─── Child Process Tracking & Lifecycle ──────────────────────────────────────
 const runningChildren = [];
 
 function killChildren() {
     runningChildren.forEach(child => {
-        try { child.kill('SIGKILL'); } catch (_) {}
+        try { child.kill('SIGTERM'); } catch (_) {}
     });
 }
-process.on('exit', killChildren);
-process.on('SIGINT', () => { killChildren(); process.exit(0); });
-process.on('SIGTERM', () => { killChildren(); process.exit(0); });
 
-/**
- * Kill leftover zombie child processes from previous crashed runs.
- * Hostinger shared hosting has a tight per-user process limit; stale
- * node/python procs from a previous boot exhaust those slots, causing
- * EAGAIN when we try to spawn the backend/dashboard on restart.
- */
-function killZombieChildren() {
-    const patterns = [
-        'backend-api/dist/main',
-        'dist/main.js',
-        'nest start',
-        'standalone/web-dashboard/server.js',
-        'standalone/server.js',
-        'uvicorn',
-        'analytics-engine',
-    ];
-    for (const pat of patterns) {
-        try {
-            // pkill -f matches against the full command line
-            execSync(`pkill -f "${pat}" 2>/dev/null || true`, { shell: true, stdio: 'ignore' });
-        } catch (_) {}
+function cleanup() {
+    if (isPrimaryManager) {
+        try { fs.unlinkSync(lockFile); } catch (_) {}
+        try { fs.unlinkSync(stateFile); } catch (_) {}
     }
-    log('🧹 Zombie cleanup done — cleared stale child processes.');
+    killChildren();
 }
+
+process.on('exit', cleanup);
+process.on('SIGINT', () => { cleanup(); process.exit(0); });
+process.on('SIGTERM', () => { cleanup(); process.exit(0); });
+process.on('uncaughtException', (err) => { log(`❌ Uncaught exception: ${err.stack || err}`); });
+process.on('unhandledRejection', (reason) => { log(`❌ Unhandled rejection: ${reason?.stack || reason}`); });
 
 function freePort(port) {
     try { execSync(`fuser -k ${port}/tcp`, { stdio: 'ignore' }); } catch (_) {}
@@ -389,7 +431,6 @@ const engineFailureCounts = new Map();
 
 function startEngine(name, execBin, execArgs, port, cwd, envExtra = {}, delay = 0) {
     setTimeout(() => {
-        // Only stat-check absolute paths — bare commands are resolved by the OS
         const isAbsPath = execBin.startsWith('/');
         if (isAbsPath && !fs.existsSync(execBin)) {
             log(`❌ ${name}: executable not found → ${execBin}`);
@@ -406,7 +447,16 @@ function startEngine(name, execBin, execArgs, port, cwd, envExtra = {}, delay = 
         });
         runningChildren.push(child);
 
-        child.stdout.on('data', d => log(`[${name}] ${d.toString().trim()}`));
+        child.stdout.on('data', d => {
+            const line = d.toString().trim();
+            log(`[${name}] ${line}`);
+            if (name === 'Dashboard' && (line.includes('Ready in') || line.includes('started server on'))) {
+                DASH_READY = true;
+            }
+            if (name === 'Backend' && line.includes('Application is running on')) {
+                BACK_READY = true;
+            }
+        });
         child.stderr.on('data', d => log(`[${name}] ${d.toString().trim()}`));
         child.on('error', err => {
             log(`❌ [${name}] spawn error: ${err.message}`);
@@ -415,27 +465,28 @@ function startEngine(name, execBin, execArgs, port, cwd, envExtra = {}, delay = 
             const idx = runningChildren.indexOf(child);
             if (idx !== -1) runningChildren.splice(idx, 1);
 
+            if (name === 'Dashboard') DASH_READY = false;
+            if (name === 'Backend') BACK_READY = false;
+
             const uptime = Date.now() - startTime;
             if (uptime > 30000) {
-                // If it ran stably for more than 30s, reset failure counter
                 engineFailureCounts.set(name, 0);
             }
 
             const currentFails = (engineFailureCounts.get(name) || 0) + 1;
             engineFailureCounts.set(name, currentFails);
 
-            // Circuit breaker: if it immediately crashes 5 times in a row, back off to avoid process limit exhaustion
-            if (currentFails >= 5 && uptime < 5000) {
-                log(`🛑 [${name}] Repeatedly crashing on startup (${currentFails} consecutive immediate exits). Halting restarts to preserve server resources.`);
-                return;
-            }
-
-            log(`⚠️  ${name} exited (${code ?? signal}) — restarting in 5 s… (attempt ${currentFails})`);
-            setTimeout(() => startEngine(name, execBin, execArgs, port, cwd, envExtra), 5000);
+            // Progressive backoff: 3s, 6s, 9s, max 30s
+            const backoff = Math.min(3000 * Math.min(currentFails, 10), 30000);
+            log(`⚠️  ${name} exited (${code ?? signal}) — restarting in ${(backoff / 1000).toFixed(0)} s… (attempt ${currentFails})`);
+            setTimeout(() => {
+                startEngine(name, execBin, execArgs, port, cwd, envExtra);
+            }, backoff);
         });
     }, delay);
 }
 
+// ─── Python Environment Discovery ───────────────────────────────────────────
 function findSystemPythonCandidates() {
     const cmds = [
         '/opt/alt/python311/bin/python3',
@@ -454,7 +505,6 @@ function findSystemPythonCandidates() {
     const found = [];
     for (const cmd of cmds) {
         try {
-            const { execSync } = require('child_process');
             let p = cmd;
             if (!cmd.startsWith('/')) {
                 p = execSync(`which ${cmd} 2>/dev/null`, { encoding: 'utf8' }).trim();
@@ -468,17 +518,14 @@ function findSystemPythonCandidates() {
     return found;
 }
 
-// Resolve python3 absolute path and ensure uvicorn can actually be loaded
 function resolvePython() {
     const aiDir = path.join(rootDir, 'ai-services');
     const venvDir = path.join(aiDir, 'venv');
     const venvLibDir = path.join(venvDir, 'lib');
     const localPackagesDir = path.join(aiDir, '.python_packages');
-    const { execFileSync } = require('child_process');
 
     const pythonCandidates = findSystemPythonCandidates();
 
-    // Helper: test if uvicorn can be imported
     function canImportUvicorn(bin, extraEnv = {}) {
         try {
             execFileSync(bin, ['-c', 'import uvicorn'], {
@@ -491,7 +538,7 @@ function resolvePython() {
         }
     }
 
-    // 1. Check virtualenv (venv/bin/python3 or python)
+    // 1. Check virtualenv
     const venvBins = [
         path.join(venvDir, 'bin', 'python3'),
         path.join(venvDir, 'bin', 'python')
@@ -507,7 +554,7 @@ function resolvePython() {
         }
     }
 
-    // 2. Check if venv lib/site-packages exists but venv binaries are broken
+    // 2. Check venv site-packages with system python
     if (fs.existsSync(venvLibDir)) {
         try {
             const pyDirs = fs.readdirSync(venvLibDir).filter(d => d.startsWith('python'));
@@ -529,12 +576,10 @@ function resolvePython() {
                     }
                 }
             }
-        } catch (e) {
-            log(`AI Engine: venv scan error: ${e.message}`);
-        }
+        } catch (_) {}
     }
 
-    // 3. Check if .python_packages exists (created by pip install --target ./.python_packages)
+    // 3. Check .python_packages
     if (fs.existsSync(localPackagesDir)) {
         for (const py of pythonCandidates) {
             if (canImportUvicorn(py, { PYTHONPATH: localPackagesDir })) {
@@ -551,7 +596,7 @@ function resolvePython() {
         }
     }
 
-    // 4. Check if any system python has uvicorn globally installed
+    // 4. Check global uvicorn
     for (const py of pythonCandidates) {
         if (canImportUvicorn(py)) {
             log(`AI Engine: resolved → ${py} (global uvicorn)`);
@@ -567,8 +612,121 @@ function resolvePython() {
     return null;
 }
 
+// ─── Engine Boot & Coordination Orchestration ───────────────────────────────
+async function waitForReadiness(backPort, dashPort, aiPort) {
+    let backDone = false;
+    let dashDone = false;
+
+    for (let i = 0; i < 60; i++) {
+        if (!backDone) {
+            backDone = await checkTcpPort(backPort);
+            if (backDone) {
+                BACK_READY = true;
+                log(`✅ Backend is operational on port ${backPort}`);
+            }
+        }
+        if (!dashDone) {
+            dashDone = await checkTcpPort(dashPort);
+            if (dashDone) {
+                DASH_READY = true;
+                log(`✅ Dashboard is operational on port ${dashPort}`);
+            }
+        }
+        if (backDone && dashDone) break;
+        await new Promise(r => setTimeout(r, 500));
+    }
+
+    if (backDone && dashDone) {
+        try {
+            fs.writeFileSync(stateFile, JSON.stringify({
+                managerPid: process.pid,
+                backendPort: backPort,
+                dashboardPort: dashPort,
+                aiPort: aiPort,
+                updatedAt: Date.now()
+            }), 'utf8');
+            try { fs.unlinkSync(lockFile); } catch (_) {}
+            log(`🚀 All engines operational! Master Proxy ready to serve.`);
+        } catch (e) {
+            log(`Warning: Failed to save engine state: ${e.message}`);
+        }
+    } else {
+        log(`⚠️ Readiness check incomplete after 30s (Backend=${backDone}, Dashboard=${dashDone})`);
+    }
+}
+
 async function bootEngines() {
-    killZombieChildren();
+    // ── Phase 1: Check if sibling worker already manages healthy engines ──
+    if (fs.existsSync(stateFile)) {
+        try {
+            const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+            if (state && state.dashboardPort && state.backendPort) {
+                const dashOk = await checkTcpPort(state.dashboardPort);
+                const backOk = await checkTcpPort(state.backendPort);
+                if (dashOk && backOk) {
+                    BACK_PORT  = state.backendPort;
+                    DASH_PORT  = state.dashboardPort;
+                    AI_PORT    = state.aiPort || null;
+                    BACK_READY = true;
+                    DASH_READY = true;
+                    log(`✨ Attached to existing healthy engines (Manager PID ${state.managerPid}): Backend=${BACK_PORT}, Dashboard=${DASH_PORT}`);
+                    return;
+                }
+            }
+        } catch (_) {}
+    }
+
+    // ── Phase 2: Try to acquire Primary Manager lock ──
+    try {
+        const fd = fs.openSync(lockFile, 'wx');
+        fs.writeSync(fd, String(process.pid));
+        fs.closeSync(fd);
+        isPrimaryManager = true;
+    } catch (e) {
+        // Lock exists. Check if stale (> 45s)
+        try {
+            const stat = fs.statSync(lockFile);
+            if (Date.now() - stat.mtimeMs > 45000) {
+                try { fs.unlinkSync(lockFile); } catch (_) {}
+                const fd = fs.openSync(lockFile, 'wx');
+                fs.writeSync(fd, String(process.pid));
+                fs.closeSync(fd);
+                isPrimaryManager = true;
+            }
+        } catch (_) {}
+    }
+
+    // ── Phase 3: Secondary Worker Waiting ──
+    if (!isPrimaryManager) {
+        log(`⏳ Another worker is currently starting engines. Waiting for readiness...`);
+        for (let i = 0; i < 30; i++) {
+            await new Promise(r => setTimeout(r, 1000));
+            if (fs.existsSync(stateFile)) {
+                try {
+                    const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+                    if (state && state.dashboardPort && state.backendPort) {
+                        const dashOk = await checkTcpPort(state.dashboardPort);
+                        const backOk = await checkTcpPort(state.backendPort);
+                        if (dashOk && backOk) {
+                            BACK_PORT  = state.backendPort;
+                            DASH_PORT  = state.dashboardPort;
+                            AI_PORT    = state.aiPort || null;
+                            BACK_READY = true;
+                            DASH_READY = true;
+                            log(`✨ Engines ready! Attached: Backend=${BACK_PORT}, Dashboard=${DASH_PORT}`);
+                            return;
+                        }
+                    }
+                } catch (_) {}
+            }
+        }
+        log(`⚠️ Wait timed out — taking over as Primary Engine Manager.`);
+        try { fs.unlinkSync(lockFile); } catch (_) {}
+        isPrimaryManager = true;
+    }
+
+    // ── Phase 4: Primary Manager Engine Boot ──
+    log(`👑 Operating as Primary Engine Manager.`);
 
     try {
         BACK_PORT = await findFreePort();
@@ -580,7 +738,7 @@ async function bootEngines() {
         return;
     }
 
-    // ── AI Engine (FastAPI) ────────────────────────────────────────────────
+    // 1. AI Engine
     const pythonResolved = resolvePython();
     if (pythonResolved) {
         startEngine(
@@ -596,7 +754,7 @@ async function bootEngines() {
         log('⚠️  Skipping AI Engine — visit /logs to see diagnostics. Check python3 is installed on the host.');
     }
 
-    // ── Backend (NestJS dist) ─────────────────────────────────────────────
+    // 2. Backend (NestJS)
     const backendEntry = path.join(rootDir, 'backend-api', 'dist', 'main.js');
     if (!fs.existsSync(backendEntry)) {
         try {
@@ -607,9 +765,10 @@ async function bootEngines() {
         }
     }
     startEngine('Backend', process.execPath, [backendEntry], BACK_PORT,
-                path.join(rootDir, 'backend-api'), { AI_SERVICE_URL: `http://127.0.0.1:${AI_PORT}` }, 0);
+                path.join(rootDir, 'backend-api'),
+                { AI_SERVICE_URL: `http://127.0.0.1:${AI_PORT}`, HOSTNAME: '127.0.0.1' }, 0);
 
-    // ── Analytics Engine (Rust) ──────────────────────────────────────────
+    // 3. Analytics Engine (Rust)
     const rustBin = path.join(rootDir, 'analytics-engine', 'target', 'release', 'analytics-engine');
     const rustDebugBin = path.join(rootDir, 'analytics-engine', 'target', 'debug', 'analytics-engine');
     const targetRustBin = fs.existsSync(rustBin) ? rustBin : (fs.existsSync(rustDebugBin) ? rustDebugBin : null);
@@ -617,7 +776,7 @@ async function bootEngines() {
         startEngine('Analytics', targetRustBin, [], 5000, path.join(rootDir, 'analytics-engine'), {}, 0);
     }
 
-    // ── Dashboard (Next.js standalone) ───────────────────────────────────
+    // 4. Dashboard (Next.js)
     const standaloneA = path.join(rootDir, 'web-dashboard', '.next', 'standalone', 'web-dashboard', 'server.js');
     const standaloneB = path.join(rootDir, 'web-dashboard', '.next', 'standalone', 'server.js');
     const nextBinLocal = path.join(rootDir, 'web-dashboard', 'node_modules', 'next', 'dist', 'bin', 'next');
@@ -635,10 +794,23 @@ async function bootEngines() {
     } else {
         dashEntry = fs.existsSync(nextBinLocal) ? nextBinLocal : nextBinRoot;
         dashCwd   = path.join(rootDir, 'web-dashboard');
-        dashArgs  = [dashEntry, 'start'];
+        dashArgs  = [dashEntry, 'start', '-p', String(DASH_PORT), '-H', '127.0.0.1'];
     }
 
-    startEngine('Dashboard', process.execPath, dashArgs, DASH_PORT, dashCwd, {}, 1000);
+    startEngine('Dashboard', process.execPath, dashArgs, DASH_PORT, dashCwd,
+                { HOSTNAME: '127.0.0.1', HOST: '127.0.0.1' }, 0);
+
+    // Begin async health monitoring and state publishing
+    waitForReadiness(BACK_PORT, DASH_PORT, AI_PORT);
+
+    // Periodic heartbeat to keep state file fresh
+    setInterval(() => {
+        if (isPrimaryManager && fs.existsSync(stateFile)) {
+            try {
+                const s = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+                s.updatedAt = Date.now();
+                fs.writeFileSync(stateFile, JSON.stringify(s), 'utf8');
+            } catch (_) {}
+        }
+    }, 15000);
 }
-
-
