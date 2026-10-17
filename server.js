@@ -2,7 +2,7 @@
 /**
  * VultaCore Master Proxy
  * Zero external dependencies — uses only Node built-ins.
- * Supports Phusion Passenger multi-worker pooling with Singleton Engine Management.
+ * Supports Phusion Passenger / LiteSpeed multi-worker pooling with Unix Domain Sockets.
  */
 const http  = require('http');
 const https = require('https');
@@ -18,10 +18,12 @@ const masterPort = process.env.PORT || 3000;
 const stateFile = path.join(rootDir, '.engine-state.json');
 const lockFile  = path.join(rootDir, '.engine.lock');
 
-// Engine ports and readiness flags
-let BACK_PORT  = null;
-let DASH_PORT  = null;
-let AI_PORT    = null;
+// User-scoped Unix domain sockets (avoids TCP loopback / firewall restrictions in CloudLinux/CageFS)
+const uid = typeof process.getuid === 'function' ? process.getuid() : 'shared';
+let BACK_TARGET = path.join('/tmp', `vultacore-back-${uid}.sock`);
+let DASH_TARGET = path.join('/tmp', `vultacore-dash-${uid}.sock`);
+let AI_PORT     = null;
+
 let BACK_READY = false;
 let DASH_READY = false;
 let isPrimaryManager = false;
@@ -31,16 +33,17 @@ let bootLogs = [];
 function log(msg) {
     const line = `[${new Date().toLocaleTimeString()}] ${msg}`;
     bootLogs.push(line);
-    if (bootLogs.length > 100) bootLogs.shift();
+    if (bootLogs.length > 150) bootLogs.shift();
     console.log(line);
 }
 
 log(`Master Proxy Booting (PID ${process.pid})...`);
 
-// ─── Fast TCP Port Availability Check ───────────────────────────────────────
-function checkTcpPort(port, host = '127.0.0.1', timeoutMs = 800) {
+// ─── Socket & Port Availability Check ───────────────────────────────────────
+function checkSocket(target, timeoutMs = 1200) {
     return new Promise((resolve) => {
-        if (!port) return resolve(false);
+        if (!target) return resolve(false);
+        const isSocket = typeof target === 'string' && (target.startsWith('/') || target.endsWith('.sock'));
         const socket = new net.Socket();
         let called = false;
         const done = (result) => {
@@ -54,7 +57,12 @@ function checkTcpPort(port, host = '127.0.0.1', timeoutMs = 800) {
         socket.once('connect', () => done(true));
         socket.once('error', () => done(false));
         socket.once('timeout', () => done(false));
-        socket.connect(port, host);
+
+        if (isSocket) {
+            socket.connect(target);
+        } else {
+            socket.connect(Number(target), '127.0.0.1');
+        }
     });
 }
 
@@ -70,15 +78,26 @@ function findFreePort() {
 }
 
 // ─── Built-in HTTP Proxy ────────────────────────────────────────────────────
-function proxyRequest(req, res, targetPort) {
-    const options = {
-        hostname : '127.0.0.1',
-        port     : targetPort,
-        path     : req.url,
-        method   : req.method,
-        headers  : {
+function proxyRequest(req, res, target) {
+    const isSocket = typeof target === 'string' && (target.startsWith('/') || target.endsWith('.sock'));
+    const options = isSocket ? {
+        socketPath : target,
+        path       : req.url,
+        method     : req.method,
+        headers    : {
             ...req.headers,
-            host: `127.0.0.1:${targetPort}`,
+            host              : req.headers.host || 'vultacore.techprogression.com',
+            'x-forwarded-host': req.headers.host || 'vultacore.techprogression.com',
+            'x-forwarded-proto': req.headers['x-forwarded-proto'] || 'https'
+        }
+    } : {
+        hostname   : '127.0.0.1',
+        port       : target,
+        path       : req.url,
+        method     : req.method,
+        headers    : {
+            ...req.headers,
+            host              : `127.0.0.1:${target}`,
             'x-forwarded-host': req.headers.host || 'vultacore.techprogression.com',
             'x-forwarded-proto': req.headers['x-forwarded-proto'] || 'https'
         }
@@ -90,9 +109,7 @@ function proxyRequest(req, res, targetPort) {
     });
 
     proxyReq.on('error', (err) => {
-        log(`❌ Proxy connection failed [${req.method} ${req.url} -> :${targetPort}]: ${err.code || err.message}`);
-        if (targetPort === DASH_PORT) DASH_READY = false;
-        if (targetPort === BACK_PORT) BACK_READY = false;
+        log(`❌ Proxy connection failed [${req.method} ${req.url} -> ${target}]: ${err.code || err.message}`);
 
         if (req.url.startsWith('/api')) {
             if (!res.headersSent) {
@@ -123,7 +140,7 @@ function sendBooting(res) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="refresh" content="3">
+  <meta http-equiv="refresh" content="2">
   <title>VultaCore — Starting</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -318,12 +335,12 @@ const server = http.createServer((req, res) => {
     if (req.url === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({
-            status: 'up',
-            ready: { backend: BACK_READY, dashboard: DASH_READY },
-            ports : { backend: BACK_PORT, dashboard: DASH_PORT, ai: AI_PORT },
+            status   : 'up',
+            ready    : { backend: BACK_READY, dashboard: DASH_READY },
+            targets  : { backend: BACK_TARGET, dashboard: DASH_TARGET, ai: AI_PORT },
             isPrimary: isPrimaryManager,
-            pid: process.pid,
-            uptime: process.uptime()
+            pid      : process.pid,
+            uptime   : process.uptime()
         }));
     }
     // Admin boot log endpoint
@@ -334,15 +351,15 @@ const server = http.createServer((req, res) => {
             'Access-Control-Allow-Origin': '*',
         });
         return res.end(JSON.stringify({
-            logs    : bootLogs,
+            logs     : bootLogs,
             hasErrors,
-            uptime  : process.uptime(),
-            ports   : { backend: BACK_PORT, dashboard: DASH_PORT, ai: AI_PORT },
-            booted  : !!(BACK_READY && DASH_READY),
-            ready   : { backend: BACK_READY, dashboard: DASH_READY },
+            uptime   : process.uptime(),
+            targets  : { backend: BACK_TARGET, dashboard: DASH_TARGET, ai: AI_PORT },
+            booted   : !!(BACK_READY && DASH_READY),
+            ready    : { backend: BACK_READY, dashboard: DASH_READY },
             isPrimary: isPrimaryManager,
-            pid: process.pid,
-            ts      : new Date().toISOString(),
+            pid      : process.pid,
+            ts       : new Date().toISOString(),
         }));
     }
 
@@ -351,30 +368,36 @@ const server = http.createServer((req, res) => {
     const isApi = req.url.startsWith('/api') || req.url.startsWith('/socket.io');
 
     if (isApi) {
-        if (!BACK_READY || !BACK_PORT) {
+        if (!BACK_READY || !BACK_TARGET) {
             res.writeHead(503, { 'Content-Type': 'application/json' });
             return res.end(JSON.stringify({ error: 'Backend engine initializing... Please retry shortly.' }));
         }
-        return proxyRequest(req, res, BACK_PORT);
+        return proxyRequest(req, res, BACK_TARGET);
     } else {
-        if (!DASH_READY || !DASH_PORT) {
+        if (!DASH_READY || !DASH_TARGET) {
             return sendBooting(res);
         }
-        return proxyRequest(req, res, DASH_PORT);
+        return proxyRequest(req, res, DASH_TARGET);
     }
 });
 
 // ─── WebSocket Upgrade Tunneling ────────────────────────────────────────────
 server.on('upgrade', (req, socket, head) => {
     const isApi = req.url.startsWith('/socket.io') || req.url.startsWith('/api');
-    const targetPort = isApi ? BACK_PORT : DASH_PORT;
+    const target = isApi ? BACK_TARGET : DASH_TARGET;
     const isReady = isApi ? BACK_READY : DASH_READY;
 
-    if (!targetPort || !isReady) {
+    if (!target || !isReady) {
         socket.destroy();
         return;
     }
-    const proxySocket = net.connect(targetPort, '127.0.0.1', () => {
+
+    const isSocket = typeof target === 'string' && (target.startsWith('/') || target.endsWith('.sock'));
+    const proxySocket = isSocket
+        ? net.connect(target, () => onConnected())
+        : net.connect(Number(target), '127.0.0.1', () => onConnected());
+
+    function onConnected() {
         proxySocket.write(
             `${req.method} ${req.url} HTTP/${req.httpVersion}\r\n` +
             Object.entries(req.headers).map(([k, v]) => `${k}: ${v}`).join('\r\n') +
@@ -383,7 +406,8 @@ server.on('upgrade', (req, socket, head) => {
         if (head && head.length > 0) proxySocket.write(head);
         proxySocket.pipe(socket);
         socket.pipe(proxySocket);
-    });
+    }
+
     proxySocket.on('error', () => socket.destroy());
     socket.on('error', () => proxySocket.destroy());
 });
@@ -413,6 +437,8 @@ function cleanup() {
     if (isPrimaryManager) {
         try { fs.unlinkSync(lockFile); } catch (_) {}
         try { fs.unlinkSync(stateFile); } catch (_) {}
+        try { fs.unlinkSync(BACK_TARGET); } catch (_) {}
+        try { fs.unlinkSync(DASH_TARGET); } catch (_) {}
     }
     killChildren();
 }
@@ -423,25 +449,29 @@ process.on('SIGTERM', () => { cleanup(); process.exit(0); });
 process.on('uncaughtException', (err) => { log(`❌ Uncaught exception: ${err.stack || err}`); });
 process.on('unhandledRejection', (reason) => { log(`❌ Unhandled rejection: ${reason?.stack || reason}`); });
 
-function freePort(port) {
-    try { execSync(`fuser -k ${port}/tcp`, { stdio: 'ignore' }); } catch (_) {}
+function freePortOrSocket(target) {
+    if (typeof target === 'string' && (target.startsWith('/') || target.endsWith('.sock'))) {
+        try { fs.unlinkSync(target); } catch (_) {}
+    } else if (target) {
+        try { execSync(`fuser -k ${target}/tcp`, { stdio: 'ignore' }); } catch (_) {}
+    }
 }
 
 const engineFailureCounts = new Map();
 
-function startEngine(name, execBin, execArgs, port, cwd, envExtra = {}, delay = 0) {
+function startEngine(name, execBin, execArgs, portOrSocket, cwd, envExtra = {}, delay = 0) {
     setTimeout(() => {
         const isAbsPath = execBin.startsWith('/');
         if (isAbsPath && !fs.existsSync(execBin)) {
             log(`❌ ${name}: executable not found → ${execBin}`);
             return;
         }
-        freePort(port);
-        log(`📡 Spawning ${name} on port ${port} [${execBin}]...`);
+        freePortOrSocket(portOrSocket);
+        log(`📡 Spawning ${name} on ${portOrSocket} [${execBin}]...`);
 
         const startTime = Date.now();
         const child = spawn(execBin, execArgs, {
-            env  : { ...process.env, PORT: String(port), NODE_ENV: 'production', ...envExtra },
+            env  : { ...process.env, PORT: String(portOrSocket), NODE_ENV: 'production', ...envExtra },
             cwd  : cwd || rootDir,
             shell: false
         });
@@ -450,7 +480,7 @@ function startEngine(name, execBin, execArgs, port, cwd, envExtra = {}, delay = 
         child.stdout.on('data', d => {
             const line = d.toString().trim();
             log(`[${name}] ${line}`);
-            if (name === 'Dashboard' && (line.includes('Ready in') || line.includes('started server on'))) {
+            if (name === 'Dashboard' && (line.includes('Ready in') || line.includes('started server on') || line.includes('Ready on'))) {
                 DASH_READY = true;
             }
             if (name === 'Backend' && line.includes('Application is running on')) {
@@ -480,7 +510,7 @@ function startEngine(name, execBin, execArgs, port, cwd, envExtra = {}, delay = 
             const backoff = Math.min(3000 * Math.min(currentFails, 10), 30000);
             log(`⚠️  ${name} exited (${code ?? signal}) — restarting in ${(backoff / 1000).toFixed(0)} s… (attempt ${currentFails})`);
             setTimeout(() => {
-                startEngine(name, execBin, execArgs, port, cwd, envExtra);
+                startEngine(name, execBin, execArgs, portOrSocket, cwd, envExtra);
             }, backoff);
         });
     }, delay);
@@ -613,23 +643,23 @@ function resolvePython() {
 }
 
 // ─── Engine Boot & Coordination Orchestration ───────────────────────────────
-async function waitForReadiness(backPort, dashPort, aiPort) {
+async function waitForReadiness(backTarget, dashTarget, aiPort) {
     let backDone = false;
     let dashDone = false;
 
     for (let i = 0; i < 60; i++) {
         if (!backDone) {
-            backDone = await checkTcpPort(backPort);
+            backDone = await checkSocket(backTarget);
             if (backDone) {
                 BACK_READY = true;
-                log(`✅ Backend is operational on port ${backPort}`);
+                log(`✅ Backend is operational on ${backTarget}`);
             }
         }
         if (!dashDone) {
-            dashDone = await checkTcpPort(dashPort);
+            dashDone = await checkSocket(dashTarget);
             if (dashDone) {
                 DASH_READY = true;
-                log(`✅ Dashboard is operational on port ${dashPort}`);
+                log(`✅ Dashboard is operational on ${dashTarget}`);
             }
         }
         if (backDone && dashDone) break;
@@ -639,11 +669,11 @@ async function waitForReadiness(backPort, dashPort, aiPort) {
     if (backDone && dashDone) {
         try {
             fs.writeFileSync(stateFile, JSON.stringify({
-                managerPid: process.pid,
-                backendPort: backPort,
-                dashboardPort: dashPort,
-                aiPort: aiPort,
-                updatedAt: Date.now()
+                managerPid     : process.pid,
+                backendTarget  : backTarget,
+                dashboardTarget: dashTarget,
+                aiPort         : aiPort,
+                updatedAt      : Date.now()
             }), 'utf8');
             try { fs.unlinkSync(lockFile); } catch (_) {}
             log(`🚀 All engines operational! Master Proxy ready to serve.`);
@@ -660,16 +690,19 @@ async function bootEngines() {
     if (fs.existsSync(stateFile)) {
         try {
             const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
-            if (state && state.dashboardPort && state.backendPort) {
-                const dashOk = await checkTcpPort(state.dashboardPort);
-                const backOk = await checkTcpPort(state.backendPort);
+            const bTarget = state.backendTarget || state.backendPort;
+            const dTarget = state.dashboardTarget || state.dashboardPort;
+
+            if (bTarget && dTarget) {
+                const dashOk = await checkSocket(dTarget);
+                const backOk = await checkSocket(bTarget);
                 if (dashOk && backOk) {
-                    BACK_PORT  = state.backendPort;
-                    DASH_PORT  = state.dashboardPort;
-                    AI_PORT    = state.aiPort || null;
-                    BACK_READY = true;
-                    DASH_READY = true;
-                    log(`✨ Attached to existing healthy engines (Manager PID ${state.managerPid}): Backend=${BACK_PORT}, Dashboard=${DASH_PORT}`);
+                    BACK_TARGET = bTarget;
+                    DASH_TARGET = dTarget;
+                    AI_PORT     = state.aiPort || null;
+                    BACK_READY  = true;
+                    DASH_READY  = true;
+                    log(`✨ Attached to existing healthy engines (Manager PID ${state.managerPid}): Backend=${BACK_TARGET}, Dashboard=${DASH_TARGET}`);
                     return;
                 }
             }
@@ -704,16 +737,18 @@ async function bootEngines() {
             if (fs.existsSync(stateFile)) {
                 try {
                     const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
-                    if (state && state.dashboardPort && state.backendPort) {
-                        const dashOk = await checkTcpPort(state.dashboardPort);
-                        const backOk = await checkTcpPort(state.backendPort);
+                    const bTarget = state.backendTarget || state.backendPort;
+                    const dTarget = state.dashboardTarget || state.dashboardPort;
+                    if (bTarget && dTarget) {
+                        const dashOk = await checkSocket(dTarget);
+                        const backOk = await checkSocket(bTarget);
                         if (dashOk && backOk) {
-                            BACK_PORT  = state.backendPort;
-                            DASH_PORT  = state.dashboardPort;
-                            AI_PORT    = state.aiPort || null;
-                            BACK_READY = true;
-                            DASH_READY = true;
-                            log(`✨ Engines ready! Attached: Backend=${BACK_PORT}, Dashboard=${DASH_PORT}`);
+                            BACK_TARGET = bTarget;
+                            DASH_TARGET = dTarget;
+                            AI_PORT     = state.aiPort || null;
+                            BACK_READY  = true;
+                            DASH_READY  = true;
+                            log(`✨ Engines ready! Attached: Backend=${BACK_TARGET}, Dashboard=${DASH_TARGET}`);
                             return;
                         }
                     }
@@ -729,18 +764,16 @@ async function bootEngines() {
     log(`👑 Operating as Primary Engine Manager.`);
 
     try {
-        BACK_PORT = await findFreePort();
-        DASH_PORT = await findFreePort();
-        AI_PORT   = await findFreePort();
-        log(`Dynamically allocated ports: Backend=${BACK_PORT}, Dashboard=${DASH_PORT}, AI=${AI_PORT}`);
-    } catch (e) {
-        log(`❌ Failed to allocate ports: ${e.message}`);
-        return;
-    }
+        AI_PORT = await findFreePort();
+    } catch (_) {}
 
-    // 1. AI Engine
+    // Ensure stale socket files from prior crashes are removed
+    freePortOrSocket(BACK_TARGET);
+    freePortOrSocket(DASH_TARGET);
+
+    // 1. AI Engine (optional)
     const pythonResolved = resolvePython();
-    if (pythonResolved) {
+    if (pythonResolved && AI_PORT) {
         startEngine(
             'AI Engine',
             pythonResolved.bin,
@@ -764,7 +797,7 @@ async function bootEngines() {
             log(`❌ Failed to build backend-api: ${e.message}`);
         }
     }
-    startEngine('Backend', process.execPath, [backendEntry], BACK_PORT,
+    startEngine('Backend', process.execPath, [backendEntry], BACK_TARGET,
                 path.join(rootDir, 'backend-api'),
                 { AI_SERVICE_URL: `http://127.0.0.1:${AI_PORT}`, HOSTNAME: '127.0.0.1' }, 0);
 
@@ -777,13 +810,18 @@ async function bootEngines() {
     }
 
     // 4. Dashboard (Next.js)
-    const standaloneA = path.join(rootDir, 'web-dashboard', '.next', 'standalone', 'web-dashboard', 'server.js');
-    const standaloneB = path.join(rootDir, 'web-dashboard', '.next', 'standalone', 'server.js');
+    const customRunner = path.join(rootDir, 'web-dashboard', 'standalone-runner.js');
+    const standaloneA  = path.join(rootDir, 'web-dashboard', '.next', 'standalone', 'web-dashboard', 'server.js');
+    const standaloneB  = path.join(rootDir, 'web-dashboard', '.next', 'standalone', 'server.js');
     const nextBinLocal = path.join(rootDir, 'web-dashboard', 'node_modules', 'next', 'dist', 'bin', 'next');
     const nextBinRoot  = path.join(rootDir, 'node_modules', 'next', 'dist', 'bin', 'next');
 
     let dashEntry, dashCwd, dashArgs;
-    if (fs.existsSync(standaloneA)) {
+    if (fs.existsSync(customRunner)) {
+        dashEntry = customRunner;
+        dashCwd   = path.join(rootDir, 'web-dashboard');
+        dashArgs  = [customRunner];
+    } else if (fs.existsSync(standaloneA)) {
         dashEntry = standaloneA;
         dashCwd   = path.dirname(standaloneA);
         dashArgs  = [standaloneA];
@@ -794,14 +832,13 @@ async function bootEngines() {
     } else {
         dashEntry = fs.existsSync(nextBinLocal) ? nextBinLocal : nextBinRoot;
         dashCwd   = path.join(rootDir, 'web-dashboard');
-        dashArgs  = [dashEntry, 'start', '-p', String(DASH_PORT), '-H', '127.0.0.1'];
+        dashArgs  = [dashEntry, 'start'];
     }
 
-    startEngine('Dashboard', process.execPath, dashArgs, DASH_PORT, dashCwd,
-                { HOSTNAME: '127.0.0.1', HOST: '127.0.0.1' }, 0);
+    startEngine('Dashboard', process.execPath, dashArgs, DASH_TARGET, dashCwd, {}, 0);
 
     // Begin async health monitoring and state publishing
-    waitForReadiness(BACK_PORT, DASH_PORT, AI_PORT);
+    waitForReadiness(BACK_TARGET, DASH_TARGET, AI_PORT);
 
     // Periodic heartbeat to keep state file fresh
     setInterval(() => {

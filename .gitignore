@@ -12,6 +12,8 @@ web-dashboard/out/
 server.log
 error_log.txt
 *.sqlite
+.engine-state.json
+.engine.lock
 
 .env
 .env.local
