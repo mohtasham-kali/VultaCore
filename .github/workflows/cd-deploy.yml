@@ -45,7 +45,6 @@ jobs:
           host: ${{ secrets.HOSTINGER_SSH_HOST }}
           port: ${{ secrets.HOSTINGER_SSH_PORT }}
           username: ${{ secrets.HOSTINGER_SSH_USER }}
-          password: ${{ secrets.HOSTINGER_SSH_PASS }}
           script: |
             source ~/.bashrc 2>/dev/null || source ~/.bash_profile 2>/dev/null || true
             echo "=== NODE VERSION ==="
