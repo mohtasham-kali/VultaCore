@@ -11,8 +11,6 @@ services:
         value: production
       - key: PORT
         value: 3001
-      - key: AI_SERVICE_URL
-        value: https://vultacore-ai.onrender.com
 
   - type: web
     name: vultacore-ai

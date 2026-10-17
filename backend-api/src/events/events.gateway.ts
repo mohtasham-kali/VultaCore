@@ -50,8 +50,6 @@ export class EventsGateway
     this.server.to(`user:${userId}`).emit('subscriptionUpdated', {
       newRank: newPlan,
     });
-    this.logger.log(
-      `📡 Emitted subscriptionUpdated to user:${userId} → ${newPlan}`,
-    );
+    this.logger.log(`📡 Emitted subscriptionUpdated to user:${userId} → ${newPlan}`);
   }
 }

@@ -5,6 +5,7 @@ import { io, Socket } from "socket.io-client";
 import { useAuth } from "@/context/AuthContext";
 import { Send, Hash, Users, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SOCKET_URL } from "@/lib/constants";
 
 interface ChatMessage {
   id: string;
@@ -13,8 +14,6 @@ interface ChatMessage {
   createdAt: string;
   author?: { username: string; id: string };
 }
-
-import { API_BASE_URL } from "@/lib/constants";
 
 interface LiveChatPanelProps {
   room: "dev" | "cyber";
@@ -39,8 +38,7 @@ export function LiveChatPanel({ room }: LiveChatPanelProps) {
 
   useEffect(() => {
     // 1. Establish connection
-    const socketUrl = API_BASE_URL.startsWith('/') ? window.location.origin : API_BASE_URL.replace(/\/api$/, '');
-    const newSocket = io(socketUrl, { transports: ["websocket"] });
+    const newSocket = io(SOCKET_URL, { transports: ["websocket"] });
     
     newSocket.on("connect", () => {
       setIsConnected(true);

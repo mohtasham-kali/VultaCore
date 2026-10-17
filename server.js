@@ -1,2136 +1,593 @@
 #!/usr/bin/env node
-
 /**
  * VultaCore Master Proxy
- *
- * Hostinger / Passenger compatible.
- *
- * Internal services:
- *   Backend:   3001
- *   Dashboard: 3002
- *   AI Engine: 8002
- *
- * The public Node.js process listens on process.env.PORT.
- *
- * Important:
- * - Only one Passenger worker manages child processes.
- * - No pkill commands are used.
- * - Existing healthy services are reused.
- * - Existing unhealthy services are not killed automatically.
+ * Zero external dependencies — uses only Node built-ins.
+ * Passenger must see this process bind to process.env.PORT quickly.
  */
-
-'use strict';
-
-const http = require('http');
-const net = require('net');
-const path = require('path');
-const fs = require('fs');
+const http  = require('http');
+const https = require('https');
 const { spawn, execSync } = require('child_process');
+const path  = require('path');
+const fs    = require('fs');
 
-const rootDir = __dirname;
-const BACKEND_DIR = path.join(rootDir, 'backend-api');
-const DASHBOARD_DIR = path.join(rootDir, 'web-dashboard');
-const AI_DIR = path.join(rootDir, 'ai-services');
-const DOWNLOADS_DIR = path.join(rootDir, 'public', 'downloads');
+const rootDir    = __dirname;
+const masterPort = process.env.PORT || 3000;
 
-const ENGINE_STATE_FILE = path.join(
-    rootDir,
-    '.vultacore_state.json'
-);
+// Child ports — assigned dynamically on boot to prevent Zombie process EADDRINUSE errors
+let BACK_PORT = null;
+let DASH_PORT = null;
+let AI_PORT   = null;
 
-const BOOT_LOCK_FILE = path.join(
-    rootDir,
-    '.vultacore_boot.lock'
-);
+function findFreePort() {
+    return new Promise((resolve, reject) => {
+        const net = require('net');
+        const srv = net.createServer();
+        srv.listen(0, '127.0.0.1', () => {
+            const port = srv.address().port;
+            srv.close((err) => err ? reject(err) : resolve(port));
+        });
+        srv.on('error', reject);
+    });
+}
 
-const LOCK_STALE_MS = 60000;
-
-let heartbeatInterval = null;
-let runningChildren = [];
 let bootLogs = [];
 
-let bootStarted = false;
-let isProcessExiting = false;
-let isBootLockOwner = false;
-
-let isBackendReady = false;
-let isDashboardReady = false;
-let isAiReady = false;
-
-let backendDependencyPromise = null;
-
-/**
- * Load .env files without requiring dotenv.
- */
-function loadEnv() {
-    const envFiles = [
-        path.join(rootDir, '.env'),
-        path.join(BACKEND_DIR, '.env')
-    ];
-
-    for (const file of envFiles) {
-        if (!fs.existsSync(file)) {
-            continue;
-        }
-
-        try {
-            const content = fs.readFileSync(file, 'utf8');
-
-            for (const line of content.split('\n')) {
-                const trimmed = line.trim();
-
-                if (!trimmed || trimmed.startsWith('#')) {
-                    continue;
-                }
-
-                const separator = trimmed.indexOf('=');
-
-                if (separator <= 0) {
-                    continue;
-                }
-
-                const key = trimmed
-                    .slice(0, separator)
-                    .trim();
-
-                let value = trimmed
-                    .slice(separator + 1)
-                    .trim();
-
-                if (
-                    (value.startsWith('"') && value.endsWith('"')) ||
-                    (value.startsWith("'") && value.endsWith("'"))
-                ) {
-                    value = value.slice(1, -1);
-                }
-
-                if (
-                    process.env[key] === undefined ||
-                    process.env[key] === ''
-                ) {
-                    process.env[key] = value;
-                }
-            }
-        } catch (_) {
-            // Environment loading must not crash the proxy.
-        }
-    }
-
-    if (
-        !process.env.DATABASE_URL &&
-        process.env.SUPABASE_DATABASE_URL
-    ) {
-        process.env.DATABASE_URL =
-            process.env.SUPABASE_DATABASE_URL;
-    }
-
-    if (process.env.DATABASE_URL) {
-        process.env.DATABASE_URL =
-            process.env.DATABASE_URL.replace(
-                /^(postgres(?:ql)?:\/\/[^:]+:)(.*)(@[^@]+)$/,
-                (_match, prefix, password, host) => {
-                    const encodedPassword =
-                        encodeURIComponent(
-                            decodeURIComponent(password)
-                        );
-
-                    return `${prefix}${encodedPassword}${host}`;
-                }
-            );
-    }
-}
-
-loadEnv();
-
-/**
- * Port parser.
- */
-function getPort(value, fallback) {
-    const port = Number.parseInt(value, 10);
-
-    if (
-        Number.isInteger(port) &&
-        port > 0 &&
-        port < 65536
-    ) {
-        return port;
-    }
-
-    return fallback;
-}
-
-/**
- * Public and internal ports.
- *
- * Set these in Hostinger environment variables if required:
- *
- * PORT=Hostinger assigned public port
- * BACKEND_PORT=3001
- * DASHBOARD_PORT=3002
- * AI_PORT=8002
- */
-const masterPort = getPort(
-    process.env.PORT,
-    3000
-);
-
-const BACK_PORT = getPort(
-    process.env.BACKEND_PORT,
-    3001
-);
-
-const DASH_PORT = getPort(
-    process.env.DASHBOARD_PORT,
-    3002
-);
-
-const AI_PORT = getPort(
-    process.env.AI_PORT,
-    8002
-);
-
-const BACKEND_ENTRY = path.join(
-    BACKEND_DIR,
-    'dist',
-    'main.js'
-);
-
-/**
- * Logging.
- */
-function log(message) {
-    const line =
-        `[${new Date().toLocaleTimeString()}] ${message}`;
-
+function log(msg) {
+    const line = `[${new Date().toLocaleTimeString()}] ${msg}`;
     bootLogs.push(line);
-
-    if (bootLogs.length > 200) {
-        bootLogs.shift();
-    }
-
+    if (bootLogs.length > 100) bootLogs.shift();
     console.log(line);
 }
 
-/**
- * Runtime environment.
- */
-function buildRuntimeEnv(extra = {}) {
-    const nodeBinDir = process.execPath
-        ? path.dirname(process.execPath)
-        : null;
+log('Master Proxy Booting...');
 
-    const pathEntries = [
-        nodeBinDir,
-        '/opt/alt/python311/bin',
-        '/opt/alt/python310/bin',
-        '/opt/alt/python39/bin',
-        '/opt/alt/alt-nodejs24/root/usr/bin',
-        '/opt/alt/alt-nodejs22/root/usr/bin',
-        '/opt/alt/alt-nodejs20/root/usr/bin',
-        '/usr/local/bin',
-        '/usr/bin',
-        '/bin'
-    ];
-
-    if (process.env.PATH) {
-        pathEntries.push(
-            ...process.env.PATH.split(path.delimiter)
-        );
-    }
-
-    return {
-        ...process.env,
-        ...extra,
-        PATH: [
-            ...new Set(
-                pathEntries.filter(Boolean)
-            )
-        ].join(path.delimiter),
-        NODE_ENV: extra.NODE_ENV || 'production'
-    };
-}
-
-/**
- * Lock handling.
- *
- * Only one Passenger worker is allowed to manage:
- *
- * - Backend
- * - Dashboard
- * - AI Engine
- */
-function readBootLock() {
-    try {
-        return JSON.parse(
-            fs.readFileSync(
-                BOOT_LOCK_FILE,
-                'utf8'
-            )
-        );
-    } catch (_) {
-        return null;
-    }
-}
-
-function writeBootLock() {
-    fs.writeFileSync(
-        BOOT_LOCK_FILE,
-        JSON.stringify({
-            pid: process.pid,
-            timestamp: Date.now()
-        }),
-        'utf8'
-    );
-}
-
-function isProcessAlive(pid) {
-    if (!pid) {
-        return false;
-    }
-
-    try {
-        process.kill(Number(pid), 0);
-        return true;
-    } catch (error) {
-        return error.code === 'EPERM';
-    }
-}
-
-function isLockStale(lock) {
-    if (!lock || !lock.pid || !lock.timestamp) {
-        return true;
-    }
-
-    if (Number(lock.pid) === process.pid) {
-        return false;
-    }
-
-    const age = Date.now() - Number(lock.timestamp);
-
-    if (age < LOCK_STALE_MS) {
-        return false;
-    }
-
-    try {
-        process.kill(Number(lock.pid), 0);
-        return false;
-    } catch (error) {
-        return error.code === 'ESRCH';
-    }
-}
-
-function startLockHeartbeat() {
-    if (heartbeatInterval) {
-        clearInterval(heartbeatInterval);
-    }
-
-    heartbeatInterval = setInterval(() => {
-        if (!isBootLockOwner) {
-            return;
-        }
-
-        try {
-            writeBootLock();
-        } catch (_) {}
-    }, 3000);
-
-    if (heartbeatInterval.unref) {
-        heartbeatInterval.unref();
-    }
-}
-
-function tryAcquireBootLock() {
-    if (fs.existsSync(BOOT_LOCK_FILE)) {
-        const existingLock = readBootLock();
-
-        if (
-            existingLock &&
-            Number(existingLock.pid) === process.pid
-        ) {
-            isBootLockOwner = true;
-            startLockHeartbeat();
-            return true;
-        }
-
-        if (!isLockStale(existingLock)) {
-            return false;
-        }
-
-        try {
-            fs.unlinkSync(BOOT_LOCK_FILE);
-        } catch (_) {
-            return false;
-        }
-    }
-
-    try {
-        const fd = fs.openSync(
-            BOOT_LOCK_FILE,
-            'wx'
-        );
-
-        fs.writeSync(
-            fd,
-            JSON.stringify({
-                pid: process.pid,
-                timestamp: Date.now()
-            })
-        );
-
-        fs.closeSync(fd);
-
-        isBootLockOwner = true;
-        startLockHeartbeat();
-
-        return true;
-    } catch (error) {
-        return error.code === 'EEXIST'
-            ? false
-            : false;
-    }
-}
-
-function releaseBootLock() {
-    if (heartbeatInterval) {
-        clearInterval(heartbeatInterval);
-        heartbeatInterval = null;
-    }
-
-    if (!isBootLockOwner) {
-        return;
-    }
-
-    try {
-        const lock = readBootLock();
-
-        if (
-            lock &&
-            Number(lock.pid) === process.pid
-        ) {
-            fs.unlinkSync(BOOT_LOCK_FILE);
-        }
-    } catch (_) {}
-
-    isBootLockOwner = false;
-}
-
-/**
- * Engine state.
- */
-function updateEngineState() {
-    const state = {
-        backendPort: BACK_PORT,
-        dashboardPort: DASH_PORT,
-        aiPort: AI_PORT,
-        backendReady: isBackendReady,
-        dashboardReady: isDashboardReady,
-        aiReady: isAiReady,
-        managerPid: isBootLockOwner
-            ? process.pid
-            : null,
-        updatedAt: Date.now()
-    };
-
-    try {
-        const temporaryFile =
-            `${ENGINE_STATE_FILE}.${process.pid}.tmp`;
-
-        fs.writeFileSync(
-            temporaryFile,
-            JSON.stringify(state, null, 2),
-            'utf8'
-        );
-
-        fs.renameSync(
-            temporaryFile,
-            ENGINE_STATE_FILE
-        );
-    } catch (_) {}
-}
-
-function syncEngineState() {
-    try {
-        if (!fs.existsSync(ENGINE_STATE_FILE)) {
-            return null;
-        }
-
-        const state = JSON.parse(
-            fs.readFileSync(
-                ENGINE_STATE_FILE,
-                'utf8'
-            )
-        );
-
-        if (!state) {
-            return null;
-        }
-
-        isBackendReady =
-            Boolean(state.backendReady);
-
-        isDashboardReady =
-            Boolean(state.dashboardReady);
-
-        isAiReady =
-            Boolean(state.aiReady);
-
-        return state;
-    } catch (_) {
-        return null;
-    }
-}
-
-/**
- * Network helpers.
- */
-function checkTcpConnect(
-    port,
-    host = '127.0.0.1',
-    timeout = 700
-) {
-    return new Promise((resolve) => {
-        const socket = new net.Socket();
-        let finished = false;
-
-        const finish = (result) => {
-            if (finished) {
-                return;
-            }
-
-            finished = true;
-
-            try {
-                socket.destroy();
-            } catch (_) {}
-
-            resolve(result);
-        };
-
-        const timer = setTimeout(
-            () => finish(false),
-            timeout
-        );
-
-        socket.once('connect', () => {
-            clearTimeout(timer);
-            finish(true);
-        });
-
-        socket.once('error', () => {
-            clearTimeout(timer);
-            finish(false);
-        });
-
-        try {
-            socket.connect(port, host);
-        } catch (_) {
-            clearTimeout(timer);
-            finish(false);
-        }
-    });
-}
-
-function checkHttpHealth(
-    name,
-    port,
-    requestPath = '/',
-    timeout = 2500
-) {
-    if (!port) {
-        return Promise.resolve(false);
-    }
-
-    const hosts = [
-        '127.0.0.1',
-        '0.0.0.0'
-    ];
-
-    function probe(index) {
-        if (index >= hosts.length) {
-            return Promise.resolve(false);
-        }
-
-        const host = hosts[index];
-
-        return new Promise((resolve) => {
-            let finished = false;
-
-            const finish = (result) => {
-                if (finished) {
-                    return;
-                }
-
-                finished = true;
-                resolve(result);
-            };
-
-            const timer = setTimeout(
-                () => finish(false),
-                timeout
-            );
-
-            const request = http.get(
-                {
-                    hostname: host,
-                    port,
-                    path: requestPath,
-                    timeout
-                },
-                (response) => {
-                    clearTimeout(timer);
-                    response.resume();
-
-                    finish(
-                        response.statusCode < 500
-                    );
-                }
-            );
-
-            request.on('error', () => {
-                clearTimeout(timer);
-                finish(false);
-            });
-        }).then((ok) => {
-            if (ok) {
-                log(
-                    `🩺 ${name} is reachable on ` +
-                    `${host}:${port}${requestPath}`
-                );
-
-                return true;
-            }
-
-            return probe(index + 1);
-        });
-    }
-
-    return probe(0);
-}
-
-function isPortListening(port) {
-    return checkTcpConnect(
-        port,
-        '127.0.0.1',
-        700
-    );
-}
-
-function checkAiHealth(port) {
-    return checkHttpHealth(
-        'AI Engine',
-        port,
-        '/',
-        2500
-    );
-}
-
-function waitForEngineReady(
-    name,
-    port,
-    maximumWait = 60000
-) {
-    const startedAt = Date.now();
-    const requestPath =
-        name === 'Backend'
-            ? '/api'
-            : '/';
-
-    return new Promise((resolve) => {
-        const check = async () => {
-            let ready = false;
-
-            if (name === 'AI Engine') {
-                ready = await checkAiHealth(port);
-            } else {
-                ready = await checkHttpHealth(
-                    name,
-                    port,
-                    requestPath,
-                    2000
-                );
-            }
-
-            if (ready) {
-                if (name === 'Backend') {
-                    isBackendReady = true;
-                }
-
-                if (name === 'Dashboard') {
-                    isDashboardReady = true;
-                }
-
-                if (name === 'AI Engine') {
-                    isAiReady = true;
-                }
-
-                updateEngineState();
-
-                log(
-                    `✅ ${name} is ready on port ${port}.`
-                );
-
-                resolve(true);
-                return;
-            }
-
-            if (
-                Date.now() - startedAt >= maximumWait
-            ) {
-                log(
-                    `⚠️ ${name} did not become ready ` +
-                    `within ${maximumWait / 1000}s.`
-                );
-
-                resolve(false);
-                return;
-            }
-
-            setTimeout(check, 1000);
-        };
-
-        check();
-    });
-}
-
-/**
- * Boot page.
- */
-function sendBooting(res) {
-    if (res.headersSent) {
-        return;
-    }
-
-    res.writeHead(200, {
-        'Content-Type': 'text/html; charset=utf-8',
-        'Cache-Control': 'no-store'
-    });
-
-    res.end(`
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="refresh" content="6">
-<title>VultaCore Starting</title>
-<style>
-body {
-    margin: 0;
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #fff;
-    background: #050a14;
-    font-family: system-ui, sans-serif;
-}
-main {
-    text-align: center;
-}
-h1 {
-    margin-bottom: 8px;
-}
-p {
-    color: #94a3b8;
-}
-</style>
-</head>
-<body>
-<main>
-<h1>VultaCore</h1>
-<p>Initializing engines...</p>
-</main>
-</body>
-</html>
-`);
-}
-
-/**
- * Static files.
- */
-function tryServeStatic(req, res) {
-    const cleanUrl = decodeURIComponent(
-        (req.url || '/').split('?')[0]
-    );
-
-    let filePath = null;
-
-    if (cleanUrl.startsWith('/_next/static/')) {
-        filePath = path.join(
-            DASHBOARD_DIR,
-            '.next',
-            'static',
-            cleanUrl.slice('/_next/static/'.length)
-        );
-    } else if (
-        /\.(png|jpg|jpeg|gif|svg|ico|webp|woff2?|json|css|js)$/i
-            .test(cleanUrl)
-    ) {
-        filePath = path.join(
-            DASHBOARD_DIR,
-            'public',
-            cleanUrl
-        );
-    }
-
-    if (!filePath) {
-        return false;
-    }
-
-    const root = path.resolve(
-        DASHBOARD_DIR
-    );
-
-    const resolved = path.resolve(
-        filePath
-    );
-
-    if (
-        !resolved.startsWith(root + path.sep) &&
-        resolved !== root
-    ) {
-        return false;
-    }
-
-    if (!fs.existsSync(resolved)) {
-        return false;
-    }
-
-    const mimeTypes = {
-        '.css': 'text/css',
-        '.js': 'text/javascript',
-        '.json': 'application/json',
-        '.png': 'image/png',
-        '.jpg': 'image/jpeg',
-        '.jpeg': 'image/jpeg',
-        '.gif': 'image/gif',
-        '.svg': 'image/svg+xml',
-        '.ico': 'image/x-icon',
-        '.webp': 'image/webp',
-        '.woff': 'font/woff',
-        '.woff2': 'font/woff2'
-    };
-
-    const extension =
-        path.extname(resolved).toLowerCase();
-
-    res.writeHead(200, {
-        'Content-Type':
-            mimeTypes[extension] ||
-            'application/octet-stream',
-        'Cache-Control':
-            'public, max-age=31536000'
-    });
-
-    fs.createReadStream(resolved).pipe(res);
-
-    return true;
-}
-
-/**
- * Downloads.
- */
-function serveDownload(req, res) {
-    const filename = decodeURIComponent(
-        (req.url || '')
-            .replace('/downloads/', '')
-            .split('?')[0]
-    );
-
-    if (
-        !filename ||
-        filename.includes('..') ||
-        filename.includes('/') ||
-        filename.includes('\\')
-    ) {
-        res.writeHead(400);
-        res.end('Invalid filename');
-        return;
-    }
-
-    const filePath = path.join(
-        DOWNLOADS_DIR,
-        filename
-    );
-
-    if (!fs.existsSync(filePath)) {
-        res.writeHead(404, {
-            'Content-Type': 'text/plain'
-        });
-
-        res.end(
-            `Installer not found: ${filename}`
-        );
-
-        return;
-    }
-
-    const stat = fs.statSync(filePath);
-
-    res.writeHead(200, {
-        'Content-Type':
-            'application/octet-stream',
-        'Content-Disposition':
-            `attachment; filename="${filename}"`,
-        'Content-Length':
-            stat.size,
-        'Cache-Control':
-            'public, max-age=86400'
-    });
-
-    fs.createReadStream(filePath).pipe(res);
-}
-
-/**
- * Proxy requests.
- */
+// ─── Built-in HTTP Proxy ────────────────────────────────────────────────────
 function proxyRequest(req, res, targetPort) {
-    const clientHost =
-        req.headers.host ||
-        `127.0.0.1:${targetPort}`;
-
-    const proxyRequestOptions = {
-        hostname: '127.0.0.1',
-        port: targetPort,
-        path: req.url,
-        method: req.method,
-        headers: {
-            ...req.headers,
-            host: clientHost,
-            'x-forwarded-host': clientHost,
-            'x-forwarded-proto':
-                req.headers['x-forwarded-proto'] ||
-                'https',
-            'x-forwarded-for':
-                req.headers['x-forwarded-for'] ||
-                req.socket.remoteAddress
-        }
+    const options = {
+        hostname : '127.0.0.1',
+        port     : targetPort,
+        path     : req.url,
+        method   : req.method,
+        headers  : { ...req.headers, host: `127.0.0.1:${targetPort}` }
     };
 
-    const proxy = http.request(
-        proxyRequestOptions,
-        (proxyResponse) => {
-            res.writeHead(
-                proxyResponse.statusCode || 502,
-                proxyResponse.headers
-            );
+    const proxyReq = http.request(options, (proxyRes) => {
+        res.writeHead(proxyRes.statusCode, proxyRes.headers);
+        proxyRes.pipe(res, { end: true });
+    });
 
-            proxyResponse.pipe(res);
+    proxyReq.on('error', () => {
+        if (req.url.startsWith('/api')) {
+            res.writeHead(503, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Backend engine is starting up. Please retry shortly.' }));
         }
-    );
-
-    proxy.on('error', (error) => {
-        log(
-            `⚠️ Proxy error on port ${targetPort}: ` +
-            error.message
-        );
-
-        if (res.headersSent) {
-            return;
-        }
-
-        const requestPath =
-            (req.url || '').split('?')[0];
-
-        const isApiRequest =
-            requestPath.startsWith('/api') ||
-            requestPath.startsWith('/socket.io');
-
-        if (isApiRequest) {
-            res.writeHead(503, {
-                'Content-Type':
-                    'application/json',
-                'Cache-Control':
-                    'no-store'
-            });
-
-            res.end(JSON.stringify({
-                statusCode: 503,
-                error: 'Service Unavailable',
-                message:
-                    'The internal service is restarting.'
-            }));
-
-            return;
-        }
-
         sendBooting(res);
     });
-
-    req.pipe(proxy);
+    req.pipe(proxyReq, { end: true });
 }
 
-/**
- * HTTP server.
- */
-const server = http.createServer(
-    async (req, res) => {
-        const requestPath =
-            (req.url || '/').split('?')[0];
+function sendBooting(res) {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="refresh" content="6">
+  <title>VultaCore — Starting</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-        if (
-            requestPath.startsWith('/downloads/')
-        ) {
-            return serveDownload(req, res);
-        }
-
-        if (
-            requestPath === '/logs' ||
-            requestPath === '/_logs'
-        ) {
-            res.writeHead(200, {
-                'Content-Type':
-                    'text/plain; charset=utf-8',
-                'Cache-Control':
-                    'no-store'
-            });
-
-            res.end(
-                bootLogs.join('\n')
-            );
-
-            return;
-        }
-
-        if (requestPath === '/health') {
-            res.writeHead(200, {
-                'Content-Type':
-                    'application/json',
-                'Cache-Control':
-                    'no-store'
-            });
-
-            res.end(JSON.stringify({
-                status: 'up',
-                publicPort: masterPort,
-                ports: {
-                    backend: BACK_PORT,
-                    dashboard: DASH_PORT,
-                    ai: AI_PORT
-                },
-                ready: {
-                    backend: isBackendReady,
-                    dashboard: isDashboardReady,
-                    ai: isAiReady
-                },
-                managerPid: isBootLockOwner
-                    ? process.pid
-                    : null,
-                backendEntryExists:
-                    fs.existsSync(BACKEND_ENTRY),
-                uptime: process.uptime(),
-                bootStarted
-            }));
-
-            return;
-        }
-
-        if (
-            requestPath === '/api/boot-logs'
-        ) {
-            res.writeHead(200, {
-                'Content-Type':
-                    'application/json',
-                'Access-Control-Allow-Origin':
-                    '*',
-                'Cache-Control':
-                    'no-store'
-            });
-
-            res.end(JSON.stringify({
-                logs: bootLogs,
-                ports: {
-                    backend: BACK_PORT,
-                    dashboard: DASH_PORT,
-                    ai: AI_PORT
-                },
-                ready: {
-                    backend: isBackendReady,
-                    dashboard: isDashboardReady,
-                    ai: isAiReady
-                },
-                booted:
-                    isBackendReady &&
-                    isDashboardReady,
-                timestamp:
-                    new Date().toISOString()
-            }));
-
-            return;
-        }
-
-        if (tryServeStatic(req, res)) {
-            return;
-        }
-
-        syncEngineState();
-
-        const isApi =
-            requestPath.startsWith('/api') ||
-            requestPath.startsWith('/socket.io');
-
-        const targetPort = isApi
-            ? BACK_PORT
-            : DASH_PORT;
-
-        const targetReady = isApi
-            ? isBackendReady
-            : isDashboardReady;
-
-        if (!targetReady) {
-            const confirmed =
-                await checkHttpHealth(
-                    isApi
-                        ? 'Backend'
-                        : 'Dashboard',
-                    targetPort,
-                    isApi ? '/api' : '/',
-                    700
-                );
-
-            if (confirmed) {
-                if (isApi) {
-                    isBackendReady = true;
-                } else {
-                    isDashboardReady = true;
-                }
-
-                updateEngineState();
-            }
-        }
-
-        const readyNow = isApi
-            ? isBackendReady
-            : isDashboardReady;
-
-        if (!readyNow) {
-            if (isApi) {
-                res.writeHead(503, {
-                    'Content-Type':
-                        'application/json',
-                    'Retry-After': '5',
-                    'Cache-Control':
-                        'no-store'
-                });
-
-                res.end(JSON.stringify({
-                    statusCode: 503,
-                    error: 'Service Unavailable',
-                    message:
-                        'Backend API is still starting.'
-                }));
-
-                return;
-            }
-
-            sendBooting(res);
-            return;
-        }
-
-        proxyRequest(
-            req,
-            res,
-            targetPort
-        );
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #050a14;
+      overflow: hidden;
+      font-family: 'Segoe UI', system-ui, sans-serif;
     }
-);
 
-/**
- * WebSocket and Socket.IO proxy.
- */
-server.on(
-    'upgrade',
-    (req, clientSocket, head) => {
-        const requestPath =
-            (req.url || '/').split('?')[0];
-
-        const isApi =
-            requestPath.startsWith('/api') ||
-            requestPath.startsWith('/socket.io');
-
-        syncEngineState();
-
-        const targetPort = isApi
-            ? BACK_PORT
-            : DASH_PORT;
-
-        const targetReady = isApi
-            ? isBackendReady
-            : isDashboardReady;
-
-        if (!targetReady) {
-            clientSocket.destroy();
-            return;
-        }
-
-        const proxySocket = net.connect(
-            targetPort,
-            '127.0.0.1',
-            () => {
-                const headers = Object.entries(
-                    req.headers
-                )
-                    .map(([key, value]) => {
-                        const normalized =
-                            Array.isArray(value)
-                                ? value.join(', ')
-                                : value;
-
-                        return `${key}: ${normalized}`;
-                    })
-                    .join('\r\n');
-
-                proxySocket.write(
-                    `${req.method} ${req.url} ` +
-                    `HTTP/${req.httpVersion}\r\n` +
-                    `${headers}\r\n\r\n`
-                );
-
-                if (head && head.length) {
-                    proxySocket.write(head);
-                }
-
-                proxySocket.pipe(clientSocket);
-                clientSocket.pipe(proxySocket);
-            }
-        );
-
-        proxySocket.on(
-            'error',
-            () => clientSocket.destroy()
-        );
-
-        clientSocket.on(
-            'error',
-            () => proxySocket.destroy()
-        );
+    /* ── Blurred ambient background blobs ── */
+    .bg-blob {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(90px);
+      opacity: 0.18;
+      animation: blobDrift 8s ease-in-out infinite alternate;
     }
-);
+    .bg-blob-1 { width: 500px; height: 500px; background: #7c3aed; top: -150px; left: -150px; animation-delay: 0s; }
+    .bg-blob-2 { width: 400px; height: 400px; background: #2563eb; bottom: -120px; right: -120px; animation-delay: -3s; }
+    .bg-blob-3 { width: 300px; height: 300px; background: #0ea5e9; top: 40%; left: 55%; animation-delay: -6s; }
 
-/**
- * Backend dependency checks.
- */
-function checkCookieParser() {
-    try {
-        require.resolve(
-            'cookie-parser',
-            {
-                paths: [BACKEND_DIR]
-            }
-        );
+    @keyframes blobDrift {
+      from { transform: translate(0, 0) scale(1); }
+      to   { transform: translate(30px, 20px) scale(1.08); }
+    }
 
+    /* ── Centre stage ── */
+    .stage {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 220px;
+      height: 220px;
+    }
+
+    /* ── Bubble rings ── */
+    .ring {
+      position: absolute;
+      border-radius: 50%;
+      border: 1.5px solid rgba(139, 92, 246, 0.5);
+      animation: ringPulse 2.4s ease-in-out infinite;
+    }
+    .ring-1 { width: 130px; height: 130px; animation-delay: 0s;    border-color: rgba(139,92,246,0.55); }
+    .ring-2 { width: 170px; height: 170px; animation-delay: 0.5s;  border-color: rgba(99,102,241,0.40); }
+    .ring-3 { width: 210px; height: 210px; animation-delay: 1.0s;  border-color: rgba(59,130,246,0.30); }
+    .ring-4 { width: 250px; height: 250px; animation-delay: 1.5s;  border-color: rgba(14,165,233,0.20); }
+
+    @keyframes ringPulse {
+      0%   { transform: scale(0.88); opacity: 0.9; }
+      50%  { transform: scale(1.05); opacity: 0.5; }
+      100% { transform: scale(0.88); opacity: 0.9; }
+    }
+
+    /* ── Logo container ── */
+    .logo-wrap {
+      position: relative;
+      z-index: 10;
+      width: 88px;
+      height: 88px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.04);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255,255,255,0.12);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 40px rgba(139,92,246,0.35), 0 0 80px rgba(139,92,246,0.15);
+      animation: logoBreath 3s ease-in-out infinite;
+    }
+    .logo-wrap img {
+      width: 54px;
+      height: 54px;
+      object-fit: contain;
+      filter: drop-shadow(0 0 12px rgba(139,92,246,0.6));
+    }
+
+    @keyframes logoBreath {
+      0%, 100% { transform: scale(1);    box-shadow: 0 0 40px rgba(139,92,246,0.35), 0 0 80px rgba(139,92,246,0.15); }
+      50%       { transform: scale(1.06); box-shadow: 0 0 60px rgba(139,92,246,0.55), 0 0 120px rgba(139,92,246,0.25); }
+    }
+
+    /* ── Text beneath ── */
+    .label {
+      margin-top: 48px;
+      text-align: center;
+      color: rgba(255,255,255,0.85);
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-shadow: 0 0 20px rgba(139,92,246,0.5);
+    }
+    .sublabel {
+      margin-top: 8px;
+      text-align: center;
+      color: rgba(148,163,184,0.7);
+      font-size: 0.72rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    /* ── Dot spinner ── */
+    .dots {
+      display: flex;
+      gap: 6px;
+      margin-top: 22px;
+      justify-content: center;
+    }
+    .dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: #7c3aed;
+      animation: dotBounce 1.4s ease-in-out infinite;
+    }
+    .dot:nth-child(2) { animation-delay: 0.2s; background: #6366f1; }
+    .dot:nth-child(3) { animation-delay: 0.4s; background: #3b82f6; }
+
+    @keyframes dotBounce {
+      0%, 80%, 100% { transform: scale(0.7); opacity: 0.5; }
+      40%            { transform: scale(1.2); opacity: 1; }
+    }
+
+    .wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-blob bg-blob-1"></div>
+  <div class="bg-blob bg-blob-2"></div>
+  <div class="bg-blob bg-blob-3"></div>
+
+  <div class="wrapper">
+    <div class="stage">
+      <div class="ring ring-1"></div>
+      <div class="ring ring-2"></div>
+      <div class="ring ring-3"></div>
+      <div class="ring ring-4"></div>
+      <div class="logo-wrap">
+        <img src="/logo.png" alt="VultaCore" onerror="this.style.display='none';this.parentNode.innerHTML='<span style=\\'font-size:2rem\\'>⚡</span>'">
+      </div>
+    </div>
+
+    <div class="label">VultaCore</div>
+    <div class="sublabel">Initializing engines…</div>
+    <div class="dots">
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+</body>
+</html>`);
+}
+
+// ─── Static Asset Shortcuts (bypass child proxy for speed) ──────────────────
+function tryServeStatic(req, res) {
+    let filePath = null;
+
+    if (req.url.startsWith('/_next/static/')) {
+        filePath = path.join(rootDir, 'web-dashboard', '.next', 'static',
+                            req.url.replace('/_next/static/', ''));
+    } else if (/\.(png|jpg|jpeg|gif|svg|ico|webp|woff2?|json|exe|dmg|AppImage|deb)$/i.test(req.url)) {
+        filePath = path.join(rootDir, 'web-dashboard', 'public', req.url);
+    }
+
+    if (filePath && fs.existsSync(filePath)) {
+        const ext = path.extname(filePath).toLowerCase();
+        const mime = {
+            '.css':'text/css', '.js':'text/javascript', '.png':'image/png',
+            '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.svg':'image/svg+xml',
+            '.ico':'image/x-icon', '.webp':'image/webp',
+            '.woff':'font/woff', '.woff2':'font/woff2',
+            '.json':'application/json'
+        };
+        res.writeHead(200, { 'Content-Type': mime[ext] || 'application/octet-stream' });
+        fs.createReadStream(filePath).pipe(res);
         return true;
-    } catch (_) {
-        return false;
     }
-}
-
-function checkSqlite3() {
-    const locations = [
-        rootDir,
-        BACKEND_DIR
-    ];
-
-    for (const location of locations) {
-        try {
-            execSync(
-                `"${process.execPath}" -e "require('sqlite3')"`,
-                {
-                    cwd: location,
-                    stdio: 'ignore',
-                    timeout: 15000,
-                    env: buildRuntimeEnv()
-                }
-            );
-
-            return true;
-        } catch (_) {}
-    }
-
     return false;
 }
 
-function typeormProjectDir() {
-    try {
-        const packagePath =
-            require.resolve(
-                'typeorm/package.json',
-                {
-                    paths: [BACKEND_DIR]
-                }
-            );
+// ─── /logs diagnostic route ─────────────────────────────────────────────────
+const server = http.createServer((req, res) => {
+    // Diagnostic endpoints — always available
+    if (req.url === '/logs' || req.url === '/_logs') {
+        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+        return res.end(bootLogs.join('\n'));
+    }
+    if (req.url === '/health') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({
+            status: 'up',
+            ports : { backend: BACK_PORT, dashboard: DASH_PORT, ai: AI_PORT },
+            uptime: process.uptime()
+        }));
+    }
+    // Admin-only boot log endpoint (consumed by /admin/system-health page)
+    if (req.url === '/api/boot-logs') {
+        const hasErrors = bootLogs.some(l => l.includes('❌'));
+        res.writeHead(200, {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+        });
+        return res.end(JSON.stringify({
+            logs    : bootLogs,
+            hasErrors,
+            uptime  : process.uptime(),
+            ports   : { backend: BACK_PORT, dashboard: DASH_PORT, ai: AI_PORT },
+            booted  : !!(BACK_PORT && DASH_PORT),
+            ts      : new Date().toISOString(),
+        }));
+    }
 
-        return path.resolve(
-            path.dirname(packagePath),
-            '..',
-            '..'
+    if (tryServeStatic(req, res)) return;
+
+    if (!BACK_PORT || !DASH_PORT) {
+        if (req.url.startsWith('/api')) {
+            res.writeHead(503, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Backend engine initializing...' }));
+        }
+        return sendBooting(res);
+    }
+
+    const targetPort = (req.url.startsWith('/api') || req.url.startsWith('/socket.io')) ? BACK_PORT : DASH_PORT;
+    proxyRequest(req, res, targetPort);
+});
+
+// ─── WebSocket Upgrade Tunneling ────────────────────────────────────────────
+server.on('upgrade', (req, socket, head) => {
+    const targetPort = (req.url.startsWith('/socket.io') || req.url.startsWith('/api')) ? BACK_PORT : DASH_PORT;
+    if (!targetPort) {
+        socket.destroy();
+        return;
+    }
+    const net = require('net');
+    const proxySocket = net.connect(targetPort, '127.0.0.1', () => {
+        proxySocket.write(
+            `${req.method} ${req.url} HTTP/${req.httpVersion}\r\n` +
+            Object.entries(req.headers).map(([k, v]) => `${k}: ${v}`).join('\r\n') +
+            '\r\n\r\n'
         );
-    } catch (_) {
-        return BACKEND_DIR;
-    }
+        if (head && head.length > 0) proxySocket.write(head);
+        proxySocket.pipe(socket);
+        socket.pipe(proxySocket);
+    });
+    proxySocket.on('error', () => socket.destroy());
+    socket.on('error', () => proxySocket.destroy());
+});
+
+server.listen(masterPort, () => {
+    log(`✨ Master Proxy listening on port ${masterPort}`);
+    // Spawn engines AFTER we are already listening
+    bootEngines().catch(err => {
+        log(`❌ Extent failure in bootEngines: ${err.message}`);
+    });
+});
+
+server.on('error', (err) => {
+    log(`❌ Master server error: ${err.message}`);
+    process.exit(1);
+});
+
+// ─── Engine Spawner ──────────────────────────────────────────────────────────
+const runningChildren = [];
+
+function killChildren() {
+    runningChildren.forEach(child => {
+        try { child.kill('SIGKILL'); } catch (_) {}
+    });
 }
-
-function getNpmCandidates() {
-    return [
-        process.env.npm_execpath,
-        '/opt/alt/alt-nodejs24/root/usr/bin/npm',
-        '/opt/alt/alt-nodejs22/root/usr/bin/npm',
-        '/opt/alt/alt-nodejs20/root/usr/bin/npm',
-        '/usr/bin/npm',
-        'npm'
-    ].filter(Boolean);
-}
-
-async function ensureBackendDependencies() {
-    if (backendDependencyPromise) {
-        return backendDependencyPromise;
-    }
-
-    backendDependencyPromise = (async () => {
-        if (!fs.existsSync(BACKEND_ENTRY)) {
-            throw new Error(
-                `Backend entry not found: ${BACKEND_ENTRY}`
-            );
-        }
-
-        const databaseUrl =
-            process.env.DATABASE_URL || '';
-
-        const remoteDatabase =
-            /^(postgres|postgresql|mysql|mariadb):\/\//
-                .test(databaseUrl);
-
-        const missing = [];
-
-        if (!checkCookieParser()) {
-            missing.push({
-                name: 'cookie-parser',
-                cwd: BACKEND_DIR
-            });
-        }
-
-        if (
-            !remoteDatabase &&
-            !checkSqlite3()
-        ) {
-            missing.push({
-                name: 'sqlite3',
-                cwd: typeormProjectDir()
-            });
-        }
-
-        if (!missing.length) {
-            log(
-                '✅ Backend dependencies are available.'
-            );
-
-            return true;
-        }
-
-        for (const dependency of missing) {
-            let installed = false;
-
-            for (const npm of getNpmCandidates()) {
-                try {
-                    const npmCommand =
-                        npm.endsWith('.js')
-                            ? `"${process.execPath}" "${npm}"`
-                            : `"${npm}"`;
-
-                    if (
-                        npm.startsWith('/') &&
-                        !fs.existsSync(npm)
-                    ) {
-                        continue;
-                    }
-
-                    log(
-                        `📦 Installing ${dependency.name}`
-                    );
-
-                    execSync(
-                        `${npmCommand} install ` +
-                        `${dependency.name} ` +
-                        '--save --no-audit --no-fund',
-                        {
-                            cwd: dependency.cwd,
-                            stdio: 'inherit',
-                            timeout: 120000,
-                            env: buildRuntimeEnv()
-                        }
-                    );
-
-                    installed = true;
-                    break;
-                } catch (error) {
-                    log(
-                        `⚠️ Could not install ` +
-                        `${dependency.name}: ` +
-                        error.message
-                    );
-                }
-            }
-
-            if (
-                !installed &&
-                dependency.name !== 'sqlite3'
-            ) {
-                throw new Error(
-                    `Unable to install ${dependency.name}.`
-                );
-            }
-        }
-
-        return true;
-    })();
-
-    try {
-        return await backendDependencyPromise;
-    } catch (error) {
-        backendDependencyPromise = null;
-        throw error;
-    }
-}
+process.on('exit', killChildren);
+process.on('SIGINT', () => { killChildren(); process.exit(0); });
+process.on('SIGTERM', () => { killChildren(); process.exit(0); });
 
 /**
- * Python detection and dependencies.
+ * Kill leftover zombie child processes from previous crashed runs.
+ * Hostinger shared hosting has a tight per-user process limit; stale
+ * node/python procs from a previous boot exhaust those slots, causing
+ * EAGAIN when we try to spawn the backend/dashboard on restart.
  */
-function findPython() {
-    const candidates = [
-        '/opt/alt/python311/bin/python3',
-        '/opt/alt/python310/bin/python3',
-        '/opt/alt/python39/bin/python3',
-        '/usr/local/bin/python3',
-        '/usr/bin/python3',
-        'python3',
-        'python'
+function killZombieChildren() {
+    const patterns = [
+        'backend-api/dist/main',
+        'dist/main.js',
+        'nest start',
+        'standalone/web-dashboard/server.js',
+        'standalone/server.js',
+        'uvicorn',
+        'analytics-engine',
     ];
-
-    for (const candidate of candidates) {
+    for (const pat of patterns) {
         try {
-            let executable = candidate;
-
-            if (!candidate.startsWith('/')) {
-                executable = execSync(
-                    `command -v ${candidate}`,
-                    {
-                        encoding: 'utf8',
-                        env: buildRuntimeEnv()
-                    }
-                ).trim();
-            }
-
-            if (!executable) {
-                continue;
-            }
-
-            if (
-                executable.startsWith('/') &&
-                !fs.existsSync(executable)
-            ) {
-                continue;
-            }
-
-            execSync(
-                `"${executable}" --version`,
-                {
-                    stdio: 'ignore',
-                    env: buildRuntimeEnv()
-                }
-            );
-
-            return executable;
+            // pkill -f matches against the full command line
+            execSync(`pkill -f "${pat}" 2>/dev/null || true`, { shell: true, stdio: 'ignore' });
         } catch (_) {}
     }
-
-    return null;
+    log('🧹 Zombie cleanup done — cleared stale child processes.');
 }
 
-function resolvePython() {
-    const virtualenvCandidates = [
-        path.join(
-            AI_DIR,
-            'venv',
-            'bin',
-            'python3'
-        ),
-        path.join(
-            AI_DIR,
-            'venv',
-            'bin',
-            'python'
-        )
-    ];
-
-    for (const python of virtualenvCandidates) {
-        if (fs.existsSync(python)) {
-            return {
-                bin: python,
-                env: {},
-                args: (port) => [
-                    '-m',
-                    'uvicorn',
-                    'main:app',
-                    '--host',
-                    '127.0.0.1',
-                    '--port',
-                    String(port)
-                ]
-            };
-        }
-    }
-
-    const python = findPython();
-
-    if (!python) {
-        log(
-            '❌ Python 3 was not found.'
-        );
-
-        return null;
-    }
-
-    const packagesDir = path.join(
-        AI_DIR,
-        '.python_packages'
-    );
-
-    const requiredPackages = [
-        'uvicorn',
-        'fastapi',
-        'httpx',
-        'python-dotenv',
-        'pydantic',
-        'google-genai',
-        'groq',
-        'openai',
-        'anthropic'
-    ];
-
-    const importName = (packageName) => {
-        if (packageName === 'google-genai') {
-            return 'google.genai';
-        }
-
-        if (packageName === 'python-dotenv') {
-            return 'dotenv';
-        }
-
-        return packageName.replace(/-/g, '_');
-    };
-
-    const missing = [];
-
-    for (const packageName of requiredPackages) {
-        try {
-            execSync(
-                `"${python}" -c "import ${importName(packageName)}"`,
-                {
-                    stdio: 'ignore',
-                    env: buildRuntimeEnv({
-                        PYTHONPATH: fs.existsSync(packagesDir)
-                            ? packagesDir
-                            : ''
-                    })
-                }
-            );
-        } catch (_) {
-            missing.push(packageName);
-        }
-    }
-
-    if (missing.length) {
-        try {
-            fs.mkdirSync(
-                packagesDir,
-                {
-                    recursive: true
-                }
-            );
-
-            const lockFile = path.join(
-                packagesDir,
-                '.pip_installing.lock'
-            );
-
-            if (!fs.existsSync(lockFile)) {
-                fs.writeFileSync(
-                    lockFile,
-                    String(process.pid)
-                );
-
-                log(
-                    `📦 Installing Python packages: ` +
-                    `${missing.join(', ')}`
-                );
-
-                execSync(
-                    `"${python}" -m pip install ` +
-                    `--quiet --target="${packagesDir}" ` +
-                    missing.join(' '),
-                    {
-                        stdio: 'inherit',
-                        timeout: 180000,
-                        env: buildRuntimeEnv({
-                            PYTHONPATH: packagesDir
-                        })
-                    }
-                );
-
-                fs.unlinkSync(lockFile);
-
-                log(
-                    '✅ Python packages installed.'
-                );
-            }
-        } catch (error) {
-            log(
-                `⚠️ Python dependency installation failed: ` +
-                error.message
-            );
-        }
-    }
-
-    return {
-        bin: python,
-        env: {
-            PYTHONPATH: fs.existsSync(packagesDir)
-                ? packagesDir
-                : ''
-        },
-        args: (port) => [
-            '-m',
-            'uvicorn',
-            'main:app',
-            '--host',
-            '127.0.0.1',
-            '--port',
-            String(port)
-        ]
-    };
+function freePort(port) {
+    try { execSync(`fuser -k ${port}/tcp`, { stdio: 'ignore' }); } catch (_) {}
 }
 
-/**
- * Dashboard discovery.
- */
-function findDashboardServer() {
-    const candidates = [
-        path.join(
-            DASHBOARD_DIR,
-            '.next',
-            'standalone',
-            'web-dashboard',
-            'server.js'
-        ),
-        path.join(
-            DASHBOARD_DIR,
-            '.next',
-            'standalone',
-            'server.js'
-        )
-    ];
-
-    for (const candidate of candidates) {
-        if (fs.existsSync(candidate)) {
-            return candidate;
-        }
-    }
-
-    return null;
-}
-
-/**
- * Child process management.
- */
-function markReady(name) {
-    if (name === 'Backend') {
-        isBackendReady = true;
-    }
-
-    if (name === 'Dashboard') {
-        isDashboardReady = true;
-    }
-
-    if (name === 'AI Engine') {
-        isAiReady = true;
-    }
-
-    updateEngineState();
-}
-
-function markNotReady(name) {
-    if (name === 'Backend') {
-        isBackendReady = false;
-    }
-
-    if (name === 'Dashboard') {
-        isDashboardReady = false;
-    }
-
-    if (name === 'AI Engine') {
-        isAiReady = false;
-    }
-
-    updateEngineState();
-}
-
-function startEngine(
-    name,
-    executable,
-    args,
-    port,
-    cwd,
-    extraEnv = {},
-    delay = 0,
-    attempt = 0
-) {
-    const maximumAttempts = 6;
-
-    setTimeout(async () => {
-        if (isProcessExiting) {
+function startEngine(name, execBin, execArgs, port, cwd, envExtra = {}, delay = 0) {
+    setTimeout(() => {
+        // Only stat-check absolute paths — bare commands are resolved by the OS
+        const isAbsPath = execBin.startsWith('/');
+        if (isAbsPath && !fs.existsSync(execBin)) {
+            log(`❌ ${name}: executable not found → ${execBin}`);
             return;
         }
+        freePort(port);
+        log(`📡 Spawning ${name} on port ${port} [${execBin}]...`);
 
-        if (
-            await isPortListening(port)
-        ) {
-            log(
-                `ℹ️ ${name}: port ${port} is already ` +
-                'in use. No duplicate process will start.'
-            );
-
-            const ready =
-                name === 'AI Engine'
-                    ? await checkAiHealth(port)
-                    : await checkHttpHealth(
-                        name,
-                        port,
-                        name === 'Backend'
-                            ? '/api'
-                            : '/',
-                        2000
-                    );
-
-            if (ready) {
-                markReady(name);
-            } else {
-                log(
-                    `⚠️ ${name}: port ${port} is occupied ` +
-                    'but the service is not healthy.'
-                );
-            }
-
-            return;
-        }
-
-        log(
-            `🚀 Starting ${name} on port ${port} ` +
-            `(attempt ${attempt + 1})`
-        );
-
-        let child;
-
-        try {
-            child = spawn(
-                executable,
-                args,
-                {
-                    cwd: cwd || rootDir,
-                    env: buildRuntimeEnv({
-                        ...extraEnv,
-                        PORT: String(port)
-                    }),
-                    shell: false,
-                    detached: false,
-                    stdio: [
-                        'ignore',
-                        'pipe',
-                        'pipe'
-                    ]
-                }
-            );
-        } catch (error) {
-            log(
-                `❌ Could not start ${name}: ` +
-                error.message
-            );
-
-            return;
-        }
-
+        const child = spawn(execBin, execArgs, {
+            env  : { ...process.env, PORT: String(port), NODE_ENV: 'production', ...envExtra },
+            cwd  : cwd || rootDir,
+            shell: false
+        });
         runningChildren.push(child);
 
-        log(
-            `📡 ${name} started with PID ${child.pid}.`
-        );
-
-        const processOutput = (data) => {
-            const text = data
-                .toString()
-                .trim();
-
-            if (!text) {
-                return;
-            }
-
-            log(`[${name}] ${text}`);
-
-            const readyMessage =
-                text.includes('Application startup complete') ||
-                text.includes('Uvicorn running on') ||
-                text.includes('Application is running on') ||
-                text.includes('Nest application successfully started') ||
-                text.includes('Ready in');
-
-            if (readyMessage) {
-                markReady(name);
-            }
-        };
-
-        child.stdout.on(
-            'data',
-            processOutput
-        );
-
-        child.stderr.on(
-            'data',
-            processOutput
-        );
-
-        child.on(
-            'error',
-            (error) => {
-                log(
-                    `❌ ${name} process error: ` +
-                    error.message
-                );
-            }
-        );
-
-        child.on(
-            'exit',
-            (code, signal) => {
-                const index =
-                    runningChildren.indexOf(child);
-
-                if (index !== -1) {
-                    runningChildren.splice(
-                        index,
-                        1
-                    );
-                }
-
-                markNotReady(name);
-
-                if (isProcessExiting) {
-                    return;
-                }
-
-                log(
-                    `⚠️ ${name} exited ` +
-                    `(code=${code}, signal=${signal}).`
-                );
-
-                if (attempt >= maximumAttempts) {
-                    log(
-                        `🛑 ${name} reached the retry limit.`
-                    );
-
-                    return;
-                }
-
-                const wait =
-                    Math.min(
-                        5000 *
-                        Math.pow(2, attempt),
-                        60000
-                    );
-
-                log(
-                    `🔁 ${name} will retry in ` +
-                    `${Math.round(wait / 1000)} seconds.`
-                );
-
-                startEngine(
-                    name,
-                    executable,
-                    args,
-                    port,
-                    cwd,
-                    extraEnv,
-                    wait,
-                    attempt + 1
-                );
-            }
-        );
-
-        waitForEngineReady(
-            name,
-            port,
-            60000
-        ).then((ready) => {
-            if (ready) {
-                markReady(name);
-            }
+        child.stdout.on('data', d => log(`[${name}] ${d.toString().trim()}`));
+        child.stderr.on('data', d => log(`[${name}] ${d.toString().trim()}`));
+        child.on('error', err => {
+            log(`❌ [${name}] spawn error: ${err.message}`);
+        });
+        child.on('exit', code => {
+            const idx = runningChildren.indexOf(child);
+            if (idx !== -1) runningChildren.splice(idx, 1);
+            log(`⚠️  ${name} exited (${code}) — restarting in 5 s…`);
+            setTimeout(() => startEngine(name, execBin, execArgs, port, cwd, envExtra), 5000);
         });
     }, delay);
 }
 
-/**
- * Start all internal engines.
- */
+function findSystemPython() {
+    const cmds = [
+        'python3',
+        'python',
+        '/usr/bin/python3',
+        '/usr/local/bin/python3',
+        '/bin/python3',
+        '/usr/bin/python',
+        '/opt/alt/python311/bin/python3',
+        '/opt/alt/python310/bin/python3',
+        '/opt/alt/python39/bin/python3'
+    ];
+    for (const cmd of cmds) {
+        try {
+            const { execSync } = require('child_process');
+            // Check if command is an absolute path or exists in PATH
+            let p = cmd;
+            if (!cmd.startsWith('/')) {
+                p = execSync(`which ${cmd} 2>/dev/null`, { encoding: 'utf8' }).trim();
+            }
+            if (p && fs.existsSync(p)) {
+                // Verify it actually runs and is python 3 (optional but good)
+                execSync(`${p} --version`, { stdio: 'ignore' });
+                return p;
+            }
+        } catch (_) {}
+    }
+    return null;
+}
+
+// Resolve python3 absolute path at boot time so we can log clearly if missing
+function resolvePython() {
+    const aiDir = path.join(rootDir, 'ai-services');
+    const venvDir = path.join(aiDir, 'venv');
+    const venvLibDir = path.join(venvDir, 'lib');
+
+    const sysPython = findSystemPython();
+
+    // 1. Check if a valid venv exists (by checking lib/ dir which pip always creates)
+    if (fs.existsSync(venvLibDir)) {
+        try {
+            // Find the python3.x subdirectory dynamically
+            const pyDirs = fs.readdirSync(venvLibDir).filter(d => d.startsWith('python'));
+            if (pyDirs.length > 0) {
+                const sitePackages = path.join(venvLibDir, pyDirs[0], 'site-packages');
+                if (fs.existsSync(sitePackages)) {
+                    
+                    // Verify critical packages are installed (like uvicorn)
+                    if (!fs.existsSync(path.join(sitePackages, 'uvicorn'))) {
+                        log(`AI Engine: uvicorn missing in venv site-packages. Skipping venv use.`);
+                    } else {
+                        // Find working python binary: prefer venv python, fall back to system
+                        const candidates = [
+                            path.join(venvDir, 'bin', 'python3'),
+                            path.join(venvDir, 'bin', 'python'),
+                        ];
+                        for (const bin of candidates) {
+                            try {
+                                const { execFileSync } = require('child_process');
+                                execFileSync(bin, ['--version'], { stdio: 'ignore' });
+                                log(`AI Engine: resolved → venv python (${path.basename(bin)}) with site-packages`);
+                                return {
+                                    bin,
+                                    args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
+                                    env: { PYTHONPATH: sitePackages }
+                                };
+                            } catch (_) {}
+                        }
+                        // venv binaries broken — fall back to system python with PYTHONPATH
+                        if (sysPython) {
+                            log(`AI Engine: venv binaries broken, using system python (${sysPython}) with PYTHONPATH=${sitePackages}`);
+                            return {
+                                bin: sysPython,
+                                args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
+                                env: { PYTHONPATH: sitePackages }
+                            };
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            log(`AI Engine: venv scan error: ${e.message}`);
+        }
+    }
+
+    // 2. No venv at all — try system python3 (no guarantee uvicorn is installed)
+    if (sysPython) {
+        log(`AI Engine: resolved → ${sysPython} (system, no venv — uvicorn must be installed globally)`);
+        return {
+            bin: sysPython,
+            args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
+            env: {}
+        };
+    }
+
+    log('❌ AI Engine: no python3/python found anywhere — AI bots will be unavailable');
+    return null;
+}
+
 async function bootEngines() {
-    if (!tryAcquireBootLock()) {
-        syncEngineState();
+    killZombieChildren();
 
-        const owner = readBootLock();
-
-        log(
-            `ℹ️ Another worker is managing the engines ` +
-            `(PID ${owner ? owner.pid : 'unknown'}).`
-        );
-
+    try {
+        BACK_PORT = await findFreePort();
+        DASH_PORT = await findFreePort();
+        AI_PORT   = await findFreePort();
+        log(`Dynamically allocated ports: Backend=${BACK_PORT}, Dashboard=${DASH_PORT}, AI=${AI_PORT}`);
+    } catch (e) {
+        log(`❌ Failed to allocate ports: ${e.message}`);
         return;
     }
 
-    if (bootStarted) {
-        return;
-    }
-
-    bootStarted = true;
-
-    log(
-        '🚀 Starting VultaCore engines.'
-    );
-
-    updateEngineState();
-
-    const python = resolvePython();
-
-    if (python) {
+    // ── AI Engine (FastAPI) ────────────────────────────────────────────────
+    const pythonResolved = resolvePython();
+    if (pythonResolved) {
         startEngine(
             'AI Engine',
-            python.bin,
-            python.args(AI_PORT),
+            pythonResolved.bin,
+            pythonResolved.args(AI_PORT),
             AI_PORT,
-            AI_DIR,
-            python.env || {},
+            path.join(rootDir, 'ai-services'),
+            pythonResolved.env || {},
             0
         );
     } else {
-        log(
-            '⚠️ AI Engine was not started because Python ' +
-            'was unavailable.'
-        );
+        log('⚠️  Skipping AI Engine — visit /logs to see diagnostics. Check python3 is installed on the host.');
     }
 
-    const standaloneServer =
-        findDashboardServer();
-
-    const localNext = path.join(
-        DASHBOARD_DIR,
-        'node_modules',
-        'next',
-        'dist',
-        'bin',
-        'next'
-    );
-
-    const rootNext = path.join(
-        rootDir,
-        'node_modules',
-        'next',
-        'dist',
-        'bin',
-        'next'
-    );
-
-    const nextBinary =
-        fs.existsSync(localNext)
-            ? localNext
-            : rootNext;
-
-    if (standaloneServer) {
-        startEngine(
-            'Dashboard',
-            process.execPath,
-            [standaloneServer],
-            DASH_PORT,
-            path.dirname(standaloneServer),
-            {
-                HOSTNAME: '127.0.0.1'
-            },
-            1000
-        );
-    } else if (fs.existsSync(nextBinary)) {
-        startEngine(
-            'Dashboard',
-            process.execPath,
-            [
-                nextBinary,
-                'start',
-                '-p',
-                String(DASH_PORT)
-            ],
-            DASHBOARD_DIR,
-            {
-                HOSTNAME: '127.0.0.1'
-            },
-            1000
-        );
-    } else {
-        log(
-            '❌ Next.js production server was not found.'
-        );
-    }
-
-    try {
-        await ensureBackendDependencies();
-
-        startEngine(
-            'Backend',
-            process.execPath,
-            [BACKEND_ENTRY],
-            BACK_PORT,
-            BACKEND_DIR,
-            {
-                AI_SERVICE_URL:
-                    `http://127.0.0.1:${AI_PORT}`,
-                AI_PORT: String(AI_PORT)
-            },
-            1500
-        );
-    } catch (error) {
-        log(
-            `❌ Backend dependency setup failed: ` +
-            error.message
-        );
-    }
-
-    log(
-        `✅ Engine boot initiated: ` +
-        `Backend=${BACK_PORT}, ` +
-        `Dashboard=${DASH_PORT}, ` +
-        `AI=${AI_PORT}`
-    );
-}
-
-/**
- * Watchdog.
- *
- * Only the lock owner performs recovery.
- * Other Passenger workers only synchronize state.
- */
-function startWatchdog() {
-    setInterval(async () => {
-        if (isProcessExiting) {
-            return;
-        }
-
-        syncEngineState();
-
-        if (!isBootLockOwner) {
-            return;
-        }
-
-        const dashboardHealthy =
-            await checkHttpHealth(
-                'Dashboard',
-                DASH_PORT,
-                '/',
-                1500
-            );
-
-        const backendHealthy =
-            await checkHttpHealth(
-                'Backend',
-                BACK_PORT,
-                '/api',
-                1500
-            );
-
-        const aiHealthy =
-            await checkAiHealth(AI_PORT);
-
-        if (
-            dashboardHealthy !== isDashboardReady ||
-            backendHealthy !== isBackendReady ||
-            aiHealthy !== isAiReady
-        ) {
-            isDashboardReady = dashboardHealthy;
-            isBackendReady = backendHealthy;
-            isAiReady = aiHealthy;
-
-            updateEngineState();
-        }
-    }, 10000);
-}
-
-/**
- * Stop only child processes owned by this master process.
- */
-function shutdown() {
-    if (isProcessExiting) {
-        return;
-    }
-
-    isProcessExiting = true;
-
-    for (const child of runningChildren) {
+    // ── Backend (NestJS dist) ─────────────────────────────────────────────
+    const backendEntry = path.join(rootDir, 'backend-api', 'dist', 'main.js');
+    if (!fs.existsSync(backendEntry)) {
         try {
-            child.kill('SIGTERM');
-        } catch (_) {}
+            log('🔨 Building backend-api dist bundle...');
+            execSync('npm run build', { cwd: path.join(rootDir, 'backend-api'), stdio: 'ignore' });
+        } catch (e) {
+            log(`❌ Failed to build backend-api: ${e.message}`);
+        }
+    }
+    startEngine('Backend', process.execPath, [backendEntry], BACK_PORT,
+                path.join(rootDir, 'backend-api'), { AI_SERVICE_URL: `http://127.0.0.1:${AI_PORT}` }, 0);
+
+    // ── Analytics Engine (Rust) ──────────────────────────────────────────
+    const rustBin = path.join(rootDir, 'analytics-engine', 'target', 'release', 'analytics-engine');
+    const rustDebugBin = path.join(rootDir, 'analytics-engine', 'target', 'debug', 'analytics-engine');
+    const targetRustBin = fs.existsSync(rustBin) ? rustBin : (fs.existsSync(rustDebugBin) ? rustDebugBin : null);
+    if (targetRustBin) {
+        startEngine('Analytics', targetRustBin, [], 5000, path.join(rootDir, 'analytics-engine'), {}, 0);
     }
 
-    releaseBootLock();
+    // ── Dashboard (Next.js standalone) ───────────────────────────────────
+    const standaloneA = path.join(rootDir, 'web-dashboard', '.next', 'standalone', 'web-dashboard', 'server.js');
+    const standaloneB = path.join(rootDir, 'web-dashboard', '.next', 'standalone', 'server.js');
+    const nextBinLocal = path.join(rootDir, 'web-dashboard', 'node_modules', 'next', 'dist', 'bin', 'next');
+    const nextBinRoot  = path.join(rootDir, 'node_modules', 'next', 'dist', 'bin', 'next');
+
+    let dashEntry, dashCwd, dashArgs;
+    if (fs.existsSync(standaloneA)) {
+        dashEntry = standaloneA;
+        dashCwd   = path.dirname(standaloneA);
+        dashArgs  = [standaloneA];
+    } else if (fs.existsSync(standaloneB)) {
+        dashEntry = standaloneB;
+        dashCwd   = path.dirname(standaloneB);
+        dashArgs  = [standaloneB];
+    } else {
+        dashEntry = fs.existsSync(nextBinLocal) ? nextBinLocal : nextBinRoot;
+        dashCwd   = path.join(rootDir, 'web-dashboard');
+        dashArgs  = [dashEntry, 'start'];
+    }
+
+    startEngine('Dashboard', process.execPath, dashArgs, DASH_PORT, dashCwd, {}, 1000);
 }
 
-process.once('SIGTERM', () => {
-    shutdown();
-    process.exit(0);
-});
 
-process.once('SIGINT', () => {
-    shutdown();
-    process.exit(0);
-});
-
-process.once('exit', () => {
-    releaseBootLock();
-});
-
-/**
- * Start public proxy.
- */
-server.listen(
-    masterPort,
-    '0.0.0.0',
-    () => {
-        log(
-            `✨ Master proxy listening on port ${masterPort}.`
-        );
-
-        setTimeout(async () => {
-            try {
-                await bootEngines();
-                startWatchdog();
-            } catch (error) {
-                log(
-                    `❌ Boot failure: ${error.message}`
-                );
-            }
-        }, 1000);
-    }
-);
-
-server.on(
-    'error',
-    (error) => {
-        log(
-            `❌ Master proxy error: ${error.message}`
-        );
-
-        shutdown();
-        process.exit(1);
-    }
-);

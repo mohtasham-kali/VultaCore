@@ -68,14 +68,10 @@ export class ChatGateway
   @SubscribeMessage('sendMessage')
   async handleSendMessage(
     @ConnectedSocket() client: Socket,
-    @MessageBody()
-    payload: { room: string; content: string; userId: string; email?: string },
+    @MessageBody() payload: { room: string; content: string; userId: string; email?: string },
   ) {
     try {
-      const author = await this.usersService.findOrCreateUser(
-        payload.userId,
-        payload.email,
-      );
+      const author = await this.usersService.findOrCreateUser(payload.userId, payload.email);
       const savedMessage = await this.chatService.saveMessage(
         payload.room,
         payload.content,
@@ -89,7 +85,7 @@ export class ChatGateway
     }
   }
 
-  // --- LEMONSQUEEZY / USER EVENT LOGIC --- //
+  // --- REVENUECAT / USER EVENT LOGIC --- //
 
   @SubscribeMessage('subscribeToUserEvents')
   handleSubscribeToUserEvents(
@@ -102,7 +98,7 @@ export class ChatGateway
     console.log(`Client ${client.id} listening for events on: ${userRoom}`);
   }
 
-  // Public method called by your LEMONSQUEEZY Webhook Controller
+  // Public method called by your RevenueCat Webhook Controller
   notifyUserSubscriptionUpdated(userId: string, newRank: string) {
     const userRoom = `user_events_${userId}`;
     console.log(`📡 Emitting subscriptionUpdated to ${userRoom} -> ${newRank}`);

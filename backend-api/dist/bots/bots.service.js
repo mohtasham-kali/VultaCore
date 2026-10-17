@@ -47,53 +47,20 @@ let BotsService = class BotsService {
         const orderedHistory = history.reverse();
         let memoryContext = '';
         if (orderedHistory.length > 0) {
-            memoryContext =
-                'Conversation History:\n' +
-                    orderedHistory
-                        .map((msg) => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
-                        .join('\n') +
-                    '\n\n';
+            memoryContext = 'Conversation History:\n' + orderedHistory.map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`).join('\n') + '\n\n';
         }
         const finalContext = memoryContext + (context ? `User Context/File:\n${context}` : '');
         bot.status = 'working';
         await this.botsRepository.save(bot);
         try {
-            let aiServiceUrl = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8001';
-            if (!aiServiceUrl.startsWith('http://') &&
-                !aiServiceUrl.startsWith('https://')) {
-                aiServiceUrl = `http://${aiServiceUrl}`;
-            }
             console.log(`Executing bot ${bot.name} for user ${userId}...`);
-            console.log(`Resolved AI_SERVICE_URL: ${aiServiceUrl}`);
-            try {
-                const healthRes = await (0, rxjs_1.firstValueFrom)(this.httpService.get(`${aiServiceUrl}/`));
-                console.log('AI service base health:', healthRes.data);
-            }
-            catch (healthErr) {
-                let debugMsg;
-                if (healthErr instanceof Error) {
-                    debugMsg = healthErr.message;
-                }
-                else if (typeof healthErr === 'object' &&
-                    healthErr !== null &&
-                    'response' in healthErr) {
-                    const err = healthErr;
-                    debugMsg =
-                        err.response?.data?.detail ||
-                            err.response?.data?.error ||
-                            'Unknown AI service connectivity error';
-                }
-                else {
-                    debugMsg = 'Unknown AI service connectivity error';
-                }
-                throw new Error(`AI service not reachable at ${aiServiceUrl}/: ${debugMsg}`);
-            }
+            const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
             const response = await (0, rxjs_1.firstValueFrom)(this.httpService.post(`${aiServiceUrl}/execute`, {
                 prompt,
                 user_id: userId,
                 bot_type: bot.type,
                 bot_name: bot.name,
-                context: finalContext || null,
+                context: finalContext || null
             }));
             bot.status = 'completed';
             await this.botsRepository.save(bot);
@@ -114,36 +81,15 @@ let BotsService = class BotsService {
         catch (error) {
             bot.status = 'idle';
             await this.botsRepository.save(bot);
-            let debugMsg;
-            if (error instanceof Error) {
-                debugMsg = error.message;
-            }
-            else if (typeof error === 'object' &&
-                error !== null &&
-                'response' in error) {
-                const err = error;
-                debugMsg =
-                    (typeof err.response?.data?.detail === 'string'
-                        ? err.response.data.detail
-                        : null) ||
-                        (typeof err.response?.data?.error === 'string'
-                            ? err.response.data.error
-                            : null) ||
-                        (typeof err.message === 'string' ? err.message : null) ||
-                        (typeof err.code === 'string' ? err.code : null) ||
-                        JSON.stringify(error);
-            }
-            else {
-                debugMsg = JSON.stringify(error);
-            }
+            const debugMsg = error?.response?.data?.detail
+                || error?.response?.data?.error
+                || error?.message
+                || error?.code
+                || JSON.stringify(error)
+                || 'Unknown connection or parsing fallback error';
             console.error(`AI Service Error (${bot.name}):`, debugMsg);
-            if (typeof error === 'object' && error !== null && 'response' in error) {
-                const errorResponse = error.response;
-                if (typeof errorResponse === 'object' &&
-                    errorResponse !== null &&
-                    'data' in errorResponse) {
-                    console.error('Response data:', errorResponse.data);
-                }
+            if (error.response) {
+                console.error('Response data:', error.response.data);
             }
             return { error: `AI Service communication failed: ${debugMsg}` };
         }
@@ -170,47 +116,15 @@ let BotsService = class BotsService {
     }
     async seed() {
         const bots = [
-            {
-                name: 'Text to Code',
-                type: 'general',
-                category: 'Code Tools',
-                description: 'Convert natural language descriptions into executable code.',
-            },
-            {
-                name: 'Image to Code',
-                type: 'general',
-                category: 'Code Tools',
-                description: 'Generate code from UI mockups or screenshots.',
-            },
-            {
-                name: 'Error Explainer',
-                type: 'general',
-                category: 'Analysis',
-                description: 'Detailed explanation of compiler or runtime errors.',
-            },
-            {
-                name: 'Bug Fixer',
-                type: 'general',
-                category: 'Analysis',
-                description: 'Identify and resolve logic bugs or syntax issues.',
-            },
-            {
-                name: 'Vulnerability Detection',
-                type: 'cyber',
-                category: 'Security Audit',
-                description: 'Scan code for common security vulnerabilities (OWASP Top 10).',
-            },
-            {
-                name: 'Have I Been Pwned',
-                type: 'cyber',
-                category: 'Threat Intel',
-                description: 'Check if credentials have been compromised in known data breaches.',
-            },
+            { name: 'Text to Code', type: 'general', category: 'Code Tools', description: 'Convert natural language descriptions into executable code.' },
+            { name: 'Image to Code', type: 'general', category: 'Code Tools', description: 'Generate code from UI mockups or screenshots.' },
+            { name: 'Error Explainer', type: 'general', category: 'Analysis', description: 'Detailed explanation of compiler or runtime errors.' },
+            { name: 'Bug Fixer', type: 'general', category: 'Analysis', description: 'Identify and resolve logic bugs or syntax issues.' },
+            { name: 'Vulnerability Detection', type: 'cyber', category: 'Security Audit', description: 'Scan code for common security vulnerabilities (OWASP Top 10).' },
+            { name: 'Have I Been Pwned', type: 'cyber', category: 'Threat Intel', description: 'Check if credentials have been compromised in known data breaches.' },
         ];
         for (const botData of bots) {
-            const existing = await this.botsRepository.findOneBy({
-                name: botData.name,
-            });
+            const existing = await this.botsRepository.findOneBy({ name: botData.name });
             if (!existing) {
                 await this.create(botData);
             }

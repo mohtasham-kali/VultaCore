@@ -7,7 +7,7 @@ export declare class AppController {
     private readonly usersService;
     constructor(appService: AppService, chatGateway: ChatGateway, usersService: UsersService);
     getHello(): string;
-    handleLemonSqueezyWebhook(payload: any, authHeader?: string): Promise<{
+    handleRevenueCatWebhook(payload: any): Promise<{
         status: string;
     }>;
 }

@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { CreditCard, TrendingUp, Users, ShieldCheck, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
-
 import { API_BASE_URL } from "@/lib/constants";
 
 interface User {
@@ -19,14 +18,13 @@ export default function AdminSubscriptionsPage() {
 
   useEffect(() => {
     fetch(`${API_BASE_URL}/users`)
-      .then(res => res.ok ? res.json() : [])
+      .then(res => res.json())
       .then(data => {
         setUsers(Array.isArray(data) ? data : []);
         setLoading(false);
       })
       .catch(err => {
         console.error(err);
-        setUsers([]);
         setLoading(false);
       });
   }, []);

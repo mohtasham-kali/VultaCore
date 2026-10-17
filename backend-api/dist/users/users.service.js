@@ -44,13 +44,6 @@ let UsersService = class UsersService {
     findByUsername(username) {
         return this.usersRepository.findOneBy({ username });
     }
-    findByEmail(email) {
-        return this.usersRepository.findOneBy({ email });
-    }
-    async update(id, updates) {
-        await this.usersRepository.update(id, updates);
-        return this.usersRepository.findOneBy({ id });
-    }
     create(userData) {
         const user = this.usersRepository.create(userData);
         return this.usersRepository.save(user);
@@ -64,7 +57,7 @@ let UsersService = class UsersService {
                 username: `user_${userId.slice(0, 4)}`,
                 email: `${userId}@vultacore.app`,
                 password: 'demo_password_placeholder',
-                rank: planName,
+                rank: planName
             });
         }
         else {

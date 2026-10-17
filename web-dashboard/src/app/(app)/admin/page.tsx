@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { Users, Target, TrendingUp, DollarSign, ArrowUpRight, Activity, CreditCard } from "lucide-react";
 import Link from "next/link";
-
 import { API_BASE_URL } from "@/lib/constants";
 
 interface Stats {
@@ -18,14 +17,14 @@ export default function AdminOverview() {
   useEffect(() => {
     // Parallel fetches for efficiency
     Promise.all([
-      fetch(`${API_BASE_URL}/users`).then(res => res.ok ? res.json() : []).catch(() => []),
-      fetch(`${API_BASE_URL}/leads`).then(res => res.ok ? res.json() : []).catch(() => [])
-    ]).then(([usersData, leadsData]) => {
-      const users = Array.isArray(usersData) ? usersData : [];
-      const leads = Array.isArray(leadsData) ? leadsData : [];
+      fetch(`${API_BASE_URL}/users`).then(res => res.json()).catch(() => []),
+      fetch(`${API_BASE_URL}/leads`).then(res => res.json()).catch(() => [])
+    ]).then(([users, leads]) => {
+      const userList = Array.isArray(users) ? users : [];
+      const leadList = Array.isArray(leads) ? leads : [];
       setStats({
-        totalUsers: users.length,
-        totalLeads: leads.length,
+        totalUsers: userList.length,
+        totalLeads: leadList.length,
         // Mock revenue logic: 29 per standard, 99 per premium
         totalRevenue: users.reduce((acc: number, u: { rank?: string }) => {
           if (u.rank === "Standard") return acc + 29;

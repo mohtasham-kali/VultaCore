@@ -15,7 +15,6 @@ const user_entity_1 = require("../../users/entities/user.entity");
 let Plan = class Plan {
     id;
     name;
-    variantId;
     price;
     interval;
     features;
@@ -30,10 +29,6 @@ __decorate([
     (0, typeorm_1.Column)(),
     __metadata("design:type", String)
 ], Plan.prototype, "name", void 0);
-__decorate([
-    (0, typeorm_1.Column)(),
-    __metadata("design:type", String)
-], Plan.prototype, "variantId", void 0);
 __decorate([
     (0, typeorm_1.Column)('decimal', { precision: 10, scale: 2 }),
     __metadata("design:type", Number)

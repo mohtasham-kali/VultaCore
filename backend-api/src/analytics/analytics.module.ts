@@ -7,7 +7,10 @@ import { Post } from '../forum/entities/post.entity';
 import { Comment } from '../forum/entities/comment.entity';
 
 @Module({
-  imports: [HttpModule, TypeOrmModule.forFeature([Post, Comment])],
+  imports: [
+    HttpModule,
+    TypeOrmModule.forFeature([Post, Comment]),
+  ],
   providers: [AnalyticsService],
   controllers: [AnalyticsController],
   exports: [AnalyticsService],

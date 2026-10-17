@@ -1,11 +1,4 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  ManyToOne,
-  JoinColumn,
-} from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 
 @Entity()
@@ -23,10 +16,7 @@ export class ChatMessage {
   @CreateDateColumn()
   createdAt: Date;
 
-  @ManyToOne(() => User, (user) => user.id, {
-    eager: true,
-    onDelete: 'CASCADE',
-  })
+  @ManyToOne(() => User, (user) => user.id, { eager: true, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'authorId' })
   author: User;
 }

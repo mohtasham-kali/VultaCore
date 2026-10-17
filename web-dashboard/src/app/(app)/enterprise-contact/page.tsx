@@ -2,9 +2,7 @@
 
 import { useState } from "react";
 import { ChevronRight, ShieldCheck, Mail, Building2, Phone } from "lucide-react";
-
 import { API_BASE_URL } from "@/lib/constants";
-import { secureFetch } from "@/lib/api";
 
 export default function EnterpriseContactPage() {
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -23,7 +21,7 @@ export default function EnterpriseContactPage() {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      await secureFetch(`${API_BASE_URL}/leads`,{
+      await fetch(`${API_BASE_URL}/leads`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),

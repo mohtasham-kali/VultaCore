@@ -28,21 +28,13 @@ export class UsersService {
     return user;
   }
 
+
   findAll(): Promise<User[]> {
     return this.usersRepository.find();
   }
 
   findByUsername(username: string): Promise<User | null> {
     return this.usersRepository.findOneBy({ username });
-  }
-
-  findByEmail(email: string): Promise<User | null> {
-    return this.usersRepository.findOneBy({ email });
-  }
-
-  async update(id: string, updates: Partial<User>): Promise<User | null> {
-    await this.usersRepository.update(id, updates);
-    return this.usersRepository.findOneBy({ id });
   }
 
   create(userData: Partial<User>): Promise<User> {
@@ -52,7 +44,7 @@ export class UsersService {
 
   async updatePlan(userId: string, planName: string): Promise<User> {
     let user = await this.usersRepository.findOneBy({ id: userId });
-
+    
     if (!user) {
       // Auto-create user if missing (for demo/dev stability)
       console.log(`User ${userId} not found. Creating new record...`);
@@ -61,12 +53,12 @@ export class UsersService {
         username: `user_${userId.slice(0, 4)}`,
         email: `${userId}@vultacore.app`,
         password: 'demo_password_placeholder', // Required by database schema
-        rank: planName,
+        rank: planName
       });
     } else {
       user.rank = planName;
     }
-
+    
     return this.usersRepository.save(user);
   }
 }

@@ -28,12 +28,9 @@ export class SettingsService {
 
   async getAll(): Promise<Record<string, string>> {
     const settings = await this.settingsRepository.find();
-    return settings.reduce(
-      (acc, curr) => {
-        acc[curr.key] = curr.value;
-        return acc;
-      },
-      {} as Record<string, string>,
-    );
+    return settings.reduce((acc, curr) => {
+      acc[curr.key] = curr.value;
+      return acc;
+    }, {} as Record<string, string>);
   }
 }

@@ -28,18 +28,13 @@ let BillingController = BillingController_1 = class BillingController {
             throw new common_1.BadRequestException('planName, userId and userEmail are required.');
         }
         try {
-            const result = await this.billingService.createCheckoutSession(planName, userId, userEmail);
-            if (typeof result === 'string') {
-                return { checkoutUrl: result };
-            }
-            return { checkoutUrl: result.url, newPlan: result.newPlan };
+            const url = await this.billingService.createCheckoutSession(planName, userId, userEmail);
+            return { checkoutUrl: url };
         }
         catch (err) {
-            const errorMessage = err.response?.data?.errors
-                ? JSON.stringify(err.response.data.errors)
-                : err.message;
-            this.logger.error(`Checkout creation failed: ${errorMessage}`);
-            throw new common_1.BadRequestException(errorMessage);
+            const message = err.message;
+            this.logger.error(`Checkout creation failed: ${message}`);
+            throw new common_1.BadRequestException(message);
         }
     }
     async handleWebhook(req, signature) {

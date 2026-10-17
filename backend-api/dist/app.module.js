@@ -71,86 +71,16 @@ exports.AppModule = AppModule = __decorate([
         imports: [
             config_1.ConfigModule.forRoot({
                 isGlobal: true,
-                envFilePath: [
-                    (0, path_1.join)(process.cwd(), '.env'),
-                    (0, path_1.join)(process.cwd(), 'backend-api', '.env'),
-                    (0, path_1.join)(__dirname, '..', '.env'),
-                ],
             }),
-            typeorm_1.TypeOrmModule.forRootAsync({
-                useFactory: () => {
-                    const dbUrl = process.env.DATABASE_URL || process.env.SUPABASE_DATABASE_URL;
-                    const isPostgres = dbUrl &&
-                        (dbUrl.startsWith('postgres://') ||
-                            dbUrl.startsWith('postgresql://'));
-                    const isMysql = dbUrl &&
-                        (dbUrl.startsWith('mysql://') ||
-                            dbUrl.startsWith('mariadb://'));
-                    const dbConfig = {
-                        autoLoadEntities: true,
-                        synchronize: true,
-                    };
-                    if (isPostgres) {
-                        dbConfig.type = 'postgres';
-                        const sanitized = dbUrl.replace(/^(postgres(?:ql)?:\/\/[^:]+:)(.*)(@[^@]+)$/, (_m, prefix, password, hostPart) => {
-                            const encodedPassword = encodeURIComponent(decodeURIComponent(password));
-                            return `${prefix}${encodedPassword}${hostPart}`;
-                        });
-                        try {
-                            const parsed = new URL(sanitized);
-                            dbConfig.host = parsed.hostname;
-                            dbConfig.port = parseInt(parsed.port || '5432', 10);
-                            dbConfig.username = decodeURIComponent(parsed.username);
-                            dbConfig.password = decodeURIComponent(parsed.password);
-                            dbConfig.database = parsed.pathname.replace(/^\//, '') || 'postgres';
-                            console.log(`[Database] 🚀 Connecting to PostgreSQL/Supabase at ${dbConfig.host}:${dbConfig.port} (db: ${dbConfig.database}, user: ${dbConfig.username})`);
-                        }
-                        catch (_) {
-                            dbConfig.url = sanitized;
-                        }
-                        dbConfig.ssl = { rejectUnauthorized: false };
-                    }
-                    else if (isMysql) {
-                        dbConfig.type = 'mysql';
-                        dbConfig.url = dbUrl;
-                        try {
-                            const parsed = new URL(dbUrl);
-                            const rawDb = (parsed.pathname || '').replace(/^\//, '');
-                            if (rawDb.toLowerCase() === 'database' || !rawDb) {
-                                console.error('================================================================');
-                                console.error('[Database] 🛑 CRITICAL CONFIGURATION ERROR:');
-                                console.error('[Database] Current database name in DATABASE_URL is "' + rawDb + '".');
-                                console.error('[Database] On Hostinger, database names always include your account prefix!');
-                                console.error('[Database] Example: u879979656_vultacore (check Hostinger -> Databases)');
-                                console.error('[Database] Update DATABASE_URL in Hostinger Environment Variables:');
-                                console.error('[Database]   mysql://' + (parsed.username || 'user') + ':PASSWORD@' + (parsed.host || '127.0.0.1:3306') + '/u879979656_YOUR_ACTUAL_DB_NAME');
-                                console.error('================================================================');
-                            }
-                        }
-                        catch (_) { }
-                    }
-                    else {
-                        try {
-                            require('sqlite3');
-                        }
-                        catch (sqliteErr) {
-                            console.error('================================================================');
-                            console.error('[Database] ⚠️ sqlite3 native library failed to load:', sqliteErr.message);
-                            console.error('[Database] 👉 On Hostinger or Cloud Linux, you can configure a free database:');
-                            console.error('[Database]    • Hostinger MySQL: DATABASE_URL=mysql://user:pass@127.0.0.1:3306/dbname');
-                            console.error('[Database]    • Cloud PostgreSQL (Neon/Supabase): DATABASE_URL=postgres://user:pass@host/dbname');
-                            console.error('================================================================');
-                        }
-                        dbConfig.type = 'sqlite';
-                        if (dbUrl && dbUrl.startsWith('sqlite:')) {
-                            dbConfig.database = dbUrl.replace(/^sqlite:\/\/\/?/, '');
-                        }
-                        else {
-                            dbConfig.database = dbUrl || 'saas.sqlite';
-                        }
-                    }
-                    return dbConfig;
-                },
+            typeorm_1.TypeOrmModule.forRoot({
+                type: (process.env.DATABASE_URL ? 'postgres' : 'sqlite'),
+                url: process.env.DATABASE_URL,
+                database: process.env.DATABASE_URL ? undefined : 'saas.sqlite',
+                autoLoadEntities: true,
+                synchronize: true,
+                ssl: process.env.DATABASE_URL
+                    ? { rejectUnauthorized: false }
+                    : false,
             }),
             users_module_1.UsersModule,
             plans_module_1.PlansModule,

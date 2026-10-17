@@ -10,8 +10,6 @@ import {
 import { Request } from 'express';
 import { BillingService } from './billing.service';
 
-type RawBodyRequest = Request & { rawBody?: Buffer };
-
 interface CheckoutDto {
   planName: string;
   userId: string;
@@ -27,35 +25,26 @@ export class BillingController {
   /**
    * Frontend calls this to get a Lemon Squeezy checkout URL.
    * POST /billing/checkout
-   * Body: { planId: "...", userId: "...", userEmail: "..." }
+   * Body: { planName: "Standard" | "Premium", userId: "...", userEmail: "..." }
    */
   @Post('checkout')
   async createCheckout(@Body() body: CheckoutDto) {
     const { planName, userId, userEmail } = body;
     if (!planName || !userId || !userEmail) {
-      throw new BadRequestException(
-        'planName, userId and userEmail are required.',
-      );
+      throw new BadRequestException('planName, userId and userEmail are required.');
     }
 
     try {
-      const result = await this.billingService.createCheckoutSession(
+      const url = await this.billingService.createCheckoutSession(
         planName,
         userId,
         userEmail,
       );
-
-      // result is either a Lemon Squeezy URL or { url, newPlan } for direct-update
-      if (typeof result === 'string') {
-        return { checkoutUrl: result };
-      }
-      return { checkoutUrl: result.url, newPlan: result.newPlan };
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.errors
-        ? JSON.stringify(err.response.data.errors)
-        : err.message;
-      this.logger.error(`Checkout creation failed: ${errorMessage}`);
-      throw new BadRequestException(errorMessage);
+      return { checkoutUrl: url };
+    } catch (err: unknown) {
+      const message = (err as Error).message;
+      this.logger.error(`Checkout creation failed: ${message}`);
+      throw new BadRequestException(message);
     }
   }
 
@@ -66,15 +55,13 @@ export class BillingController {
    */
   @Post('webhook')
   async handleWebhook(
-    @Req() req: RawBodyRequest,
+    @Req() req: Request,
     @Headers('x-signature') signature: string,
   ) {
-    const rawBody = req.rawBody;
+    const rawBody: Buffer = (req as any).rawBody;
 
     if (!rawBody) {
-      throw new BadRequestException(
-        'No raw body found. Check middleware config.',
-      );
+      throw new BadRequestException('No raw body found. Check middleware config.');
     }
 
     try {

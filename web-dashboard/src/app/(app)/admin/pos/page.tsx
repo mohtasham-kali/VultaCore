@@ -3,8 +3,6 @@
 import { useState, useEffect } from "react";
 import { CreditCard, Search, ShieldPlus, ChevronRight, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { startUpgrade } from "@/lib/payments";
-
 import { API_BASE_URL } from "@/lib/constants";
 
 interface User {
@@ -23,23 +21,34 @@ export default function SalesPOSTerminal() {
 
   useEffect(() => {
     fetch(`${API_BASE_URL}/users`)
-      .then(res => res.ok ? res.json() : [])
+      .then(res => res.json())
       .then(data => setUsers(Array.isArray(data) ? data : []))
-      .catch(() => setUsers([]));
+      .catch(() => {});
   }, []);
 
   const filteredUsers = users.filter(u => 
-    u.username?.toLowerCase().includes(search.toLowerCase()) || 
-    u.email?.toLowerCase().includes(search.toLowerCase())
+    u.username.toLowerCase().includes(search.toLowerCase()) || 
+    u.email.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleUpgrade = async () => {
+  const handleManualSubscription = async () => {
     if (!selectedUser) return;
     setIsProcessing(true);
+    
     try {
-      await startUpgrade(selectedPlan, selectedUser.id, selectedUser.email);
+      await fetch(`${API_BASE_URL}/users/${selectedUser.id}/plan`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan: selectedPlan }),
+      });
+      alert(`Manual upgrade successful! ${selectedUser.username} is now on the ${selectedPlan} tier.`);
+      setSelectedUser(null);
+      // Refresh list
+      const res = await fetch(`${API_BASE_URL}/users`);
+      const data = await res.json();
+      setUsers(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.error("Upgrade error:", err);
+      console.error("POS Error:", err);
     } finally {
       setIsProcessing(false);
     }
@@ -129,7 +138,7 @@ export default function SalesPOSTerminal() {
             </div>
 
             <button 
-              onClick={handleUpgrade}
+              onClick={handleManualSubscription}
               disabled={isProcessing}
               className="w-full bg-gradient-to-r from-purple-500 to-blue-500 py-4 rounded-2xl text-white font-bold text-lg shadow-xl shadow-purple-500/20 hover:scale-[1.02] transition-all flex items-center justify-center gap-3 mt-12 group"
             >

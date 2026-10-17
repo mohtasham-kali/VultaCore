@@ -66,6 +66,7 @@ npm run open:ios       # open in Xcode (macOS only)
 ```bash
 cd ai-services
 pip install -r requirements.txt
+python -m venv venv
 source venv/bin/activate
 uvicorn main:app --reload
 ```
