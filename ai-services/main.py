@@ -63,34 +63,42 @@ class BotResponse(BaseModel):
     processing_time: float
     metadata: dict
 
-async def call_gemini(prompt: str, model_name: str = "gemini-flash-latest"):
+async def call_gemini(prompt: str, model_name: str = "gemini-3.8-flash"):
     current_key = (os.getenv("GEMINI_API_KEY") or os.getenv("GEMINI_API") or os.getenv("GENAI_API") or "").strip()
     if not current_key:
         return "Gemini Error: GEMINI_API_KEY is not configured in environment variables."
-    try:
-        model = genai.GenerativeModel(model_name)
-        response = await model.generate_content_async(prompt)
-        return response.text
-    except Exception as e:
-        err_msg = str(e)
-        if "leaked" in err_msg.lower() or "403" in err_msg:
-            return "Gemini Error: Your Gemini API key was reported as leaked by Google and has been deactivated. Please generate a fresh API key at https://aistudio.google.com/app/apikey and update GEMINI_API_KEY."
-        return f"Gemini Error: {err_msg}"
+    models_to_try = [model_name, "gemini-3.8-flash", "gemini-flash-latest"]
+    last_err = ""
+    for m in dict.fromkeys(models_to_try):
+        try:
+            model = genai.GenerativeModel(m)
+            response = await model.generate_content_async(prompt)
+            return response.text
+        except Exception as e:
+            last_err = str(e)
+            continue
+    if "leaked" in last_err.lower() or "403" in last_err:
+        return "Gemini Error: Your Gemini API key was reported as leaked by Google and has been deactivated. Please generate a fresh API key at https://aistudio.google.com/app/apikey and update GEMINI_API_KEY."
+    return f"Gemini Error: {last_err}"
 
-async def call_groq(prompt: str, model_name: str = "llama-3.3-70b-versatile"):
+async def call_groq(prompt: str, model_name: str = "openai/gpt-oss-120b"):
     if not groq_client:
         return "Groq Error: GROQ_API_KEY is not configured in environment variables."
-    try:
-        chat_completion = await groq_client.chat.completions.create(
-            messages=[{"role": "user", "content": prompt}],
-            model=model_name,
-        )
-        return chat_completion.choices[0].message.content
-    except Exception as e:
-        err_msg = str(e)
-        if "invalid_api_key" in err_msg.lower() or "401" in err_msg:
-            return "Groq Error: Invalid or expired API Key. Please verify your API key in the Groq Console (https://console.groq.com/keys)."
-        return f"Groq Error: {err_msg}"
+    models_to_try = [model_name, "openai/gpt-oss-120b", "qwen/qwen3.8-27b", "llama-3.3-70b-versatile"]
+    last_err = ""
+    for m in dict.fromkeys(models_to_try):
+        try:
+            chat_completion = await groq_client.chat.completions.create(
+                messages=[{"role": "user", "content": prompt}],
+                model=m,
+            )
+            return chat_completion.choices[0].message.content
+        except Exception as e:
+            last_err = str(e)
+            continue
+    if "invalid_api_key" in last_err.lower() or "401" in last_err:
+        return "Groq Error: Invalid or expired API Key. Please verify your API key in the Groq Console (https://console.groq.com/keys)."
+    return f"Groq Error: {last_err}"
 
 async def call_openrouter(prompt: str, model: str = "anthropic/claude-3-haiku"):
     if not openrouter_client:
@@ -119,12 +127,12 @@ async def try_with_fallbacks(prompt: str, priority_order: list) -> tuple:
         if name == "groq":
             res = await call_groq(prompt)
             if not is_provider_error(res):
-                return res, "Groq/Llama-3.3-70B"
+                return res, "Groq/GPT-OSS-120B"
             errors.append(res)
         elif name == "gemini":
             res = await call_gemini(prompt)
             if not is_provider_error(res):
-                return res, "Gemini-Flash-Latest"
+                return res, "Gemini-3.8-Flash"
             errors.append(res)
         elif name == "openrouter_claude":
             res = await call_openrouter(prompt, "anthropic/claude-3-haiku")
