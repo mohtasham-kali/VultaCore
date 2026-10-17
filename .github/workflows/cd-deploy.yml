@@ -73,6 +73,7 @@ jobs:
           script: |
             set +e
             source ~/.bashrc 2>/dev/null || source ~/.bash_profile 2>/dev/null || true
+            mkdir -p ~/domains/vultacore.techprogression.com/nodejs/public/downloads/
             
             # Prevent Git dubious ownership errors on shared Hostinger server
             git config --global --add safe.directory "*" 2>/dev/null || true
