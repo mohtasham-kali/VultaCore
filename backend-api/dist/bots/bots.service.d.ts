@@ -9,6 +9,7 @@ export declare class BotsService {
     constructor(botsRepository: Repository<Bot>, conversationRepository: Repository<ConversationMessage>, httpService: HttpService);
     findAll(type?: 'general' | 'cyber'): Promise<Bot[]>;
     executeBot(id: string, prompt: string, userId: string, context?: string): Promise<any>;
+    private fallbackDirectCloud;
     getHistory(botId: string, userId: string): Promise<ConversationMessage[]>;
     updateStatus(id: string, status: 'idle' | 'working' | 'completed'): Promise<Bot | null>;
     create(botData: Partial<Bot>): Promise<Bot>;

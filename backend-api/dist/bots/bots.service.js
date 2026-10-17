@@ -83,20 +83,156 @@ let BotsService = class BotsService {
             return response.data;
         }
         catch (error) {
-            bot.status = 'idle';
-            await this.botsRepository.save(bot);
             const debugMsg = error?.response?.data?.detail
                 || error?.response?.data?.error
                 || error?.message
                 || error?.code
                 || JSON.stringify(error)
-                || 'Unknown connection or parsing fallback error';
-            console.error(`AI Service Error (${bot.name}):`, debugMsg);
-            if (error.response) {
-                console.error('Response data:', error.response.data);
+                || 'Unknown connection or parsing error';
+            console.warn(`[BotsService] AI Microservice unavailable (${bot.name}): ${debugMsg}. Invoking direct cloud fallback...`);
+            try {
+                const fallbackData = await this.fallbackDirectCloud(bot, prompt, finalContext);
+                bot.status = 'completed';
+                await this.botsRepository.save(bot);
+                await this.conversationRepository.save({
+                    userId,
+                    botId: id,
+                    role: 'user',
+                    content: prompt,
+                });
+                await this.conversationRepository.save({
+                    userId,
+                    botId: id,
+                    role: 'assistant',
+                    content: fallbackData.response || JSON.stringify(fallbackData),
+                });
+                return fallbackData;
             }
-            return { error: `AI Service communication failed: ${debugMsg}` };
+            catch (fallbackError) {
+                bot.status = 'idle';
+                await this.botsRepository.save(bot);
+                console.error(`[BotsService] All AI engines failed (${bot.name}):`, fallbackError.message);
+                return { error: `AI Service communication failed: ${debugMsg}. Fallback: ${fallbackError.message}` };
+            }
         }
+    }
+    async fallbackDirectCloud(bot, prompt, context) {
+        const startTime = Date.now();
+        const systemRole = bot.type === 'cyber'
+            ? 'You are an advanced Cyber Security AI Agent. Provide expert security analysis, threat mitigation, and code audit insights.'
+            : bot.name === 'Text to Code'
+                ? 'You are an expert software engineer. Write high-quality, robust, and clean code with clear explanations.'
+                : bot.name === 'Bug Fixer'
+                    ? 'You are a master debugging specialist. Analyze the problem, identify root causes, and provide working solutions.'
+                    : 'You are an intelligent, helpful AI assistant built into VultaCore.';
+        const fullPrompt = context
+            ? `CONTEXT:\n${context}\n\nUSER REQUEST:\n${prompt}`
+            : prompt;
+        const openrouterKey = (process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_API || '').trim();
+        if (openrouterKey) {
+            const models = ['openai/gpt-4o', 'meta-llama/llama-3.3-70b-instruct', 'google/gemini-2.0-flash-001'];
+            for (const model of models) {
+                try {
+                    const res = await (0, rxjs_1.firstValueFrom)(this.httpService.post('https://openrouter.ai/api/v1/chat/completions', {
+                        model,
+                        messages: [
+                            { role: 'system', content: systemRole },
+                            { role: 'user', content: fullPrompt },
+                        ],
+                        max_tokens: 1000,
+                    }, {
+                        headers: {
+                            Authorization: `Bearer ${openrouterKey}`,
+                            'Content-Type': 'application/json',
+                            'HTTP-Referer': 'https://vultacore.techprogression.com',
+                            'X-Title': 'VultaCore SaaS',
+                        },
+                        timeout: 18000,
+                    }));
+                    const reply = res.data?.choices?.[0]?.message?.content;
+                    if (reply) {
+                        return {
+                            bot_name: bot.name,
+                            response: reply,
+                            confidence: 0.96,
+                            processing_time: (Date.now() - startTime) / 1000,
+                            metadata: { engine: `${model} (Direct OpenRouter Fallback)` },
+                        };
+                    }
+                }
+                catch (e) {
+                    console.warn(`[OpenRouter Direct Error] ${model}: ${e.message}`);
+                }
+            }
+        }
+        const geminiKey = (process.env.GEMINI_API_KEY || process.env.GEMINI_API || process.env.GENAI_API || '').trim();
+        if (geminiKey) {
+            const models = ['gemini-2.5-flash', 'gemini-1.5-flash'];
+            for (const m of models) {
+                try {
+                    const res = await (0, rxjs_1.firstValueFrom)(this.httpService.post(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${geminiKey}`, {
+                        contents: [
+                            {
+                                parts: [
+                                    { text: `${systemRole}\n\n${fullPrompt}` }
+                                ]
+                            }
+                        ]
+                    }, {
+                        headers: { 'Content-Type': 'application/json' },
+                        timeout: 18000,
+                    }));
+                    const reply = res.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+                    if (reply) {
+                        return {
+                            bot_name: bot.name,
+                            response: reply,
+                            confidence: 0.95,
+                            processing_time: (Date.now() - startTime) / 1000,
+                            metadata: { engine: `${m} (Direct Gemini Fallback)` },
+                        };
+                    }
+                }
+                catch (e) {
+                    console.warn(`[Gemini Direct Error] ${m}: ${e.message}`);
+                }
+            }
+        }
+        const groqKey = (process.env.GROQ_API_KEY || process.env.GROQ_API || '').trim();
+        if (groqKey) {
+            const models = ['openai/gpt-oss-120b', 'llama-3.3-70b-versatile'];
+            for (const m of models) {
+                try {
+                    const res = await (0, rxjs_1.firstValueFrom)(this.httpService.post('https://api.groq.com/openai/v1/chat/completions', {
+                        model: m,
+                        messages: [
+                            { role: 'system', content: systemRole },
+                            { role: 'user', content: fullPrompt },
+                        ],
+                    }, {
+                        headers: {
+                            Authorization: `Bearer ${groqKey}`,
+                            'Content-Type': 'application/json',
+                        },
+                        timeout: 18000,
+                    }));
+                    const reply = res.data?.choices?.[0]?.message?.content;
+                    if (reply) {
+                        return {
+                            bot_name: bot.name,
+                            response: reply,
+                            confidence: 0.94,
+                            processing_time: (Date.now() - startTime) / 1000,
+                            metadata: { engine: `${m} (Direct Groq Fallback)` },
+                        };
+                    }
+                }
+                catch (e) {
+                    console.warn(`[Groq Direct Error] ${m}: ${e.message}`);
+                }
+            }
+        }
+        throw new Error('All AI providers (OpenRouter, Gemini, Groq) failed or keys are missing.');
     }
     async getHistory(botId, userId) {
         const history = await this.conversationRepository.find({

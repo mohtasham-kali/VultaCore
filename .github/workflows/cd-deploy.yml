@@ -66,10 +66,10 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         continue-on-error: true
         with:
-          host: ${{ secrets.HOSTINGER_SSH_HOST }}
-          port: ${{ secrets.HOSTINGER_SSH_PORT }}
-          username: ${{ secrets.HOSTINGER_SSH_USER }}
-          password: ${{ secrets.HOSTINGER_SSH_PASS }}
+          host: '45.130.228.127'
+          username: 'u879979656'
+          key: ${{ secrets.SSH_PRIVATE_KEY }}   # <--- Make sure this line is exactly here
+          port: 65002   
           script: |
             set +e
             source ~/.bashrc 2>/dev/null || source ~/.bash_profile 2>/dev/null || true
