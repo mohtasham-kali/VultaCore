@@ -15,7 +15,8 @@ export interface LocalAIProgress {
 export async function initLocalEngine(
   onProgress?: (report: LocalAIProgress) => void
 ): Promise<MLCEngine> {
-  if (typeof navigator === 'undefined' || !navigator.gpu) {
+  const nav = typeof navigator !== 'undefined' ? (navigator as Navigator & { gpu?: unknown }) : undefined;
+  if (!nav || !nav.gpu) {
     throw new Error("WebGPU is not supported on this device/browser. Offline Local AI requires WebGPU. If you are using the Desktop app on Linux or macOS, the native webview may not support it yet. Please use Online Mode.");
   }
 
