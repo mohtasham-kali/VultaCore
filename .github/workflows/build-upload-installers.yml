@@ -198,20 +198,20 @@ jobs:
       - name: Ensure target directory exists on Hostinger
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.HOSTINGER_SSH_HOST }}
-          port: ${{ secrets.HOSTINGER_SSH_PORT }}
-          username: ${{ secrets.HOSTINGER_SSH_USER }}
-          password: ${{ secrets.HOSTINGER_SSH_PASS }}
+          host: '45.130.228.127'
+          username: 'u879979656'
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 65002
           script: |
             mkdir -p ~/domains/vultacore.techprogression.com/nodejs/public/downloads/
 
       - name: Upload installers to Hostinger via SCP
         uses: appleboy/scp-action@v0.1.7
         with:
-          host: ${{ secrets.HOSTINGER_SSH_HOST }}
-          port: ${{ secrets.HOSTINGER_SSH_PORT }}
-          username: ${{ secrets.HOSTINGER_SSH_USER }}
-          password: ${{ secrets.HOSTINGER_SSH_PASS }}
+          host: '45.130.228.127'
+          username: 'u879979656'
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 65002
           source: "all-installers/*"
           target: "~/domains/vultacore.techprogression.com/nodejs/public/downloads/"
           strip_components: 1
@@ -219,10 +219,10 @@ jobs:
       - name: Verify upload on Hostinger
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.HOSTINGER_SSH_HOST }}
-          port: ${{ secrets.HOSTINGER_SSH_PORT }}
-          username: ${{ secrets.HOSTINGER_SSH_USER }}
-          password: ${{ secrets.HOSTINGER_SSH_PASS }}
+          host: '45.130.228.127'
+          username: 'u879979656'
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 65002
           script: |
             echo "=== Installers in public/downloads/ ==="
             ls -lh ~/domains/vultacore.techprogression.com/nodejs/public/downloads/ 2>/dev/null || echo "Directory empty or missing"
