@@ -100,21 +100,27 @@ async def call_groq(prompt: str, model_name: str = "openai/gpt-oss-120b"):
         return "Groq Error: Invalid or expired API Key. Please verify your API key in the Groq Console (https://console.groq.com/keys)."
     return f"Groq Error: {last_err}"
 
-async def call_openrouter(prompt: str, model: str = "anthropic/claude-3-haiku"):
+async def call_openrouter(prompt: str, model: str = "openai/gpt-4o"):
     if not openrouter_client:
         return "OpenRouter Error: OPENROUTER_API_KEY is not configured in environment variables."
-    try:
-        response = await openrouter_client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            extra_headers={
-                "HTTP-Referer": "https://vultacore.techprogression.com",
-                "X-Title": "VultaCore AI",
-            }
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        return f"OpenRouter Error ({model}): {str(e)}"
+    models_to_try = [model, "openai/gpt-4o", "meta-llama/llama-3.3-70b-instruct", "google/gemini-2.0-flash-001"]
+    last_err = ""
+    for m in dict.fromkeys(models_to_try):
+        try:
+            response = await openrouter_client.chat.completions.create(
+                model=m,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=1000,
+                extra_headers={
+                    "HTTP-Referer": "https://vultacore.techprogression.com",
+                    "X-Title": "VultaCore AI",
+                }
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            last_err = str(e)
+            continue
+    return f"OpenRouter Error: {last_err}"
 
 def is_provider_error(text: str) -> bool:
     if not text:
@@ -134,15 +140,15 @@ async def try_with_fallbacks(prompt: str, priority_order: list) -> tuple:
             if not is_provider_error(res):
                 return res, "Gemini-3.8-Flash"
             errors.append(res)
-        elif name == "openrouter_claude":
-            res = await call_openrouter(prompt, "anthropic/claude-3-haiku")
+        elif name in ("openrouter_claude", "openrouter_gpt4o", "openrouter"):
+            res = await call_openrouter(prompt, "openai/gpt-4o")
             if not is_provider_error(res):
-                return res, "Claude-3-Haiku (OpenRouter)"
+                return res, "GPT-4o (OpenRouter)"
             errors.append(res)
         elif name == "openrouter_llama":
-            res = await call_openrouter(prompt, "meta-llama/llama-3-8b-instruct")
+            res = await call_openrouter(prompt, "meta-llama/llama-3.3-70b-instruct")
             if not is_provider_error(res):
-                return res, "Llama-3-8B (OpenRouter)"
+                return res, "Llama-3.3-70B (OpenRouter)"
             errors.append(res)
 
     return "\n\n".join(errors), "All Providers Failed"
@@ -166,22 +172,22 @@ async def execute_bot(request: BotRequest):
         if request.bot_type == "cyber":
             response_text, engine_meta = await try_with_fallbacks(
                 f"You are a Cyber Security Expert. Analyze this: {full_prompt}",
-                ["groq", "gemini", "openrouter_llama"]
+                ["groq", "gemini", "openrouter_gpt4o"]
             )
         elif bot_name == "Text to Code":
             response_text, engine_meta = await try_with_fallbacks(
                 f"You are an expert coder. Write code for: {full_prompt}",
-                ["openrouter_claude", "gemini", "groq"]
+                ["openrouter_gpt4o", "gemini", "groq"]
             )
         elif bot_name == "Bug Fixer":
             response_text, engine_meta = await try_with_fallbacks(
                 f"You are a debugging expert. Fix the bugs in this: {full_prompt}",
-                ["openrouter_llama", "gemini", "groq"]
+                ["openrouter_gpt4o", "gemini", "groq"]
             )
         else:
             response_text, engine_meta = await try_with_fallbacks(
                 f"Analyze/Process this task: {full_prompt}",
-                ["gemini", "groq", "openrouter_llama"]
+                ["gemini", "groq", "openrouter_gpt4o"]
             )
             
     except Exception as e:
