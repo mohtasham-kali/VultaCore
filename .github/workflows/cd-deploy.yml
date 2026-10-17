@@ -5,7 +5,7 @@ on:
     branches: [main]
 
 jobs:
-  deploy-hostinger:
+   deploy-hostinger:
     name: Build & Deploy to Hostinger
     runs-on: ubuntu-latest
     permissions:
@@ -31,7 +31,7 @@ jobs:
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-          NEXT_PUBLIC_API_URL: https://vultacore.techprogression.com/api
+          NEXT_PUBLIC_API_URL: https://techprogression.com
 
       - name: Configure Git
         run: |
@@ -42,23 +42,24 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         continue-on-error: true
         with:
-          host: ${{ secrets.HOSTINGER_SSH_HOST }}
-          port: ${{ secrets.HOSTINGER_SSH_PORT }}
-          username: ${{ secrets.HOSTINGER_SSH_USER }}
+          host: '45.130.228.127'
+          port: 65002
+          username: 'u879979656'
+          key: ${{ secrets.SSH_PRIVATE_KEY }}  # <--- Added Key here so this step passes
           script: |
             source ~/.bashrc 2>/dev/null || source ~/.bash_profile 2>/dev/null || true
             echo "=== NODE VERSION ==="
             node --version 2>&1 || echo "node not found in PATH"
             echo "=== APP DIR CONTENTS ==="
-            ls -la ~/domains/vultacore.techprogression.com/nodejs/ 2>/dev/null || echo "dir missing"
+            ls -la ~/domains/://techprogression.com 2>/dev/null || echo "dir missing"
             echo "=== HTTP-PROXY MODULE ==="
-            ls ~/domains/vultacore.techprogression.com/nodejs/node_modules/http-proxy 2>/dev/null && echo "FOUND" || echo "MISSING"
+            ls ~/domains/://techprogression.comnode_modules/http-proxy 2>/dev/null && echo "FOUND" || echo "MISSING"
             echo "=== HOSTINGER STDERR.LOG (NODE APP CRASH) ==="
-            cat ~/domains/vultacore.techprogression.com/nodejs/stderr.log 2>/dev/null || echo "(no stderr.log)"
+            cat ~/domains/://techprogression.comstderr.log 2>/dev/null || echo "(no stderr.log)"
             echo "=== HOSTINGER SERVER.LOG ==="
-            tail -n 100 ~/domains/vultacore.techprogression.com/nodejs/logs/server.log 2>/dev/null || echo "(no server.log)"
+            tail -n 100 ~/domains/://techprogression.comlogs/server.log 2>/dev/null || echo "(no server.log)"
             echo "=== STARTUP TEST ==="
-            cd ~/domains/vultacore.techprogression.com/nodejs
+            cd ~/domains/://techprogression.com
             timeout 5 node app.js 2>&1 || echo "Test complete or crashed"
 
       - name: Deploy to Hostinger via SSH
@@ -67,7 +68,7 @@ jobs:
         with:
           host: '45.130.228.127'
           username: 'u879979656'
-          key: ${{ secrets.SSH_PRIVATE_KEY }}   # <--- Make sure this line is exactly here
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 65002   
           script: |
             set +e
@@ -76,7 +77,7 @@ jobs:
             # Prevent Git dubious ownership errors on shared Hostinger server
             git config --global --add safe.directory "*" 2>/dev/null || true
 
-            cd ~/domains/vultacore.techprogression.com/nodejs || mkdir -p ~/domains/vultacore.techprogression.com/nodejs && cd ~/domains/vultacore.techprogression.com/nodejs
+            cd ~/domains/://techprogression.com || mkdir -p ~/domains/://techprogression.com && cd ~/domains/://techprogression.com
 
             echo "=== FETCHING LATEST CODE ==="
             git fetch origin main 2>&1 || git fetch --all 2>&1 || echo "Git fetch warning"
@@ -105,87 +106,24 @@ jobs:
                   ./venv/bin/pip install --quiet --upgrade pip 2>&1 || true
                   ./venv/bin/pip install --quiet -r requirements.txt 2>&1 && echo "✅ AI deps installed in venv" || echo "AI deps install warning"
                 else
-                  $PYTHON_BIN -m pip --version &>/dev/null || (curl -sS https://bootstrap.pypa.io/get-pip.py | $PYTHON_BIN 2>&1 || true)
+                  $PYTHON_BIN -m pip --version &>/dev/null || (curl -sS https://pypa.io | $PYTHON_BIN 2>&1 || true)
                   $PYTHON_BIN -m pip install --quiet --upgrade pip 2>&1 || true
                   $PYTHON_BIN -m pip install --quiet --target ./.python_packages -r requirements.txt 2>&1 && echo "✅ AI deps installed locally in .python_packages" || echo "AI deps install warning"
                 fi
               else
                 echo "⚠️ Python 3 not found on system"
               fi
-              cd ~/domains/vultacore.techprogression.com/nodejs
+              cd ~/domains/://techprogression.com
             fi
 
             echo "=== RESTARTING PASSENGER / NODE PROCESS ==="
             if command -v passenger-config &>/dev/null; then
-              passenger-config restart-app ~/domains/vultacore.techprogression.com/nodejs && echo "✅ passenger-config restart done"
+              passenger-config restart-app ~/domains/://techprogression.com && echo "✅ passenger-config restart done"
             elif command -v passenger &>/dev/null; then
-              passenger restart-app ~/domains/vultacore.techprogression.com/nodejs && echo "✅ passenger restart done"
+              passenger restart-app ~/domains/://techprogression.com && echo "✅ passenger restart done"
             else
               mkdir -p tmp && touch tmp/restart.txt && echo "✅ restart.txt touched"
             fi
 
             echo "Deploy complete at $(date)"
             exit 0
-
-
-  deploy-api:
-    name: Deploy Backend API
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Build Docker image
-        run: docker build -t vultacore-api:${{ github.sha }} ./backend-api
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set lower case owner name
-        run: |
-          echo "OWNER_LOWER=${GITHUB_REPOSITORY_OWNER,,}" >> ${GITHUB_ENV}
-
-      - name: Push image
-        run: |
-          docker tag vultacore-api:${{ github.sha }} ghcr.io/${{ env.OWNER_LOWER }}/vultacore-api:latest
-          docker push ghcr.io/${{ env.OWNER_LOWER }}/vultacore-api:latest
-
-  deploy-ai:
-    name: Deploy AI Services
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Build Docker image
-        run: docker build -t vultacore-ai:${{ github.sha }} ./ai-services
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set lower case owner name
-        run: |
-          echo "OWNER_LOWER=${GITHUB_REPOSITORY_OWNER,,}" >> ${GITHUB_ENV}
-
-      - name: Push image
-        run: |
-          docker tag vultacore-ai:${{ github.sha }} ghcr.io/${{ env.OWNER_LOWER }}/vultacore-ai:latest
-          docker push ghcr.io/${{ env.OWNER_LOWER }}/vultacore-ai:latest
