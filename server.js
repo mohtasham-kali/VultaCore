@@ -385,6 +385,8 @@ function freePort(port) {
     try { execSync(`fuser -k ${port}/tcp`, { stdio: 'ignore' }); } catch (_) {}
 }
 
+const engineFailureCounts = new Map();
+
 function startEngine(name, execBin, execArgs, port, cwd, envExtra = {}, delay = 0) {
     setTimeout(() => {
         // Only stat-check absolute paths — bare commands are resolved by the OS
@@ -396,6 +398,7 @@ function startEngine(name, execBin, execArgs, port, cwd, envExtra = {}, delay = 
         freePort(port);
         log(`📡 Spawning ${name} on port ${port} [${execBin}]...`);
 
+        const startTime = Date.now();
         const child = spawn(execBin, execArgs, {
             env  : { ...process.env, PORT: String(port), NODE_ENV: 'production', ...envExtra },
             cwd  : cwd || rootDir,
@@ -408,90 +411,119 @@ function startEngine(name, execBin, execArgs, port, cwd, envExtra = {}, delay = 
         child.on('error', err => {
             log(`❌ [${name}] spawn error: ${err.message}`);
         });
-        child.on('exit', code => {
+        child.on('exit', (code, signal) => {
             const idx = runningChildren.indexOf(child);
             if (idx !== -1) runningChildren.splice(idx, 1);
-            log(`⚠️  ${name} exited (${code}) — restarting in 5 s…`);
+
+            const uptime = Date.now() - startTime;
+            if (uptime > 30000) {
+                // If it ran stably for more than 30s, reset failure counter
+                engineFailureCounts.set(name, 0);
+            }
+
+            const currentFails = (engineFailureCounts.get(name) || 0) + 1;
+            engineFailureCounts.set(name, currentFails);
+
+            // Circuit breaker: if it immediately crashes 5 times in a row, back off to avoid process limit exhaustion
+            if (currentFails >= 5 && uptime < 5000) {
+                log(`🛑 [${name}] Repeatedly crashing on startup (${currentFails} consecutive immediate exits). Halting restarts to preserve server resources.`);
+                return;
+            }
+
+            log(`⚠️  ${name} exited (${code ?? signal}) — restarting in 5 s… (attempt ${currentFails})`);
             setTimeout(() => startEngine(name, execBin, execArgs, port, cwd, envExtra), 5000);
         });
     }, delay);
 }
 
-function findSystemPython() {
+function findSystemPythonCandidates() {
     const cmds = [
+        '/opt/alt/python311/bin/python3',
+        '/opt/alt/python310/bin/python3',
+        '/opt/alt/python39/bin/python3',
+        'python3.11',
+        'python3.10',
+        'python3.9',
         'python3',
-        'python',
         '/usr/bin/python3',
         '/usr/local/bin/python3',
         '/bin/python3',
-        '/usr/bin/python',
-        '/opt/alt/python311/bin/python3',
-        '/opt/alt/python310/bin/python3',
-        '/opt/alt/python39/bin/python3'
+        'python',
+        '/usr/bin/python'
     ];
+    const found = [];
     for (const cmd of cmds) {
         try {
             const { execSync } = require('child_process');
-            // Check if command is an absolute path or exists in PATH
             let p = cmd;
             if (!cmd.startsWith('/')) {
                 p = execSync(`which ${cmd} 2>/dev/null`, { encoding: 'utf8' }).trim();
             }
-            if (p && fs.existsSync(p)) {
-                // Verify it actually runs and is python 3 (optional but good)
+            if (p && fs.existsSync(p) && !found.includes(p)) {
                 execSync(`${p} --version`, { stdio: 'ignore' });
-                return p;
+                found.push(p);
             }
         } catch (_) {}
     }
-    return null;
+    return found;
 }
 
-// Resolve python3 absolute path at boot time so we can log clearly if missing
+// Resolve python3 absolute path and ensure uvicorn can actually be loaded
 function resolvePython() {
     const aiDir = path.join(rootDir, 'ai-services');
     const venvDir = path.join(aiDir, 'venv');
     const venvLibDir = path.join(venvDir, 'lib');
+    const localPackagesDir = path.join(aiDir, '.python_packages');
+    const { execFileSync } = require('child_process');
 
-    const sysPython = findSystemPython();
+    const pythonCandidates = findSystemPythonCandidates();
 
-    // 1. Check if a valid venv exists (by checking lib/ dir which pip always creates)
+    // Helper: test if uvicorn can be imported
+    function canImportUvicorn(bin, extraEnv = {}) {
+        try {
+            execFileSync(bin, ['-c', 'import uvicorn'], {
+                env: { ...process.env, ...extraEnv },
+                stdio: 'ignore'
+            });
+            return true;
+        } catch (_) {
+            return false;
+        }
+    }
+
+    // 1. Check virtualenv (venv/bin/python3 or python)
+    const venvBins = [
+        path.join(venvDir, 'bin', 'python3'),
+        path.join(venvDir, 'bin', 'python')
+    ];
+    for (const bin of venvBins) {
+        if (fs.existsSync(bin) && canImportUvicorn(bin)) {
+            log(`AI Engine: resolved → venv python (${bin}) with working uvicorn`);
+            return {
+                bin,
+                args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
+                env: {}
+            };
+        }
+    }
+
+    // 2. Check if venv lib/site-packages exists but venv binaries are broken
     if (fs.existsSync(venvLibDir)) {
         try {
-            // Find the python3.x subdirectory dynamically
             const pyDirs = fs.readdirSync(venvLibDir).filter(d => d.startsWith('python'));
             if (pyDirs.length > 0) {
                 const sitePackages = path.join(venvLibDir, pyDirs[0], 'site-packages');
                 if (fs.existsSync(sitePackages)) {
-                    
-                    // Verify critical packages are installed (like uvicorn)
-                    if (!fs.existsSync(path.join(sitePackages, 'uvicorn'))) {
-                        log(`AI Engine: uvicorn missing in venv site-packages. Skipping venv use.`);
-                    } else {
-                        // Find working python binary: prefer venv python, fall back to system
-                        const candidates = [
-                            path.join(venvDir, 'bin', 'python3'),
-                            path.join(venvDir, 'bin', 'python'),
-                        ];
-                        for (const bin of candidates) {
-                            try {
-                                const { execFileSync } = require('child_process');
-                                execFileSync(bin, ['--version'], { stdio: 'ignore' });
-                                log(`AI Engine: resolved → venv python (${path.basename(bin)}) with site-packages`);
-                                return {
-                                    bin,
-                                    args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
-                                    env: { PYTHONPATH: sitePackages }
-                                };
-                            } catch (_) {}
-                        }
-                        // venv binaries broken — fall back to system python with PYTHONPATH
-                        if (sysPython) {
-                            log(`AI Engine: venv binaries broken, using system python (${sysPython}) with PYTHONPATH=${sitePackages}`);
+                    for (const py of pythonCandidates) {
+                        if (canImportUvicorn(py, { PYTHONPATH: sitePackages })) {
+                            log(`AI Engine: resolved → ${py} using venv site-packages`);
                             return {
-                                bin: sysPython,
+                                bin: py,
                                 args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
-                                env: { PYTHONPATH: sitePackages }
+                                env: {
+                                    PYTHONPATH: sitePackages,
+                                    PATH: `${path.join(venvDir, 'bin')}:${process.env.PATH || ''}`
+                                }
                             };
                         }
                     }
@@ -502,17 +534,36 @@ function resolvePython() {
         }
     }
 
-    // 2. No venv at all — try system python3 (no guarantee uvicorn is installed)
-    if (sysPython) {
-        log(`AI Engine: resolved → ${sysPython} (system, no venv — uvicorn must be installed globally)`);
-        return {
-            bin: sysPython,
-            args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
-            env: {}
-        };
+    // 3. Check if .python_packages exists (created by pip install --target ./.python_packages)
+    if (fs.existsSync(localPackagesDir)) {
+        for (const py of pythonCandidates) {
+            if (canImportUvicorn(py, { PYTHONPATH: localPackagesDir })) {
+                log(`AI Engine: resolved → ${py} with PYTHONPATH=${localPackagesDir}`);
+                return {
+                    bin: py,
+                    args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
+                    env: {
+                        PYTHONPATH: localPackagesDir,
+                        PATH: `${path.join(localPackagesDir, 'bin')}:${process.env.PATH || ''}`
+                    }
+                };
+            }
+        }
     }
 
-    log('❌ AI Engine: no python3/python found anywhere — AI bots will be unavailable');
+    // 4. Check if any system python has uvicorn globally installed
+    for (const py of pythonCandidates) {
+        if (canImportUvicorn(py)) {
+            log(`AI Engine: resolved → ${py} (global uvicorn)`);
+            return {
+                bin: py,
+                args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
+                env: {}
+            };
+        }
+    }
+
+    log('⚠️  AI Engine: uvicorn is not installed in venv, .python_packages, or system python. Skipping AI Engine to avoid crash loops.');
     return null;
 }
 

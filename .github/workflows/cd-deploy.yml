@@ -99,9 +99,17 @@ jobs:
               
               if [ -n "$PYTHON_BIN" ]; then
                 echo "Using Python: $PYTHON_BIN"
-                $PYTHON_BIN -m pip --version &>/dev/null || (curl -sS https://bootstrap.pypa.io/get-pip.py | $PYTHON_BIN 2>&1 || true)
-                $PYTHON_BIN -m pip install --quiet --upgrade pip 2>&1 || true
-                $PYTHON_BIN -m pip install --quiet --target ./.python_packages -r requirements.txt 2>&1 && echo "✅ AI deps installed locally" || echo "AI deps install warning"
+                if [ ! -d "venv" ] || [ ! -f "venv/bin/python" ]; then
+                  $PYTHON_BIN -m venv venv 2>/dev/null || true
+                fi
+                if [ -f "venv/bin/pip" ]; then
+                  ./venv/bin/pip install --quiet --upgrade pip 2>&1 || true
+                  ./venv/bin/pip install --quiet -r requirements.txt 2>&1 && echo "✅ AI deps installed in venv" || echo "AI deps install warning"
+                else
+                  $PYTHON_BIN -m pip --version &>/dev/null || (curl -sS https://bootstrap.pypa.io/get-pip.py | $PYTHON_BIN 2>&1 || true)
+                  $PYTHON_BIN -m pip install --quiet --upgrade pip 2>&1 || true
+                  $PYTHON_BIN -m pip install --quiet --target ./.python_packages -r requirements.txt 2>&1 && echo "✅ AI deps installed locally in .python_packages" || echo "AI deps install warning"
+                fi
               else
                 echo "⚠️ Python 3 not found on system"
               fi
