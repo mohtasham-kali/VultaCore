@@ -1,6 +1,6 @@
 {
-  "/apple-icon.png/route": "/apple-icon.png",
   "/favicon.ico/route": "/favicon.ico",
+  "/apple-icon.png/route": "/apple-icon.png",
   "/icon.png/route": "/icon.png",
   "/_not-found/page": "/_not-found",
   "/auth/page": "/auth",

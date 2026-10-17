@@ -88,7 +88,7 @@
     "logging": {},
     "expireTime": 31536000,
     "staticPageGenerationTimeout": 60,
-    "output": "standalone",
+    "output": "export",
     "modularizeImports": {
       "@mui/icons-material": {
         "transform": "@mui/icons-material/{{member}}"
@@ -97,7 +97,7 @@
         "transform": "lodash/{{member}}"
       }
     },
-    "outputFileTracingRoot": "/home/hacker/Documents/saasapp/repo-recovery",
+    "outputFileTracingRoot": "/home/hacker/Documents/Projects/SaaS 2.0/tri-stack",
     "experimental": {
       "nodeMiddleware": false,
       "cacheLife": {
@@ -280,24 +280,15 @@
     "bundlePagesRouterDependencies": false,
     "configFileName": "next.config.ts",
     "turbopack": {
-      "root": "/home/hacker/Documents/saasapp/repo-recovery"
+      "root": "/home/hacker/Documents/Projects/SaaS 2.0/tri-stack"
     },
     "_originalRewrites": {
       "beforeFiles": [],
-      "afterFiles": [
-        {
-          "source": "/api/:path*",
-          "destination": "http://localhost:3001/api/:path*"
-        },
-        {
-          "source": "/socket.io/:path*",
-          "destination": "http://localhost:3001/socket.io/:path*"
-        }
-      ],
+      "afterFiles": [],
       "fallback": []
     }
   },
-  "appDir": "/home/hacker/Documents/saasapp/repo-recovery/web-dashboard",
+  "appDir": "/home/hacker/Documents/Projects/SaaS 2.0/tri-stack/web-dashboard",
   "relativeAppDir": "web-dashboard",
   "files": [
     ".next/routes-manifest.json",
