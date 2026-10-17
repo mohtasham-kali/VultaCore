@@ -73,14 +73,11 @@ jobs:
           name: tauri-frontend-dist
           path: web-dashboard/out
 
-      - name: Install desktop-app dependencies
-        run: |
-          rm -f ../package-lock.json package-lock.json
-          npm install --no-package-lock
-        working-directory: desktop-app
+      - name: Install Tauri CLI
+        run: npm install -g @tauri-apps/cli@2
 
       - name: Build Tauri app executable & installers
-        run: npx tauri build --bundles deb,appimage --no-sign
+        run: tauri build --bundles deb,appimage --no-sign
         working-directory: desktop-app
 
       - name: Collect built Linux installers
@@ -120,15 +117,11 @@ jobs:
           name: tauri-frontend-dist
           path: web-dashboard/out
 
-      - name: Install desktop-app dependencies
-        run: |
-          rm -f ../package-lock.json package-lock.json
-          npm install --no-package-lock
-          npm install --no-package-lock @tauri-apps/cli-win32-x64-msvc@^2.10.1
-        working-directory: desktop-app
+      - name: Install Tauri CLI
+        run: npm install -g @tauri-apps/cli@2
 
       - name: Build Tauri app executable & installers (Windows)
-        run: npx tauri build --bundles nsis --no-sign
+        run: tauri build --bundles nsis --no-sign
         working-directory: desktop-app
 
       - name: Collect built Windows installers
@@ -166,15 +159,11 @@ jobs:
           name: tauri-frontend-dist
           path: web-dashboard/out
 
-      - name: Install desktop-app dependencies
-        run: |
-          rm -f ../package-lock.json package-lock.json
-          npm install --no-package-lock
-          npm install --no-package-lock @tauri-apps/cli-darwin-arm64@^2.10.1
-        working-directory: desktop-app
+      - name: Install Tauri CLI
+        run: npm install -g @tauri-apps/cli@2
 
       - name: Build Tauri app executable & installers (macOS)
-        run: npx tauri build --bundles dmg --no-sign
+        run: tauri build --bundles dmg --no-sign
         working-directory: desktop-app
 
       - name: Collect built macOS installers
@@ -193,7 +182,7 @@ jobs:
   deploy-to-hostinger:
     name: Upload Installers to Hostinger
     needs: [build-linux, build-windows, build-macos]
-    if: always() && (needs.build-linux.result == 'success' || needs.build-windows.result == 'success' || needs.build-macos.result == 'success')
+    if: ${{ !cancelled() && (needs.build-linux.result == 'success' || needs.build-windows.result == 'success' || needs.build-macos.result == 'success') }}
     runs-on: ubuntu-latest
     steps:
       - name: Download all installer artifacts
@@ -205,6 +194,16 @@ jobs:
 
       - name: List collected installers
         run: ls -lh all-installers/
+
+      - name: Ensure target directory exists on Hostinger
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOSTINGER_SSH_HOST }}
+          port: ${{ secrets.HOSTINGER_SSH_PORT }}
+          username: ${{ secrets.HOSTINGER_SSH_USER }}
+          password: ${{ secrets.HOSTINGER_SSH_PASS }}
+          script: |
+            mkdir -p ~/domains/vultacore.techprogression.com/nodejs/public/downloads/
 
       - name: Upload installers to Hostinger via SCP
         uses: appleboy/scp-action@v0.1.7
