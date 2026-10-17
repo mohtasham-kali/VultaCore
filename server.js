@@ -22,10 +22,12 @@ const lockFile  = path.join(rootDir, '.engine.lock');
 const uid = typeof process.getuid === 'function' ? process.getuid() : 'shared';
 let BACK_TARGET = path.join('/tmp', `vultacore-back-${uid}.sock`);
 let DASH_TARGET = path.join('/tmp', `vultacore-dash-${uid}.sock`);
+let AI_TARGET   = path.join('/tmp', `vultacore-ai-${uid}.sock`);
 let AI_PORT     = null;
 
 let BACK_READY = false;
 let DASH_READY = false;
+let AI_READY   = false;
 let isPrimaryManager = false;
 
 let bootLogs = [];
@@ -336,8 +338,8 @@ const server = http.createServer((req, res) => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({
             status   : 'up',
-            ready    : { backend: BACK_READY, dashboard: DASH_READY },
-            targets  : { backend: BACK_TARGET, dashboard: DASH_TARGET, ai: AI_PORT },
+            ready    : { backend: BACK_READY, dashboard: DASH_READY, ai: AI_READY },
+            targets  : { backend: BACK_TARGET, dashboard: DASH_TARGET, ai: AI_TARGET },
             isPrimary: isPrimaryManager,
             pid      : process.pid,
             uptime   : process.uptime()
@@ -354,9 +356,9 @@ const server = http.createServer((req, res) => {
             logs     : bootLogs,
             hasErrors,
             uptime   : process.uptime(),
-            targets  : { backend: BACK_TARGET, dashboard: DASH_TARGET, ai: AI_PORT },
+            targets  : { backend: BACK_TARGET, dashboard: DASH_TARGET, ai: AI_TARGET },
             booted   : !!(BACK_READY && DASH_READY),
-            ready    : { backend: BACK_READY, dashboard: DASH_READY },
+            ready    : { backend: BACK_READY, dashboard: DASH_READY, ai: AI_READY },
             isPrimary: isPrimaryManager,
             pid      : process.pid,
             ts       : new Date().toISOString(),
@@ -439,6 +441,7 @@ function cleanup() {
         try { fs.unlinkSync(stateFile); } catch (_) {}
         try { fs.unlinkSync(BACK_TARGET); } catch (_) {}
         try { fs.unlinkSync(DASH_TARGET); } catch (_) {}
+        try { fs.unlinkSync(AI_TARGET); } catch (_) {}
     }
     killChildren();
 }
@@ -486,6 +489,9 @@ function startEngine(name, execBin, execArgs, portOrSocket, cwd, envExtra = {}, 
             if (name === 'Backend' && line.includes('Application is running on')) {
                 BACK_READY = true;
             }
+            if (name === 'AI Engine' && (line.includes('Application startup complete') || line.includes('Uvicorn running on'))) {
+                AI_READY = true;
+            }
         });
         child.stderr.on('data', d => log(`[${name}] ${d.toString().trim()}`));
         child.on('error', err => {
@@ -497,6 +503,7 @@ function startEngine(name, execBin, execArgs, portOrSocket, cwd, envExtra = {}, 
 
             if (name === 'Dashboard') DASH_READY = false;
             if (name === 'Backend') BACK_READY = false;
+            if (name === 'AI Engine') AI_READY = false;
 
             const uptime = Date.now() - startTime;
             if (uptime > 30000) {
@@ -548,6 +555,13 @@ function findSystemPythonCandidates() {
     return found;
 }
 
+function getUvicornArgs(target) {
+    const isSocket = typeof target === 'string' && (target.startsWith('/') || target.endsWith('.sock'));
+    return isSocket
+        ? ['-m', 'uvicorn', 'main:app', '--uds', target]
+        : ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(target)];
+}
+
 function resolvePython() {
     const aiDir = path.join(rootDir, 'ai-services');
     const venvDir = path.join(aiDir, 'venv');
@@ -578,7 +592,7 @@ function resolvePython() {
             log(`AI Engine: resolved → venv python (${bin}) with working uvicorn`);
             return {
                 bin,
-                args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
+                args: getUvicornArgs,
                 env: {}
             };
         }
@@ -596,7 +610,7 @@ function resolvePython() {
                             log(`AI Engine: resolved → ${py} using venv site-packages`);
                             return {
                                 bin: py,
-                                args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
+                                args: getUvicornArgs,
                                 env: {
                                     PYTHONPATH: sitePackages,
                                     PATH: `${path.join(venvDir, 'bin')}:${process.env.PATH || ''}`
@@ -616,7 +630,7 @@ function resolvePython() {
                 log(`AI Engine: resolved → ${py} with PYTHONPATH=${localPackagesDir}`);
                 return {
                     bin: py,
-                    args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
+                    args: getUvicornArgs,
                     env: {
                         PYTHONPATH: localPackagesDir,
                         PATH: `${path.join(localPackagesDir, 'bin')}:${process.env.PATH || ''}`
@@ -632,7 +646,7 @@ function resolvePython() {
             log(`AI Engine: resolved → ${py} (global uvicorn)`);
             return {
                 bin: py,
-                args: (port) => ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(port)],
+                args: getUvicornArgs,
                 env: {}
             };
         }
@@ -643,9 +657,10 @@ function resolvePython() {
 }
 
 // ─── Engine Boot & Coordination Orchestration ───────────────────────────────
-async function waitForReadiness(backTarget, dashTarget, aiPort) {
+async function waitForReadiness(backTarget, dashTarget, aiTarget) {
     let backDone = false;
     let dashDone = false;
+    let aiDone   = false;
 
     for (let i = 0; i < 60; i++) {
         if (!backDone) {
@@ -662,7 +677,14 @@ async function waitForReadiness(backTarget, dashTarget, aiPort) {
                 log(`✅ Dashboard is operational on ${dashTarget}`);
             }
         }
-        if (backDone && dashDone) break;
+        if (!aiDone && aiTarget) {
+            aiDone = await checkSocket(aiTarget);
+            if (aiDone) {
+                AI_READY = true;
+                log(`✅ AI Engine is operational on ${aiTarget}`);
+            }
+        }
+        if (backDone && dashDone && (aiDone || !aiTarget)) break;
         await new Promise(r => setTimeout(r, 500));
     }
 
@@ -672,7 +694,7 @@ async function waitForReadiness(backTarget, dashTarget, aiPort) {
                 managerPid     : process.pid,
                 backendTarget  : backTarget,
                 dashboardTarget: dashTarget,
-                aiPort         : aiPort,
+                aiTarget       : aiTarget,
                 updatedAt      : Date.now()
             }), 'utf8');
             try { fs.unlinkSync(lockFile); } catch (_) {}
@@ -681,7 +703,7 @@ async function waitForReadiness(backTarget, dashTarget, aiPort) {
             log(`Warning: Failed to save engine state: ${e.message}`);
         }
     } else {
-        log(`⚠️ Readiness check incomplete after 30s (Backend=${backDone}, Dashboard=${dashDone})`);
+        log(`⚠️ Readiness check incomplete after 30s (Backend=${backDone}, Dashboard=${dashDone}, AI=${aiDone})`);
     }
 }
 
@@ -692,6 +714,7 @@ async function bootEngines() {
             const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
             const bTarget = state.backendTarget || state.backendPort;
             const dTarget = state.dashboardTarget || state.dashboardPort;
+            const aTarget = state.aiTarget || state.aiPort;
 
             if (bTarget && dTarget) {
                 const dashOk = await checkSocket(dTarget);
@@ -699,10 +722,11 @@ async function bootEngines() {
                 if (dashOk && backOk) {
                     BACK_TARGET = bTarget;
                     DASH_TARGET = dTarget;
-                    AI_PORT     = state.aiPort || null;
+                    AI_TARGET   = aTarget || AI_TARGET;
                     BACK_READY  = true;
                     DASH_READY  = true;
-                    log(`✨ Attached to existing healthy engines (Manager PID ${state.managerPid}): Backend=${BACK_TARGET}, Dashboard=${DASH_TARGET}`);
+                    if (aTarget) AI_READY = await checkSocket(aTarget);
+                    log(`✨ Attached to existing healthy engines (Manager PID ${state.managerPid}): Backend=${BACK_TARGET}, Dashboard=${DASH_TARGET}, AI=${AI_TARGET}`);
                     return;
                 }
             }
@@ -739,16 +763,18 @@ async function bootEngines() {
                     const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
                     const bTarget = state.backendTarget || state.backendPort;
                     const dTarget = state.dashboardTarget || state.dashboardPort;
+                    const aTarget = state.aiTarget || state.aiPort;
                     if (bTarget && dTarget) {
                         const dashOk = await checkSocket(dTarget);
                         const backOk = await checkSocket(bTarget);
                         if (dashOk && backOk) {
                             BACK_TARGET = bTarget;
                             DASH_TARGET = dTarget;
-                            AI_PORT     = state.aiPort || null;
+                            AI_TARGET   = aTarget || AI_TARGET;
                             BACK_READY  = true;
                             DASH_READY  = true;
-                            log(`✨ Engines ready! Attached: Backend=${BACK_TARGET}, Dashboard=${DASH_TARGET}`);
+                            if (aTarget) AI_READY = await checkSocket(aTarget);
+                            log(`✨ Engines ready! Attached: Backend=${BACK_TARGET}, Dashboard=${DASH_TARGET}, AI=${AI_TARGET}`);
                             return;
                         }
                     }
@@ -763,22 +789,19 @@ async function bootEngines() {
     // ── Phase 4: Primary Manager Engine Boot ──
     log(`👑 Operating as Primary Engine Manager.`);
 
-    try {
-        AI_PORT = await findFreePort();
-    } catch (_) {}
-
     // Ensure stale socket files from prior crashes are removed
     freePortOrSocket(BACK_TARGET);
     freePortOrSocket(DASH_TARGET);
+    freePortOrSocket(AI_TARGET);
 
     // 1. AI Engine (optional)
     const pythonResolved = resolvePython();
-    if (pythonResolved && AI_PORT) {
+    if (pythonResolved) {
         startEngine(
             'AI Engine',
             pythonResolved.bin,
-            pythonResolved.args(AI_PORT),
-            AI_PORT,
+            pythonResolved.args(AI_TARGET),
+            AI_TARGET,
             path.join(rootDir, 'ai-services'),
             pythonResolved.env || {},
             0
@@ -797,9 +820,13 @@ async function bootEngines() {
             log(`❌ Failed to build backend-api: ${e.message}`);
         }
     }
+    const aiServiceUrl = (typeof AI_TARGET === 'string' && (AI_TARGET.startsWith('/') || AI_TARGET.endsWith('.sock')))
+        ? AI_TARGET
+        : `http://127.0.0.1:${AI_TARGET}`;
+
     startEngine('Backend', process.execPath, [backendEntry], BACK_TARGET,
                 path.join(rootDir, 'backend-api'),
-                { AI_SERVICE_URL: `http://127.0.0.1:${AI_PORT}`, HOSTNAME: '127.0.0.1' }, 0);
+                { AI_SERVICE_URL: aiServiceUrl, HOSTNAME: '127.0.0.1' }, 0);
 
     // 3. Analytics Engine (Rust)
     const rustBin = path.join(rootDir, 'analytics-engine', 'target', 'release', 'analytics-engine');
@@ -838,7 +865,7 @@ async function bootEngines() {
     startEngine('Dashboard', process.execPath, dashArgs, DASH_TARGET, dashCwd, {}, 0);
 
     // Begin async health monitoring and state publishing
-    waitForReadiness(BACK_TARGET, DASH_TARGET, AI_PORT);
+    waitForReadiness(BACK_TARGET, DASH_TARGET, AI_TARGET);
 
     // Periodic heartbeat to keep state file fresh
     setInterval(() => {

@@ -55,13 +55,17 @@ let BotsService = class BotsService {
         try {
             console.log(`Executing bot ${bot.name} for user ${userId}...`);
             const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
-            const response = await (0, rxjs_1.firstValueFrom)(this.httpService.post(`${aiServiceUrl}/execute`, {
+            const isSocket = typeof aiServiceUrl === 'string' && (aiServiceUrl.startsWith('/') || aiServiceUrl.endsWith('.sock') || aiServiceUrl.startsWith('unix:'));
+            const socketPath = isSocket ? aiServiceUrl.replace(/^unix:\/\//, '').replace(/^unix:/, '') : undefined;
+            const requestUrl = isSocket ? 'http://localhost/execute' : `${aiServiceUrl}/execute`;
+            const requestConfig = socketPath ? { socketPath } : {};
+            const response = await (0, rxjs_1.firstValueFrom)(this.httpService.post(requestUrl, {
                 prompt,
                 user_id: userId,
                 bot_type: bot.type,
                 bot_name: bot.name,
                 context: finalContext || null
-            }));
+            }, requestConfig));
             bot.status = 'completed';
             await this.botsRepository.save(bot);
             await this.conversationRepository.save({
