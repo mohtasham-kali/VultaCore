@@ -259,9 +259,8 @@ jobs:
         with:
           host: '45.130.228.127'
           username: 'u879979656'
+          password: ${{ secrets.HOSTINGER_SSH_PASSWORD }}
           port: 65002
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          passphrase: ${{ secrets.SSH_PASSPHRASE }}
           timeout: 30s
           command_timeout: 2m
           script: |
@@ -274,9 +273,8 @@ jobs:
         with:
           host: '45.130.228.127'
           username: 'u879979656'
+          password: ${{ secrets.HOSTINGER_SSH_PASSWORD }}
           port: 65002
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          passphrase: ${{ secrets.SSH_PASSPHRASE }}
           timeout: 30s
           command_timeout: 10m
           source: "all-installers/*"
@@ -289,28 +287,20 @@ jobs:
         with:
           host: '45.130.228.127'
           username: 'u879979656'
+          password: ${{ secrets.HOSTINGER_SSH_PASSWORD }}
           port: 65002
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          passphrase: ${{ secrets.SSH_PASSPHRASE }}
           timeout: 30s
           command_timeout: 2m
           script: |
             set -eu
-
             DOWNLOAD_DIR="$HOME/domains/vultacore.techprogression.com/nodejs/public/downloads"
 
             echo "=== Installers in public/downloads/ ==="
-
-            if [ ! -d "$DOWNLOAD_DIR" ]; then
-              echo "::error::Downloads directory does not exist."
-              exit 1
-            fi
-
             ls -lh "$DOWNLOAD_DIR"
 
             if ! find "$DOWNLOAD_DIR" -maxdepth 1 -type f -print -quit | grep -q .; then
-              echo "::error::No installer files found on Hostinger."
+              echo "ERROR: No installer files found."
               exit 1
             fi
 
-            echo "Installer upload verification completed."
+            echo "Installer upload verified."
