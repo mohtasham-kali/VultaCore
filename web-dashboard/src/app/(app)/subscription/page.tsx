@@ -126,7 +126,7 @@ function SubscriptionPageClient() {
       .then((u) => {
         if (u?.rank) setCurrentPlan(u.rank);
       })
-      .catch(() => {});
+      .catch(() => { });
   }, [user]);
 
   const handleUpgrade = async (planId: string, planName: string) => {
@@ -207,8 +207,7 @@ function SubscriptionPageClient() {
           </span>
         </h1>
         <p className="text-slate-400 text-lg max-w-2xl mx-auto">
-          Secure payments powered by{" "}
-          <span className="text-yellow-400 font-semibold">Lemon Squeezy</span>.
+          Secure payments powered by.
           Pay with card, PayPal, Google Pay or Apple Pay.
         </p>
 
@@ -253,8 +252,8 @@ function SubscriptionPageClient() {
                 isCurrentPlan
                   ? "bg-gradient-to-b from-indigo-900/40 to-slate-900 border-indigo-500/50 shadow-[0_0_40px_rgba(99,102,241,0.2)] scale-105"
                   : plan.highlight
-                  ? "bg-slate-900 border-purple-500/50 shadow-2xl shadow-purple-500/10 ring-1 ring-purple-500/20 hover:scale-[1.02]"
-                  : "bg-slate-900/50 border-white/10 hover:border-white/20 hover:scale-[1.02]"
+                    ? "bg-slate-900 border-purple-500/50 shadow-2xl shadow-purple-500/10 ring-1 ring-purple-500/20 hover:scale-[1.02]"
+                    : "bg-slate-900/50 border-white/10 hover:border-white/20 hover:scale-[1.02]"
               )}
             >
               {/* Active plan top bar */}
@@ -328,8 +327,8 @@ function SubscriptionPageClient() {
                   isCurrentPlan
                     ? "bg-white/5 text-slate-400 cursor-not-allowed border border-white/5"
                     : plan.highlight
-                    ? "bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-xl shadow-purple-500/20 hover:opacity-90 active:scale-95"
-                    : `bg-gradient-to-r ${plan.gradient} text-white opacity-80 hover:opacity-100 active:scale-95`
+                      ? "bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-xl shadow-purple-500/20 hover:opacity-90 active:scale-95"
+                      : `bg-gradient-to-r ${plan.gradient} text-white opacity-80 hover:opacity-100 active:scale-95`
                 )}
               >
                 {isLoading ? (
