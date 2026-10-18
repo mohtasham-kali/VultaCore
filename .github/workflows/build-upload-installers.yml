@@ -236,7 +236,6 @@ jobs:
       - name: Validate SSH private key
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          SSH_PASSPHRASE: ${{ secrets.SSH_PASSPHRASE }}
         run: |
           set -eu
 
@@ -282,7 +281,7 @@ jobs:
           timeout: 30s
           command_timeout: 10m
           source: "all-installers/*"
-          target: "~/domains/vultacore.techprogression.com/nodejs/public/downloads/"
+          target: "/home/u879979656/domains/vultacore.techprogression.com/nodejs/public/downloads/"
           strip_components: 1
           overwrite: true
 
