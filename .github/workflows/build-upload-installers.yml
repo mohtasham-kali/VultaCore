@@ -224,11 +224,13 @@ jobs:
             exit 1
           fi
       - name: Check secret is present
-        env:
-          PW: ${{ secrets.HOSTINGER_SSH_PASSWORD }}
-        run: |
-          if [ -z "$PW" ]; then echo "::error::HOSTINGER_SSH_PASSWORD is empty or missing"; exit 1; fi
-          echo "Secret is set (length ${#PW})"
+        uses: appleboy/ssh-action@v1.0.3
+        continue-on-error: true
+        with:
+          host: '45.130.228.127'
+          username: 'u879979656'
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 65002 
       # Validate the private key without exposing it in logs.
       # Supports encrypted keys when SSH_PASSPHRASE is configured.
       - name: Validate SSH private key
@@ -249,13 +251,10 @@ jobs:
           printf '%s\n' "$SSH_PRIVATE_KEY" > "$KEY_FILE"
           chmod 600 "$KEY_FILE"
 
-          if ssh-keygen -y \
-            -P "${SSH_PASSPHRASE:-}" \
-            -f "$KEY_FILE" > /dev/null; then
+          if ssh-keygen -y -P "${SSH_PASSPHRASE:-}" -f "$KEY_FILE" > /dev/null; then
             echo "SSH private key format and passphrase validated."
           else
             echo "::error::SSH key validation failed."
-            echo "Check the key format and SSH_PASSPHRASE secret."
             exit 1
           fi
 
@@ -264,7 +263,8 @@ jobs:
         with:
           host: '45.130.228.127'
           username: 'u879979656'
-          password: ${{ secrets.HOSTINGER_SSH_PASSWORD }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
           port: 65002
           timeout: 30s
           command_timeout: 2m
@@ -278,7 +278,8 @@ jobs:
         with:
           host: '45.130.228.127'
           username: 'u879979656'
-          password: ${{ secrets.HOSTINGER_SSH_PASSWORD }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
           port: 65002
           timeout: 30s
           command_timeout: 10m
@@ -292,7 +293,8 @@ jobs:
         with:
           host: '45.130.228.127'
           username: 'u879979656'
-          password: ${{ secrets.HOSTINGER_SSH_PASSWORD }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
           port: 65002
           timeout: 30s
           command_timeout: 2m

@@ -4,14 +4,14 @@
  * Zero external dependencies — uses only Node built-ins.
  * Supports Phusion Passenger / LiteSpeed multi-worker pooling with Unix Domain Sockets.
  */
-const http  = require('http');
+const http = require('http');
 const https = require('https');
 const { spawn, execSync, execFileSync } = require('child_process');
-const path  = require('path');
-const fs    = require('fs');
-const net   = require('net');
+const path = require('path');
+const fs = require('fs');
+const net = require('net');
 
-const rootDir    = __dirname;
+const rootDir = __dirname;
 
 function loadEnvFile(envPath) {
     if (!fs.existsSync(envPath)) return;
@@ -45,18 +45,18 @@ const masterPort = process.env.PORT || 3000;
 
 // State files for multi-worker coordination
 const stateFile = path.join(rootDir, '.engine-state.json');
-const lockFile  = path.join(rootDir, '.engine.lock');
+const lockFile = path.join(rootDir, '.engine.lock');
 
 // User-scoped Unix domain sockets (avoids TCP loopback / firewall restrictions in CloudLinux/CageFS)
 const uid = typeof process.getuid === 'function' ? process.getuid() : 'shared';
 let BACK_TARGET = path.join('/tmp', `vultacore-back-${uid}.sock`);
 let DASH_TARGET = path.join('/tmp', `vultacore-dash-${uid}.sock`);
-let AI_TARGET   = path.join('/tmp', `vultacore-ai-${uid}.sock`);
-let AI_PORT     = null;
+let AI_TARGET = path.join('/tmp', `vultacore-ai-${uid}.sock`);
+let AI_PORT = null;
 
 let BACK_READY = false;
 let DASH_READY = false;
-let AI_READY   = false;
+let AI_READY = false;
 let isPrimaryManager = false;
 
 let bootLogs = [];
@@ -112,23 +112,23 @@ function findFreePort() {
 function proxyRequest(req, res, target) {
     const isSocket = typeof target === 'string' && (target.startsWith('/') || target.endsWith('.sock'));
     const options = isSocket ? {
-        socketPath : target,
-        path       : req.url,
-        method     : req.method,
-        headers    : {
+        socketPath: target,
+        path: req.url,
+        method: req.method,
+        headers: {
             ...req.headers,
-            host              : req.headers.host || 'vultacore.techprogression.com',
+            host: req.headers.host || 'vultacore.techprogression.com',
             'x-forwarded-host': req.headers.host || 'vultacore.techprogression.com',
             'x-forwarded-proto': req.headers['x-forwarded-proto'] || 'https'
         }
     } : {
-        hostname   : '127.0.0.1',
-        port       : target,
-        path       : req.url,
-        method     : req.method,
-        headers    : {
+        hostname: '127.0.0.1',
+        port: target,
+        path: req.url,
+        method: req.method,
+        headers: {
             ...req.headers,
-            host              : `127.0.0.1:${target}`,
+            host: `127.0.0.1:${target}`,
             'x-forwarded-host': req.headers.host || 'vultacore.techprogression.com',
             'x-forwarded-proto': req.headers['x-forwarded-proto'] || 'https'
         }
@@ -155,10 +155,10 @@ function proxyRequest(req, res, target) {
     });
 
     req.on('error', () => {
-        try { proxyReq.destroy(); } catch (_) {}
+        try { proxyReq.destroy(); } catch (_) { }
     });
     res.on('error', () => {
-        try { proxyReq.destroy(); } catch (_) {}
+        try { proxyReq.destroy(); } catch (_) { }
     });
 
     req.pipe(proxyReq, { end: true });
@@ -335,7 +335,7 @@ function tryServeStatic(req, res) {
 
     if (cleanUrl.startsWith('/_next/static/')) {
         filePath = path.join(rootDir, 'web-dashboard', '.next', 'static',
-                            cleanUrl.replace('/_next/static/', ''));
+            cleanUrl.replace('/_next/static/', ''));
     } else if (cleanUrl.startsWith('/downloads/')) {
         const subName = cleanUrl.replace('/downloads/', '');
         const candidates = [
@@ -368,13 +368,13 @@ function tryServeStatic(req, res) {
     if (filePath && fs.existsSync(filePath)) {
         const ext = path.extname(filePath).toLowerCase();
         const mime = {
-            '.css':'text/css', '.js':'text/javascript', '.png':'image/png',
-            '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.svg':'image/svg+xml',
-            '.ico':'image/x-icon', '.webp':'image/webp',
-            '.woff':'font/woff', '.woff2':'font/woff2',
-            '.json':'application/json', '.exe':'application/vnd.microsoft.portable-executable',
-            '.msi':'application/x-msi', '.dmg':'application/x-apple-diskimage',
-            '.appimage':'application/octet-stream', '.deb':'application/vnd.debian.binary-package'
+            '.css': 'text/css', '.js': 'text/javascript', '.png': 'image/png',
+            '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.svg': 'image/svg+xml',
+            '.ico': 'image/x-icon', '.webp': 'image/webp',
+            '.woff': 'font/woff', '.woff2': 'font/woff2',
+            '.json': 'application/json', '.exe': 'application/vnd.microsoft.portable-executable',
+            '.msi': 'application/x-msi', '.dmg': 'application/x-apple-diskimage',
+            '.appimage': 'application/octet-stream', '.deb': 'application/vnd.debian.binary-package'
         };
 
         const isInstaller = /\.(exe|dmg|AppImage|deb|msi|pkg)$/i.test(ext);
@@ -382,7 +382,7 @@ function tryServeStatic(req, res) {
         try {
             const stat = fs.statSync(filePath);
             headers['Content-Length'] = stat.size;
-        } catch (_) {}
+        } catch (_) { }
 
         if (isInstaller) {
             headers['Content-Disposition'] = `attachment; filename="${path.basename(filePath)}"`;
@@ -406,12 +406,12 @@ const server = http.createServer((req, res) => {
     if (req.url === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({
-            status   : 'up',
-            ready    : { backend: BACK_READY, dashboard: DASH_READY, ai: AI_READY },
-            targets  : { backend: BACK_TARGET, dashboard: DASH_TARGET, ai: AI_TARGET },
+            status: 'up',
+            ready: { backend: BACK_READY, dashboard: DASH_READY, ai: AI_READY },
+            targets: { backend: BACK_TARGET, dashboard: DASH_TARGET, ai: AI_TARGET },
             isPrimary: isPrimaryManager,
-            pid      : process.pid,
-            uptime   : process.uptime()
+            pid: process.pid,
+            uptime: process.uptime()
         }));
     }
     // Admin boot log endpoint
@@ -422,15 +422,15 @@ const server = http.createServer((req, res) => {
             'Access-Control-Allow-Origin': '*',
         });
         return res.end(JSON.stringify({
-            logs     : bootLogs,
+            logs: bootLogs,
             hasErrors,
-            uptime   : process.uptime(),
-            targets  : { backend: BACK_TARGET, dashboard: DASH_TARGET, ai: AI_TARGET },
-            booted   : !!(BACK_READY && DASH_READY),
-            ready    : { backend: BACK_READY, dashboard: DASH_READY, ai: AI_READY },
+            uptime: process.uptime(),
+            targets: { backend: BACK_TARGET, dashboard: DASH_TARGET, ai: AI_TARGET },
+            booted: !!(BACK_READY && DASH_READY),
+            ready: { backend: BACK_READY, dashboard: DASH_READY, ai: AI_READY },
             isPrimary: isPrimaryManager,
-            pid      : process.pid,
-            ts       : new Date().toISOString(),
+            pid: process.pid,
+            ts: new Date().toISOString(),
         }));
     }
 
@@ -452,8 +452,8 @@ const server = http.createServer((req, res) => {
         for (const dir of candidateDirs) {
             if (!fs.existsSync(dir)) continue;
             let files = [];
-            try { files = fs.readdirSync(dir); } catch (_) {}
-            
+            try { files = fs.readdirSync(dir); } catch (_) { }
+
             if (os === 'windows' || os === 'win') {
                 targetFile = files.find(f => f.endsWith('.exe')) || files.find(f => f.endsWith('.msi'));
             } else if (os === 'linux') {
@@ -474,7 +474,7 @@ const server = http.createServer((req, res) => {
         if (targetFile && fs.existsSync(targetFile)) {
             const filename = path.basename(targetFile);
             let stat = null;
-            try { stat = fs.statSync(targetFile); } catch (_) {}
+            try { stat = fs.statSync(targetFile); } catch (_) { }
 
             const headers = {
                 'Content-Type': 'application/octet-stream',
@@ -569,17 +569,17 @@ const runningChildren = [];
 
 function killChildren() {
     runningChildren.forEach(child => {
-        try { child.kill('SIGTERM'); } catch (_) {}
+        try { child.kill('SIGTERM'); } catch (_) { }
     });
 }
 
 function cleanup() {
     if (isPrimaryManager) {
-        try { fs.unlinkSync(lockFile); } catch (_) {}
-        try { fs.unlinkSync(stateFile); } catch (_) {}
-        try { fs.unlinkSync(BACK_TARGET); } catch (_) {}
-        try { fs.unlinkSync(DASH_TARGET); } catch (_) {}
-        try { fs.unlinkSync(AI_TARGET); } catch (_) {}
+        try { fs.unlinkSync(lockFile); } catch (_) { }
+        try { fs.unlinkSync(stateFile); } catch (_) { }
+        try { fs.unlinkSync(BACK_TARGET); } catch (_) { }
+        try { fs.unlinkSync(DASH_TARGET); } catch (_) { }
+        try { fs.unlinkSync(AI_TARGET); } catch (_) { }
     }
     killChildren();
 }
@@ -592,9 +592,9 @@ process.on('unhandledRejection', (reason) => { log(`❌ Unhandled rejection: ${r
 
 function freePortOrSocket(target) {
     if (typeof target === 'string' && (target.startsWith('/') || target.endsWith('.sock'))) {
-        try { fs.unlinkSync(target); } catch (_) {}
+        try { fs.unlinkSync(target); } catch (_) { }
     } else if (target) {
-        try { execSync(`fuser -k ${target}/tcp`, { stdio: 'ignore' }); } catch (_) {}
+        try { execSync(`fuser -k ${target}/tcp`, { stdio: 'ignore' }); } catch (_) { }
     }
 }
 
@@ -612,8 +612,8 @@ function startEngine(name, execBin, execArgs, portOrSocket, cwd, envExtra = {}, 
 
         const startTime = Date.now();
         const child = spawn(execBin, execArgs, {
-            env  : { ...process.env, PORT: String(portOrSocket), NODE_ENV: 'production', ...envExtra },
-            cwd  : cwd || rootDir,
+            env: { ...process.env, NODE_ENV: 'production', ...envExtra, PORT: String(portOrSocket) },
+            cwd: cwd || rootDir,
             shell: false
         });
         runningChildren.push(child);
@@ -688,7 +688,7 @@ function findSystemPythonCandidates() {
                 execSync(`${p} --version`, { stdio: 'ignore' });
                 found.push(p);
             }
-        } catch (_) {}
+        } catch (_) { }
     }
     return found;
 }
@@ -758,7 +758,7 @@ function resolvePython() {
                     }
                 }
             }
-        } catch (_) {}
+        } catch (_) { }
     }
 
     // 3. Check .python_packages
@@ -798,7 +798,7 @@ function resolvePython() {
 async function waitForReadiness(backTarget, dashTarget, aiTarget) {
     let backDone = false;
     let dashDone = false;
-    let aiDone   = false;
+    let aiDone = false;
 
     for (let i = 0; i < 60; i++) {
         if (!backDone) {
@@ -829,13 +829,13 @@ async function waitForReadiness(backTarget, dashTarget, aiTarget) {
     if (backDone && dashDone) {
         try {
             fs.writeFileSync(stateFile, JSON.stringify({
-                managerPid     : process.pid,
-                backendTarget  : backTarget,
+                managerPid: process.pid,
+                backendTarget: backTarget,
                 dashboardTarget: dashTarget,
-                aiTarget       : aiTarget,
-                updatedAt      : Date.now()
+                aiTarget: aiTarget,
+                updatedAt: Date.now()
             }), 'utf8');
-            try { fs.unlinkSync(lockFile); } catch (_) {}
+            try { fs.unlinkSync(lockFile); } catch (_) { }
             log(`🚀 All engines operational! Master Proxy ready to serve.`);
         } catch (e) {
             log(`Warning: Failed to save engine state: ${e.message}`);
@@ -860,15 +860,15 @@ async function bootEngines() {
                 if (dashOk && backOk) {
                     BACK_TARGET = bTarget;
                     DASH_TARGET = dTarget;
-                    AI_TARGET   = aTarget || AI_TARGET;
-                    BACK_READY  = true;
-                    DASH_READY  = true;
+                    AI_TARGET = aTarget || AI_TARGET;
+                    BACK_READY = true;
+                    DASH_READY = true;
                     if (aTarget) AI_READY = await checkSocket(aTarget);
                     log(`✨ Attached to existing healthy engines (Manager PID ${state.managerPid}): Backend=${BACK_TARGET}, Dashboard=${DASH_TARGET}, AI=${AI_TARGET}`);
                     return;
                 }
             }
-        } catch (_) {}
+        } catch (_) { }
     }
 
     // ── Phase 2: Try to acquire Primary Manager lock ──
@@ -882,13 +882,13 @@ async function bootEngines() {
         try {
             const stat = fs.statSync(lockFile);
             if (Date.now() - stat.mtimeMs > 45000) {
-                try { fs.unlinkSync(lockFile); } catch (_) {}
+                try { fs.unlinkSync(lockFile); } catch (_) { }
                 const fd = fs.openSync(lockFile, 'wx');
                 fs.writeSync(fd, String(process.pid));
                 fs.closeSync(fd);
                 isPrimaryManager = true;
             }
-        } catch (_) {}
+        } catch (_) { }
     }
 
     // ── Phase 3: Secondary Worker Waiting ──
@@ -908,19 +908,19 @@ async function bootEngines() {
                         if (dashOk && backOk) {
                             BACK_TARGET = bTarget;
                             DASH_TARGET = dTarget;
-                            AI_TARGET   = aTarget || AI_TARGET;
-                            BACK_READY  = true;
-                            DASH_READY  = true;
+                            AI_TARGET = aTarget || AI_TARGET;
+                            BACK_READY = true;
+                            DASH_READY = true;
                             if (aTarget) AI_READY = await checkSocket(aTarget);
                             log(`✨ Engines ready! Attached: Backend=${BACK_TARGET}, Dashboard=${DASH_TARGET}, AI=${AI_TARGET}`);
                             return;
                         }
                     }
-                } catch (_) {}
+                } catch (_) { }
             }
         }
         log(`⚠️ Wait timed out — taking over as Primary Engine Manager.`);
-        try { fs.unlinkSync(lockFile); } catch (_) {}
+        try { fs.unlinkSync(lockFile); } catch (_) { }
         isPrimaryManager = true;
     }
 
@@ -963,8 +963,8 @@ async function bootEngines() {
         : `http://127.0.0.1:${AI_TARGET}`;
 
     startEngine('Backend', process.execPath, [backendEntry], BACK_TARGET,
-                path.join(rootDir, 'backend-api'),
-                { ...process.env, AI_SERVICE_URL: aiServiceUrl, HOSTNAME: '127.0.0.1' }, 0);
+        path.join(rootDir, 'backend-api'),
+        { ...process.env, AI_SERVICE_URL: aiServiceUrl, HOSTNAME: '127.0.0.1' }, 0);
 
     // 3. Analytics Engine (Rust)
     const rustBin = path.join(rootDir, 'analytics-engine', 'target', 'release', 'analytics-engine');
@@ -976,28 +976,28 @@ async function bootEngines() {
 
     // 4. Dashboard (Next.js)
     const customRunner = path.join(rootDir, 'web-dashboard', 'standalone-runner.js');
-    const standaloneA  = path.join(rootDir, 'web-dashboard', '.next', 'standalone', 'web-dashboard', 'server.js');
-    const standaloneB  = path.join(rootDir, 'web-dashboard', '.next', 'standalone', 'server.js');
+    const standaloneA = path.join(rootDir, 'web-dashboard', '.next', 'standalone', 'web-dashboard', 'server.js');
+    const standaloneB = path.join(rootDir, 'web-dashboard', '.next', 'standalone', 'server.js');
     const nextBinLocal = path.join(rootDir, 'web-dashboard', 'node_modules', 'next', 'dist', 'bin', 'next');
-    const nextBinRoot  = path.join(rootDir, 'node_modules', 'next', 'dist', 'bin', 'next');
+    const nextBinRoot = path.join(rootDir, 'node_modules', 'next', 'dist', 'bin', 'next');
 
     let dashEntry, dashCwd, dashArgs;
     if (fs.existsSync(customRunner)) {
         dashEntry = customRunner;
-        dashCwd   = path.join(rootDir, 'web-dashboard');
-        dashArgs  = [customRunner];
+        dashCwd = path.join(rootDir, 'web-dashboard');
+        dashArgs = [customRunner];
     } else if (fs.existsSync(standaloneA)) {
         dashEntry = standaloneA;
-        dashCwd   = path.dirname(standaloneA);
-        dashArgs  = [standaloneA];
+        dashCwd = path.dirname(standaloneA);
+        dashArgs = [standaloneA];
     } else if (fs.existsSync(standaloneB)) {
         dashEntry = standaloneB;
-        dashCwd   = path.dirname(standaloneB);
-        dashArgs  = [standaloneB];
+        dashCwd = path.dirname(standaloneB);
+        dashArgs = [standaloneB];
     } else {
         dashEntry = fs.existsSync(nextBinLocal) ? nextBinLocal : nextBinRoot;
-        dashCwd   = path.join(rootDir, 'web-dashboard');
-        dashArgs  = [dashEntry, 'start'];
+        dashCwd = path.join(rootDir, 'web-dashboard');
+        dashArgs = [dashEntry, 'start'];
     }
 
     startEngine('Dashboard', process.execPath, dashArgs, DASH_TARGET, dashCwd, { ...process.env, HOSTNAME: '127.0.0.1' }, 0);
@@ -1012,7 +1012,7 @@ async function bootEngines() {
                 const s = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
                 s.updatedAt = Date.now();
                 fs.writeFileSync(stateFile, JSON.stringify(s), 'utf8');
-            } catch (_) {}
+            } catch (_) { }
         }
     }, 15000);
 }
