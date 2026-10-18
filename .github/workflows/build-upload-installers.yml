@@ -223,7 +223,12 @@ jobs:
             echo "::error::No installer files were downloaded."
             exit 1
           fi
-
+      - name: Check secret is present
+        env:
+          PW: ${{ secrets.HOSTINGER_SSH_PASSWORD }}
+        run: |
+          if [ -z "$PW" ]; then echo "::error::HOSTINGER_SSH_PASSWORD is empty or missing"; exit 1; fi
+          echo "Secret is set (length ${#PW})"
       # Validate the private key without exposing it in logs.
       # Supports encrypted keys when SSH_PASSPHRASE is configured.
       - name: Validate SSH private key
