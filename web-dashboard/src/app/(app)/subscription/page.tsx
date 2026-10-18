@@ -207,7 +207,7 @@ function SubscriptionPageClient() {
           </span>
         </h1>
         <p className="text-slate-400 text-lg max-w-2xl mx-auto">
-          Secure payments powered by.
+          Secure payments.
           Pay with card, PayPal, Google Pay or Apple Pay.
         </p>
 
