@@ -352,16 +352,7 @@ function SubscriptionPageClient() {
       {/* Powered by footer */}
       <div className="mt-16 text-center">
         <p className="text-slate-600 text-xs">
-          Payments securely processed by{" "}
-          <a
-            href="https://lemonsqueezy.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-yellow-500/70 hover:text-yellow-400 transition-colors"
-          >
-            Lemon Squeezy
-          </a>{" "}
-          · All prices in USD · Cancel anytime
+          Payments securely processed by{" "}· All prices in USD · Cancel anytime
         </p>
       </div>
     </div>
