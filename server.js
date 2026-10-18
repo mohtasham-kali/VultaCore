@@ -42,7 +42,7 @@ loadEnvFile(path.join(rootDir, '.env'));
 loadEnvFile(path.join(rootDir, 'backend-api', '.env'));
 loadEnvFile(path.join(rootDir, 'web-dashboard', '.env'));
 loadEnvFile(path.join(rootDir, 'web-dashboard', '.env.local'));
-loadEnvFile(path.join(process.env.HOME || '', 'domains/vultacore.techprogression.com/hbuilds/config/.env'));
+loadEnvFile('/home/u879979656/domains/vultacore.techprogression.com/hbuilds/config/.env');
 
 const masterPort = process.env.PORT || 3000;
 

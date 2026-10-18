@@ -37,7 +37,7 @@ export class BillingService {
       process.env.LS_API_KEY ||
       process.env.LEMONSQUEEZY_API_KEY ||
       '';
-    this.lsStoreId = this.config.get<string>('LS_STORE_ID') || process.env.LS_STORE_ID || '';
+    this.lsStoreId = this.config.get<string>('LS_STORE_ID') || process.env.LS_STORE_ID || '410740';
     this.lsWebhookSecret = this.config.get<string>('LS_WEBHOOK_SECRET') || process.env.LS_WEBHOOK_SECRET || '';
     this.appUrl = this.config.get<string>('APP_URL') || process.env.APP_URL || 'https://vultacore.techprogression.com';
 
@@ -119,15 +119,23 @@ export class BillingService {
       },
     };
 
-    const response = await firstValueFrom(
-      this.http.post('https://api.lemonsqueezy.com/v1/checkouts', payload, {
-        headers: {
-          Accept: 'application/vnd.api+json',
-          'Content-Type': 'application/vnd.api+json',
-          Authorization: `Bearer ${this.lsApiKey}`,
-        },
-      }),
-    );
+    let response;
+    try {
+      response = await firstValueFrom(
+        this.http.post('https://api.lemonsqueezy.com/v1/checkouts', payload, {
+          headers: {
+            Accept: 'application/vnd.api+json',
+            'Content-Type': 'application/vnd.api+json',
+            Authorization: `Bearer ${this.lsApiKey}`,
+          },
+        }),
+      );
+    } catch (err: any) {
+      this.logger.error(
+        `LS error (store="${this.lsStoreId}", variant="${variantId}"): ${JSON.stringify(err?.response?.data)}`,
+      );
+      throw new Error(err?.response?.data?.errors?.[0]?.detail || err.message);
+    }
 
     const checkoutUrl: string =
       response.data?.data?.attributes?.url;
