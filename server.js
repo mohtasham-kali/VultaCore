@@ -12,6 +12,35 @@ const fs    = require('fs');
 const net   = require('net');
 
 const rootDir    = __dirname;
+
+function loadEnvFile(envPath) {
+    if (!fs.existsSync(envPath)) return;
+    try {
+        const content = fs.readFileSync(envPath, 'utf8');
+        content.split('\n').forEach(line => {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith('#')) return;
+            const eqIdx = trimmed.indexOf('=');
+            if (eqIdx === -1) return;
+            const key = trimmed.slice(0, eqIdx).trim();
+            let val = trimmed.slice(eqIdx + 1).trim();
+            if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+                val = val.slice(1, -1);
+            }
+            if (!(key in process.env)) {
+                process.env[key] = val;
+            }
+        });
+        if (typeof log === 'function') log(`Loaded environment from ${path.basename(envPath)}`);
+    } catch (e) {
+        if (typeof log === 'function') log(`Failed loading ${envPath}: ${e.message}`);
+    }
+}
+loadEnvFile(path.join(rootDir, '.env'));
+loadEnvFile(path.join(rootDir, 'backend-api', '.env'));
+loadEnvFile(path.join(rootDir, 'web-dashboard', '.env'));
+loadEnvFile(path.join(rootDir, 'web-dashboard', '.env.local'));
+
 const masterPort = process.env.PORT || 3000;
 
 // State files for multi-worker coordination
@@ -299,7 +328,7 @@ function sendBooting(res) {
 </html>`);
 }
 
-// ─── Static Asset Shortcuts (bypass child proxy for speed) ──────────────────
+// ─── Static Asset & Direct Downloads (bypass child proxy for speed) ─────────
 function tryServeStatic(req, res) {
     let filePath = null;
     const cleanUrl = (req.url || '').split('?')[0];
@@ -307,8 +336,33 @@ function tryServeStatic(req, res) {
     if (cleanUrl.startsWith('/_next/static/')) {
         filePath = path.join(rootDir, 'web-dashboard', '.next', 'static',
                             cleanUrl.replace('/_next/static/', ''));
-    } else if (/\.(png|jpg|jpeg|gif|svg|ico|webp|woff2?|json|exe|dmg|AppImage|deb)$/i.test(cleanUrl)) {
-        filePath = path.join(rootDir, 'web-dashboard', 'public', cleanUrl);
+    } else if (cleanUrl.startsWith('/downloads/')) {
+        const subName = cleanUrl.replace('/downloads/', '');
+        const candidates = [
+            path.join(rootDir, 'public', 'downloads', subName),
+            path.join(rootDir, 'web-dashboard', 'public', 'downloads', subName),
+            path.join(rootDir, 'downloaded-installers', 'installers-linux', subName),
+            path.join(rootDir, 'downloaded-installers', subName),
+        ];
+        for (const cand of candidates) {
+            if (fs.existsSync(cand)) {
+                filePath = cand;
+                break;
+            }
+        }
+    } else if (/\.(png|jpg|jpeg|gif|svg|ico|webp|woff2?|json|exe|dmg|AppImage|deb|msi|pkg)$/i.test(cleanUrl)) {
+        const candidates = [
+            path.join(rootDir, 'web-dashboard', 'public', cleanUrl),
+            path.join(rootDir, 'public', cleanUrl),
+            path.join(rootDir, 'public', 'downloads', path.basename(cleanUrl)),
+            path.join(rootDir, 'web-dashboard', 'public', 'downloads', path.basename(cleanUrl)),
+        ];
+        for (const cand of candidates) {
+            if (fs.existsSync(cand)) {
+                filePath = cand;
+                break;
+            }
+        }
     }
 
     if (filePath && fs.existsSync(filePath)) {
@@ -318,9 +372,24 @@ function tryServeStatic(req, res) {
             '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.svg':'image/svg+xml',
             '.ico':'image/x-icon', '.webp':'image/webp',
             '.woff':'font/woff', '.woff2':'font/woff2',
-            '.json':'application/json'
+            '.json':'application/json', '.exe':'application/vnd.microsoft.portable-executable',
+            '.msi':'application/x-msi', '.dmg':'application/x-apple-diskimage',
+            '.appimage':'application/octet-stream', '.deb':'application/vnd.debian.binary-package'
         };
-        res.writeHead(200, { 'Content-Type': mime[ext] || 'application/octet-stream' });
+
+        const isInstaller = /\.(exe|dmg|AppImage|deb|msi|pkg)$/i.test(ext);
+        const headers = { 'Content-Type': mime[ext] || 'application/octet-stream' };
+        try {
+            const stat = fs.statSync(filePath);
+            headers['Content-Length'] = stat.size;
+        } catch (_) {}
+
+        if (isInstaller) {
+            headers['Content-Disposition'] = `attachment; filename="${path.basename(filePath)}"`;
+            headers['Cache-Control'] = 'public, max-age=3600';
+        }
+
+        res.writeHead(200, headers);
         fs.createReadStream(filePath).pipe(res);
         return true;
     }
@@ -363,6 +432,75 @@ const server = http.createServer((req, res) => {
             pid      : process.pid,
             ts       : new Date().toISOString(),
         }));
+    }
+
+    // Direct Installer Downloads endpoint
+    if (req.url.startsWith('/api/download')) {
+        const parsed = new URL(req.url, 'http://localhost');
+        const os = (parsed.searchParams.get('os') || '').toLowerCase();
+        const format = (parsed.searchParams.get('format') || '').toLowerCase();
+
+        const candidateDirs = [
+            path.join(rootDir, 'public', 'downloads'),
+            path.join(rootDir, 'web-dashboard', 'public', 'downloads'),
+            path.join(rootDir, 'downloaded-installers', 'installers-linux'),
+            path.join(rootDir, 'downloaded-installers'),
+        ];
+
+        let targetFile = null;
+
+        for (const dir of candidateDirs) {
+            if (!fs.existsSync(dir)) continue;
+            let files = [];
+            try { files = fs.readdirSync(dir); } catch (_) {}
+            
+            if (os === 'windows' || os === 'win') {
+                targetFile = files.find(f => f.endsWith('.exe')) || files.find(f => f.endsWith('.msi'));
+            } else if (os === 'linux') {
+                if (format === 'deb') {
+                    targetFile = files.find(f => f.endsWith('.deb')) || files.find(f => f.endsWith('.AppImage'));
+                } else {
+                    targetFile = files.find(f => f.endsWith('.AppImage')) || files.find(f => f.endsWith('.deb'));
+                }
+            } else if (os === 'macos' || os === 'mac' || os === 'darwin') {
+                targetFile = files.find(f => f.endsWith('.dmg')) || files.find(f => f.endsWith('.pkg'));
+            }
+            if (targetFile) {
+                targetFile = path.join(dir, targetFile);
+                break;
+            }
+        }
+
+        if (targetFile && fs.existsSync(targetFile)) {
+            const filename = path.basename(targetFile);
+            let stat = null;
+            try { stat = fs.statSync(targetFile); } catch (_) {}
+
+            const headers = {
+                'Content-Type': 'application/octet-stream',
+                'Content-Disposition': `attachment; filename="${filename}"`,
+                'Cache-Control': 'public, max-age=3600',
+            };
+            if (stat) headers['Content-Length'] = stat.size;
+
+            res.writeHead(200, headers);
+            fs.createReadStream(targetFile).pipe(res);
+            return;
+        }
+
+        // Fallback directly to release asset if specific platform file is compiling
+        let fallbackUrl = 'https://github.com/mohtasham-kali/VultaCore/releases/latest';
+        if (os === 'windows' || os === 'win') {
+            fallbackUrl = 'https://github.com/mohtasham-kali/VultaCore/releases/latest/download/VultaCore_0.1.0_x64-setup.exe';
+        } else if (os === 'macos' || os === 'mac' || os === 'darwin') {
+            fallbackUrl = 'https://github.com/mohtasham-kali/VultaCore/releases/latest/download/VultaCore_0.1.0_x64.dmg';
+        } else if (os === 'linux') {
+            fallbackUrl = format === 'deb'
+                ? 'https://github.com/mohtasham-kali/VultaCore/releases/latest/download/VultaCore_0.1.0_amd64.deb'
+                : 'https://github.com/mohtasham-kali/VultaCore/releases/latest/download/VultaCore_0.1.0_amd64.AppImage';
+        }
+        res.writeHead(302, { 'Location': fallbackUrl });
+        return res.end();
     }
 
     if (tryServeStatic(req, res)) return;
@@ -826,7 +964,7 @@ async function bootEngines() {
 
     startEngine('Backend', process.execPath, [backendEntry], BACK_TARGET,
                 path.join(rootDir, 'backend-api'),
-                { AI_SERVICE_URL: aiServiceUrl, HOSTNAME: '127.0.0.1' }, 0);
+                { ...process.env, AI_SERVICE_URL: aiServiceUrl, HOSTNAME: '127.0.0.1' }, 0);
 
     // 3. Analytics Engine (Rust)
     const rustBin = path.join(rootDir, 'analytics-engine', 'target', 'release', 'analytics-engine');
@@ -862,7 +1000,7 @@ async function bootEngines() {
         dashArgs  = [dashEntry, 'start'];
     }
 
-    startEngine('Dashboard', process.execPath, dashArgs, DASH_TARGET, dashCwd, {}, 0);
+    startEngine('Dashboard', process.execPath, dashArgs, DASH_TARGET, dashCwd, { ...process.env, HOSTNAME: '127.0.0.1' }, 0);
 
     // Begin async health monitoring and state publishing
     waitForReadiness(BACK_TARGET, DASH_TARGET, AI_TARGET);

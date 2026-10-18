@@ -83,7 +83,9 @@ jobs:
       - name: Collect built Linux installers
         run: |
           mkdir -p dist-installers
-          find desktop-app/src-tauri/target -type f \( -name "*.deb" -o -name "*.AppImage" -o -name "*.rpm" \) 2>/dev/null | xargs -I{} cp {} dist-installers/ || true
+          find desktop-app/src-tauri/target -type f \
+            \( -name "*.deb" -o -name "*.AppImage" -o -name "*.rpm" \) \
+            -exec cp {} dist-installers/ \;
           ls -lh dist-installers/
 
       - name: Upload installers as artifact
@@ -127,8 +129,15 @@ jobs:
       - name: Collect built Windows installers
         run: |
           mkdir -p dist-installers
-          find desktop-app/src-tauri/target -type f -name "*setup*.exe" -o -name "*.msi" 2>/dev/null | xargs -I{} cp {} dist-installers/ || true
-          find desktop-app/src-tauri/target/release/bundle -type f \( -name "*.msi" -o -name "*.exe" \) 2>/dev/null | xargs -I{} cp {} dist-installers/ || true
+
+          find desktop-app/src-tauri/target -type f \
+            \( -iname "*setup*.exe" -o -iname "*.msi" \) \
+            -exec cp {} dist-installers/ \;
+
+          find desktop-app/src-tauri/target/release/bundle -type f \
+            \( -iname "*.msi" -o -iname "*.exe" \) \
+            -exec cp -n {} dist-installers/ \; 2>/dev/null || true
+
           ls -lh dist-installers/
 
       - name: Upload installers as artifact
@@ -169,7 +178,11 @@ jobs:
       - name: Collect built macOS installers
         run: |
           mkdir -p dist-installers
-          find desktop-app/src-tauri/target/release/bundle -type f \( -name "*.dmg" -o -name "*.pkg" \) 2>/dev/null | xargs -I{} cp {} dist-installers/ || true
+
+          find desktop-app/src-tauri/target/release/bundle -type f \
+            \( -name "*.dmg" -o -name "*.pkg" \) \
+            -exec cp {} dist-installers/ \; 2>/dev/null || true
+
           ls -lh dist-installers/
 
       - name: Upload installers as artifact
@@ -182,8 +195,17 @@ jobs:
   deploy-to-hostinger:
     name: Upload Installers to Hostinger
     needs: [build-linux, build-windows, build-macos]
-    if: ${{ !cancelled() && (needs.build-linux.result == 'success' || needs.build-windows.result == 'success' || needs.build-macos.result == 'success') }}
+    if: >-
+      ${{
+        !cancelled() &&
+        (
+          needs.build-linux.result == 'success' ||
+          needs.build-windows.result == 'success' ||
+          needs.build-macos.result == 'success'
+        )
+      }}
     runs-on: ubuntu-latest
+
     steps:
       - name: Download all installer artifacts
         uses: actions/download-artifact@v4
@@ -192,37 +214,103 @@ jobs:
           pattern: installers-*
           merge-multiple: true
 
-      - name: List collected installers
-        run: ls -lh all-installers/
+      - name: List and validate collected installers
+        run: |
+          echo "=== Collected installers ==="
+          find all-installers -maxdepth 1 -type f -printf '%f (%s bytes)\n'
+
+          if ! find all-installers -maxdepth 1 -type f -print -quit | grep -q .; then
+            echo "::error::No installer files were downloaded."
+            exit 1
+          fi
+
+      # Validate the private key without exposing it in logs.
+      # Supports encrypted keys when SSH_PASSPHRASE is configured.
+      - name: Validate SSH private key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_PASSPHRASE: ${{ secrets.SSH_PASSPHRASE }}
+        run: |
+          set -eu
+
+          if [ -z "${SSH_PRIVATE_KEY:-}" ]; then
+            echo "::error::SSH_PRIVATE_KEY is missing or empty."
+            exit 1
+          fi
+
+          KEY_FILE="$RUNNER_TEMP/hostinger_deploy_key"
+          trap 'rm -f "$KEY_FILE"' EXIT
+
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$KEY_FILE"
+          chmod 600 "$KEY_FILE"
+
+          if ssh-keygen -y \
+            -P "${SSH_PASSPHRASE:-}" \
+            -f "$KEY_FILE" > /dev/null; then
+            echo "SSH private key format and passphrase validated."
+          else
+            echo "::error::SSH key validation failed."
+            echo "Check the key format and SSH_PASSPHRASE secret."
+            exit 1
+          fi
 
       - name: Ensure target directory exists on Hostinger
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: '45.130.228.127'
           username: 'u879979656'
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 65002
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          timeout: 30s
+          command_timeout: 2m
           script: |
+            set -eu
             mkdir -p ~/domains/vultacore.techprogression.com/nodejs/public/downloads/
+            echo "Target downloads directory is ready."
 
       - name: Upload installers to Hostinger via SCP
         uses: appleboy/scp-action@v0.1.7
         with:
           host: '45.130.228.127'
           username: 'u879979656'
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 65002
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          timeout: 30s
+          command_timeout: 10m
           source: "all-installers/*"
           target: "~/domains/vultacore.techprogression.com/nodejs/public/downloads/"
           strip_components: 1
+          overwrite: true
 
       - name: Verify upload on Hostinger
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: '45.130.228.127'
           username: 'u879979656'
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 65002
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          timeout: 30s
+          command_timeout: 2m
           script: |
+            set -eu
+
+            DOWNLOAD_DIR="$HOME/domains/vultacore.techprogression.com/nodejs/public/downloads"
+
             echo "=== Installers in public/downloads/ ==="
-            ls -lh ~/domains/vultacore.techprogression.com/nodejs/public/downloads/ 2>/dev/null || echo "Directory empty or missing"
+
+            if [ ! -d "$DOWNLOAD_DIR" ]; then
+              echo "::error::Downloads directory does not exist."
+              exit 1
+            fi
+
+            ls -lh "$DOWNLOAD_DIR"
+
+            if ! find "$DOWNLOAD_DIR" -maxdepth 1 -type f -print -quit | grep -q .; then
+              echo "::error::No installer files found on Hostinger."
+              exit 1
+            fi
+
+            echo "Installer upload verification completed."

@@ -88,7 +88,7 @@
     "logging": {},
     "expireTime": 31536000,
     "staticPageGenerationTimeout": 60,
-    "output": "export",
+    "output": "standalone",
     "modularizeImports": {
       "@mui/icons-material": {
         "transform": "@mui/icons-material/{{member}}"
@@ -284,7 +284,16 @@
     },
     "_originalRewrites": {
       "beforeFiles": [],
-      "afterFiles": [],
+      "afterFiles": [
+        {
+          "source": "/api/:path*",
+          "destination": "http://localhost:3001/api/:path*"
+        },
+        {
+          "source": "/socket.io/:path*",
+          "destination": "http://localhost:3001/socket.io/:path*"
+        }
+      ],
       "fallback": []
     }
   },

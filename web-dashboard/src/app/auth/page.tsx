@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/context/AuthContext";
 import { ArrowLeft, Mail, Lock, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -37,6 +38,35 @@ export default function AuthPage() {
   const [isTauri, setIsTauri] = useState(false);
 
   const router = useRouter();
+  const { user, isLoading: authLoading } = useAuth();
+
+  // Redirect to home if user is already authenticated
+  useEffect(() => {
+    if (!authLoading && user) {
+      router.replace("/");
+    }
+  }, [user, authLoading, router]);
+
+  // Handle PKCE code returned directly to /auth on web
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const searchParams = new URLSearchParams(window.location.search);
+    const code = searchParams.get("code");
+    if (code) {
+      setLoading(true);
+      supabase.auth.exchangeCodeForSession(code).then(({ data, error: exErr }) => {
+        if (exErr) {
+          setError(`Authentication error: ${exErr.message}`);
+          setLoading(false);
+        } else if (data?.session) {
+          router.replace("/");
+        }
+      }).catch((e) => {
+        setError(e.message || "Authentication failed");
+        setLoading(false);
+      });
+    }
+  }, [router]);
 
   // Detect Tauri and hook up the deep-link listener
   useEffect(() => {
@@ -159,7 +189,7 @@ export default function AuthPage() {
     if (typeof window !== "undefined" && (window as Window & { Capacitor?: { isNativePlatform: () => boolean } }).Capacitor?.isNativePlatform()) {
       return "com.saas2.platform://auth-callback";
     }
-    return `${window.location.origin}/`;
+    return `${window.location.origin}/auth/callback`;
   };
 
   const signInWithProvider = async (provider: "google" | "apple" | "github") => {

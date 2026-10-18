@@ -11,19 +11,21 @@ const downloadOptions = [
     color: "text-blue-400",
     bgColor: "bg-blue-500/10",
     borderColor: "border-blue-500/20",
-    url: "https://github.com/mohtasham-kali/VultaCore/releases/latest",
+    url: "/api/download?os=windows",
     description: "Installable executable for Windows 10/11 with full hardware acceleration."
   },
   {
     platform: "Linux",
     version: "2.1.0",
-    format: "AppImage",
+    format: "AppImage & .deb",
     icon: Terminal,
     color: "text-orange-400",
     bgColor: "bg-orange-500/10",
     borderColor: "border-orange-500/20",
-    url: "https://github.com/mohtasham-kali/VultaCore/releases/latest",
-    description: "Portable AppImage for all distributions. No installation required."
+    url: "/api/download?os=linux",
+    secondaryUrl: "/api/download?os=linux&format=deb",
+    secondaryLabel: "Debian / Ubuntu (.deb)",
+    description: "Portable AppImage for all Linux distributions. No installation required."
   },
   {
     platform: "macOS",
@@ -33,7 +35,7 @@ const downloadOptions = [
     color: "text-purple-400",
     bgColor: "bg-purple-500/10",
     borderColor: "border-purple-500/20",
-    url: "https://github.com/mohtasham-kali/VultaCore/releases/latest",
+    url: "/api/download?os=macos",
     description: "Universal disk image for Apple Silicon (M1/M2/M3) and Intel Macs."
   }
 ];
@@ -58,30 +60,45 @@ export default function DownloadPage() {
       {/* Download Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {downloadOptions.map((opt) => (
-          <div key={opt.platform} className={`p-8 rounded-3xl border ${opt.borderColor} ${opt.bgColor} backdrop-blur-md relative overflow-hidden group hover:scale-[1.02] transition-all duration-500`}>
-            <div className="absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 bg-white/5 rounded-full blur-3xl group-hover:bg-white/10 transition-colors" />
-            
-            <opt.icon className={`w-12 h-12 ${opt.color} mb-6`} />
-            <h3 className="text-2xl font-bold text-white mb-2">{opt.platform}</h3>
-            <div className="flex items-center gap-2 mb-4">
-              <span className="text-[10px] font-black bg-white/10 text-slate-300 px-2 py-0.5 rounded-md uppercase tracking-widest">
-                Version {opt.version}
-              </span>
-              <span className="text-[10px] font-black bg-white/10 text-slate-300 px-2 py-0.5 rounded-md uppercase tracking-widest">
-                {opt.format}
-              </span>
+          <div key={opt.platform} className={`p-8 rounded-3xl border ${opt.borderColor} ${opt.bgColor} backdrop-blur-md relative overflow-hidden group hover:scale-[1.02] transition-all duration-500 flex flex-col justify-between`}>
+            <div>
+              <div className="absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 bg-white/5 rounded-full blur-3xl group-hover:bg-white/10 transition-colors" />
+              
+              <opt.icon className={`w-12 h-12 ${opt.color} mb-6`} />
+              <h3 className="text-2xl font-bold text-white mb-2">{opt.platform}</h3>
+              <div className="flex items-center gap-2 mb-4">
+                <span className="text-[10px] font-black bg-white/10 text-slate-300 px-2 py-0.5 rounded-md uppercase tracking-widest">
+                  Version {opt.version}
+                </span>
+                <span className="text-[10px] font-black bg-white/10 text-slate-300 px-2 py-0.5 rounded-md uppercase tracking-widest">
+                  {opt.format}
+                </span>
+              </div>
+              <p className="text-slate-400 text-sm mb-8 leading-relaxed">
+                {opt.description}
+              </p>
             </div>
-            <p className="text-slate-400 text-sm mb-8 leading-relaxed">
-              {opt.description}
-            </p>
 
-            <a 
-              href={opt.url}
-              className="w-full py-4 rounded-2xl bg-white text-slate-950 font-black text-sm flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors shadow-2xl shadow-white/10"
-            >
-              <Download className="w-4 h-4" />
-              DOWNLOAD NOW
-            </a>
+            <div className="space-y-2 mt-auto">
+              <a 
+                href={opt.url}
+                download
+                className="w-full py-4 rounded-2xl bg-white text-slate-950 font-black text-sm flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors shadow-2xl shadow-white/10"
+              >
+                <Download className="w-4 h-4" />
+                DOWNLOAD NOW
+              </a>
+              {opt.secondaryUrl && (
+                <a
+                  href={opt.secondaryUrl}
+                  download
+                  className="w-full py-2.5 rounded-xl bg-white/5 border border-white/10 text-slate-300 font-semibold text-xs flex items-center justify-center gap-1.5 hover:bg-white/10 hover:text-white transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Download {opt.secondaryLabel}
+                </a>
+              )}
+            </div>
           </div>
         ))}
       </div>

@@ -44,7 +44,10 @@ export default function AnalyticsPage() {
 
   useEffect(() => {
     async function loadStats() {
-      if (!user?.id) return;
+      if (!user?.id) {
+        setLoading(false);
+        return;
+      }
       try {
         const data = await fetchAnalytics(user.id);
         setStats(data);

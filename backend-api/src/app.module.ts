@@ -28,6 +28,11 @@ const staticModuleOptions = fs.existsSync(join(process.cwd(), 'out'))
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: [
+        join(process.cwd(), '.env'),
+        join(process.cwd(), '..', '.env'),
+        join(__dirname, '..', '..', '.env'),
+      ],
     }),
     TypeOrmModule.forRoot({
       type: (process.env.DATABASE_URL ? 'postgres' : 'sqlite') as any,

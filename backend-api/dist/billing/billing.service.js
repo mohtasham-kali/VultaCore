@@ -71,19 +71,35 @@ let BillingService = BillingService_1 = class BillingService {
         this.config = config;
         this.usersService = usersService;
         this.eventsGateway = eventsGateway;
-        this.lsApiKey = this.config.get('LS_API_KEY', '');
-        this.lsStoreId = this.config.get('LS_STORE_ID', '');
-        this.lsWebhookSecret = this.config.get('LS_WEBHOOK_SECRET', '');
-        this.appUrl = this.config.get('APP_URL', 'http://localhost:3000');
-        const variantStandard = this.config.get('LS_VARIANT_STANDARD', '');
-        const variantPremium = this.config.get('LS_VARIANT_PREMIUM', '');
+        this.lsApiKey = this.config.get('LS_API_KEY') || process.env.LS_API_KEY || '';
+        this.lsStoreId = this.config.get('LS_STORE_ID') || process.env.LS_STORE_ID || '';
+        this.lsWebhookSecret = this.config.get('LS_WEBHOOK_SECRET') || process.env.LS_WEBHOOK_SECRET || '';
+        this.appUrl = this.config.get('APP_URL') || process.env.APP_URL || 'https://vultacore.techprogression.com';
+        const variantStandard = this.config.get('LS_VARIANT_STANDARD') || process.env.LS_VARIANT_STANDARD || '1820715';
+        const variantPremium = this.config.get('LS_VARIANT_PREMIUM') || process.env.LS_VARIANT_PREMIUM || '1820708';
+        const variantEnterprise = this.config.get('LS_VARIANT_ENTERPRISE') || this.config.get('LS_VARIANT_ENTERPISE') || process.env.LS_VARIANT_ENTERPRISE || process.env.LS_VARIANT_ENTERPISE || '1860093';
         if (variantStandard)
             this.variantToPlan[variantStandard] = 'Standard';
         if (variantPremium)
             this.variantToPlan[variantPremium] = 'Premium';
+        if (variantEnterprise)
+            this.variantToPlan[variantEnterprise] = 'Enterprise';
     }
     async createCheckoutSession(planName, userId, userEmail) {
-        const variantId = this.config.get(`LS_VARIANT_${planName.toUpperCase()}`);
+        const key = `LS_VARIANT_${planName.toUpperCase()}`;
+        let variantId = this.config.get(key) || process.env[key];
+        if (!variantId) {
+            const normalized = planName.toUpperCase();
+            if (normalized === 'STANDARD') {
+                variantId = this.config.get('LS_VARIANT_STANDARD') || process.env.LS_VARIANT_STANDARD || '1820715';
+            }
+            else if (normalized === 'PREMIUM') {
+                variantId = this.config.get('LS_VARIANT_PREMIUM') || process.env.LS_VARIANT_PREMIUM || '1820708';
+            }
+            else if (normalized.includes('ENTERP')) {
+                variantId = this.config.get('LS_VARIANT_ENTERPRISE') || this.config.get('LS_VARIANT_ENTERPISE') || process.env.LS_VARIANT_ENTERPRISE || process.env.LS_VARIANT_ENTERPISE || '1860093';
+            }
+        }
         if (!variantId) {
             throw new Error(`No Lemon Squeezy variant configured for plan "${planName}". Set LS_VARIANT_${planName.toUpperCase()} in .env`);
         }

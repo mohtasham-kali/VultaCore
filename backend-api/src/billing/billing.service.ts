@@ -31,16 +31,19 @@ export class BillingService {
     private readonly usersService: UsersService,
     private readonly eventsGateway: EventsGateway,
   ) {
-    this.lsApiKey = this.config.get<string>('LS_API_KEY', '');
-    this.lsStoreId = this.config.get<string>('LS_STORE_ID', '');
-    this.lsWebhookSecret = this.config.get<string>('LS_WEBHOOK_SECRET', '');
-    this.appUrl = this.config.get<string>('APP_URL', 'http://localhost:3000');
+    this.lsApiKey = this.config.get<string>('LS_API_KEY') || process.env.LS_API_KEY || '';
+    this.lsStoreId = this.config.get<string>('LS_STORE_ID') || process.env.LS_STORE_ID || '';
+    this.lsWebhookSecret = this.config.get<string>('LS_WEBHOOK_SECRET') || process.env.LS_WEBHOOK_SECRET || '';
+    this.appUrl = this.config.get<string>('APP_URL') || process.env.APP_URL || 'https://vultacore.techprogression.com';
 
     // Build variant → plan mapping from env
-    const variantStandard = this.config.get<string>('LS_VARIANT_STANDARD', '');
-    const variantPremium = this.config.get<string>('LS_VARIANT_PREMIUM', '');
+    const variantStandard = this.config.get<string>('LS_VARIANT_STANDARD') || process.env.LS_VARIANT_STANDARD || '1820715';
+    const variantPremium = this.config.get<string>('LS_VARIANT_PREMIUM') || process.env.LS_VARIANT_PREMIUM || '1820708';
+    const variantEnterprise = this.config.get<string>('LS_VARIANT_ENTERPRISE') || this.config.get<string>('LS_VARIANT_ENTERPISE') || process.env.LS_VARIANT_ENTERPRISE || process.env.LS_VARIANT_ENTERPISE || '1860093';
+
     if (variantStandard) this.variantToPlan[variantStandard] = 'Standard';
     if (variantPremium) this.variantToPlan[variantPremium] = 'Premium';
+    if (variantEnterprise) this.variantToPlan[variantEnterprise] = 'Enterprise';
   }
 
   /**
@@ -51,9 +54,20 @@ export class BillingService {
     userId: string,
     userEmail: string,
   ): Promise<string> {
-    const variantId = this.config.get<string>(
-      `LS_VARIANT_${planName.toUpperCase()}`,
-    );
+    const key = `LS_VARIANT_${planName.toUpperCase()}`;
+    let variantId = this.config.get<string>(key) || process.env[key];
+
+    // Fallbacks for known plan variants
+    if (!variantId) {
+      const normalized = planName.toUpperCase();
+      if (normalized === 'STANDARD') {
+        variantId = this.config.get<string>('LS_VARIANT_STANDARD') || process.env.LS_VARIANT_STANDARD || '1820715';
+      } else if (normalized === 'PREMIUM') {
+        variantId = this.config.get<string>('LS_VARIANT_PREMIUM') || process.env.LS_VARIANT_PREMIUM || '1820708';
+      } else if (normalized.includes('ENTERP')) {
+        variantId = this.config.get<string>('LS_VARIANT_ENTERPRISE') || this.config.get<string>('LS_VARIANT_ENTERPISE') || process.env.LS_VARIANT_ENTERPRISE || process.env.LS_VARIANT_ENTERPISE || '1860093';
+      }
+    }
 
     if (!variantId) {
       throw new Error(
