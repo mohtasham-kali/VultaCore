@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { User as UserIcon, Search, MoreVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { API_BASE_URL } from "@/lib/constants";
 
 interface User {
   id: string;
@@ -16,36 +15,19 @@ interface User {
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  const loadUsers = () => {
-    setLoading(true);
-    setError(null);
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-
-    fetch(`${API_BASE_URL}/users`, { signal: controller.signal })
-      .then(res => {
-        if (!res.ok) throw new Error(`Server returned ${res.status}`);
-        return res.json();
-      })
+  useEffect(() => {
+    fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/users`)
+      .then(res => res.json())
       .then(data => {
-        setUsers(Array.isArray(data) ? data : []);
+        setUsers(data);
         setLoading(false);
-      })
-      .catch(err => {
-        setError(err.name === 'AbortError' ? 'Backend timed out — it may still be starting up.' : err.message);
-        setLoading(false);
-      })
-      .finally(() => clearTimeout(timeout));
-  };
-
-  useEffect(() => { loadUsers(); }, []);
-
+      });
+  }, []);
 
   const handleUpdateRank = async (userId: string, newRank: string) => {
     try {
-      await fetch(`${API_BASE_URL}/users/${userId}/plan`, {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/users/${userId}/plan`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ plan: newRank }),
@@ -82,27 +64,7 @@ export default function AdminUsersPage() {
           </thead>
           <tbody className="divide-y divide-white/5">
             {loading ? (
-              <tr><td colSpan={4} className="p-12 text-center">
-                <div className="flex flex-col items-center gap-3">
-                  <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
-                  <span className="text-slate-500 text-sm">Loading accounts…</span>
-                </div>
-              </td></tr>
-            ) : error ? (
-              <tr><td colSpan={4} className="p-12 text-center">
-                <div className="flex flex-col items-center gap-3">
-                  <div className="w-10 h-10 bg-red-500/10 rounded-xl flex items-center justify-center">
-                    <span className="text-red-400 text-xl">⚠</span>
-                  </div>
-                  <p className="text-red-400 font-semibold text-sm">Backend unavailable</p>
-                  <p className="text-slate-500 text-xs max-w-xs">{error}</p>
-                  <button onClick={loadUsers} className="mt-1 px-4 py-2 bg-purple-500/10 border border-purple-500/30 text-purple-400 rounded-lg text-xs font-bold hover:bg-purple-500/20 transition-all">
-                    Retry
-                  </button>
-                </div>
-              </td></tr>
-            ) : users.length === 0 ? (
-              <tr><td colSpan={4} className="p-12 text-center text-slate-500 text-sm">No users found.</td></tr>
+              <tr><td colSpan={4} className="p-12 text-center text-slate-500 italic">Accessing VultaCore mainframe...</td></tr>
             ) : users.map((user) => (
               <tr key={user.id} className="hover:bg-white/5 transition-colors group">
                 <td className="px-6 py-4">
