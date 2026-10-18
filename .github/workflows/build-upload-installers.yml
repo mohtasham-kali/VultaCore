@@ -264,7 +264,6 @@ jobs:
           host: '45.130.228.127'
           username: 'u879979656'
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          passphrase: ${{ secrets.SSH_PASSPHRASE }}
           port: 65002
           timeout: 30s
           command_timeout: 2m
@@ -279,7 +278,6 @@ jobs:
           host: '45.130.228.127'
           username: 'u879979656'
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          passphrase: ${{ secrets.SSH_PASSPHRASE }}
           port: 65002
           timeout: 30s
           command_timeout: 10m
@@ -294,7 +292,6 @@ jobs:
           host: '45.130.228.127'
           username: 'u879979656'
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          passphrase: ${{ secrets.SSH_PASSPHRASE }}
           port: 65002
           timeout: 30s
           command_timeout: 2m
