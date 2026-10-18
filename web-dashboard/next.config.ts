@@ -1,10 +1,9 @@
 import type { NextConfig } from "next";
 
-
-const isExport = Boolean(process.env.STATIC_EXPORT);
+const isExport = process.env.STATIC_EXPORT === 'true';
 
 const nextConfig: NextConfig = {
-  // 'export' generates a static /out folder — required for Tauri to load CSS/JS locally
+  // 'export' generates a static /out folder, required for Tauri to load CSS/JS locally
   output: isExport ? 'export' : 'standalone',
   // Tauri serves files from disk, trailing slashes ensure index.html routing works
   trailingSlash: true,
@@ -14,20 +13,24 @@ const nextConfig: NextConfig = {
   images: {
     unoptimized: true,
   },
-  async rewrites() {
-    if (isExport) return [];
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001';
-    return [
-      {
-        source: '/api/:path*',
-        destination: `${backendUrl}/api/:path*`,
+  // Rewrites don't work with static export, so only define them for the server build
+  ...(isExport
+    ? {}
+    : {
+      async rewrites() {
+        const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001';
+        return [
+          {
+            source: '/api/:path*',
+            destination: `${backendUrl}/api/:path*`,
+          },
+          {
+            source: '/socket.io/:path*',
+            destination: `${backendUrl}/socket.io/:path*`,
+          },
+        ];
       },
-      {
-        source: '/socket.io/:path*',
-        destination: `${backendUrl}/socket.io/:path*`,
-      },
-    ];
-  },
+    }),
 };
 
 export default nextConfig;

@@ -35,6 +35,7 @@ jobs:
           NEXT_PUBLIC_APP_URL: ${{ vars.NEXT_PUBLIC_APP_URL }}
         run: |
           rm -rf .next/ out/
+          rm -rf src/app/api
           STATIC_EXPORT=true npm run build
 
       - name: Upload frontend static export
