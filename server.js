@@ -13,6 +13,8 @@ const net = require('net');
 
 const rootDir = __dirname;
 
+let bootLogs = [];
+
 function loadEnvFile(envPath) {
     if (!fs.existsSync(envPath)) return;
     try {
@@ -40,6 +42,7 @@ loadEnvFile(path.join(rootDir, '.env'));
 loadEnvFile(path.join(rootDir, 'backend-api', '.env'));
 loadEnvFile(path.join(rootDir, 'web-dashboard', '.env'));
 loadEnvFile(path.join(rootDir, 'web-dashboard', '.env.local'));
+loadEnvFile(path.join(process.env.HOME || '', 'domains/vultacore.techprogression.com/hbuilds/config/.env'));
 
 const masterPort = process.env.PORT || 3000;
 
@@ -58,8 +61,6 @@ let BACK_READY = false;
 let DASH_READY = false;
 let AI_READY = false;
 let isPrimaryManager = false;
-
-let bootLogs = [];
 
 function log(msg) {
     const line = `[${new Date().toLocaleTimeString()}] ${msg}`;
