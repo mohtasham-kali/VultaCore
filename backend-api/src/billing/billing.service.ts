@@ -31,7 +31,12 @@ export class BillingService {
     private readonly usersService: UsersService,
     private readonly eventsGateway: EventsGateway,
   ) {
-    this.lsApiKey = this.config.get<string>('LS_API_KEY') || process.env.LS_API_KEY || '';
+    this.lsApiKey =
+      this.config.get<string>('LS_API_KEY') ||
+      this.config.get<string>('LEMONSQUEEZY_API_KEY') ||
+      process.env.LS_API_KEY ||
+      process.env.LEMONSQUEEZY_API_KEY ||
+      '';
     this.lsStoreId = this.config.get<string>('LS_STORE_ID') || process.env.LS_STORE_ID || '';
     this.lsWebhookSecret = this.config.get<string>('LS_WEBHOOK_SECRET') || process.env.LS_WEBHOOK_SECRET || '';
     this.appUrl = this.config.get<string>('APP_URL') || process.env.APP_URL || 'https://vultacore.techprogression.com';
