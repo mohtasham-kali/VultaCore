@@ -6,50 +6,69 @@ on:
     paths:
       - 'web-dashboard/**'
       - '.github/workflows/ci-web.yml'
+  # No path filter on PRs: filtered workflows leave required checks "pending" forever.
   pull_request:
     branches: [main]
-    paths:
-      - 'web-dashboard/**'
+  workflow_call:   # lets cd-deploy.yml run this exact CI first
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-web-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # One source of truth for the API URL. Set it under Settings > Variables.
+  # (CI used .../api while CD used the bare domain, so the tested build
+  # was not the deployed build.)
+  NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
+  # Fork PRs get no secrets; fall back to harmless placeholders so the build still runs.
+  NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co' }}
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key' }}
+  NEXT_PUBLIC_LS_VARIANT_STANDARD: ${{ vars.NEXT_PUBLIC_LS_VARIANT_STANDARD }}
+  NEXT_PUBLIC_LS_VARIANT_PREMIUM: ${{ vars.NEXT_PUBLIC_LS_VARIANT_PREMIUM }}
+  # NOTE: "ENTERPISE" is spelled this way in your original. Check it matches the
+  # name read in your code; if the code says ENTERPRISE this value is undefined.
+  NEXT_PUBLIC_LS_VARIANT_ENTERPISE: ${{ vars.NEXT_PUBLIC_LS_VARIANT_ENTERPISE }}
+  NEXT_PUBLIC_LS_STORE_ID: ${{ vars.NEXT_PUBLIC_LS_STORE_ID }}
+  NEXT_PUBLIC_APP_URL: ${{ vars.NEXT_PUBLIC_APP_URL }}
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: web-dashboard
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: npm
+          cache-dependency-path: web-dashboard/package-lock.json
 
-      - name: Install dependencies
-        run: npm install
+      - name: Install (lockfile-exact)
+        run: npm ci
 
       - name: Type check
         run: npm run typecheck
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-          NEXT_PUBLIC_API_URL: https://vultacore.techprogression.com/api
-          NEXT_PUBLIC_LS_VARIANT_STANDARD: ${{ vars.NEXT_PUBLIC_LS_VARIANT_STANDARD }}
-          NEXT_PUBLIC_LS_VARIANT_PREMIUM: ${{ vars.NEXT_PUBLIC_LS_VARIANT_PREMIUM }}
-          NEXT_PUBLIC_LS_VARIANT_ENTERPISE: ${{ vars.NEXT_PUBLIC_LS_VARIANT_ENTERPISE }}
-          NEXT_PUBLIC_LS_STORE_ID: ${{ vars.NEXT_PUBLIC_LS_STORE_ID }}
-          NEXT_PUBLIC_APP_URL: ${{ vars.NEXT_PUBLIC_APP_URL }}
+
+      - name: Lint
+        run: npm run lint --if-present
+
+      - name: Unit tests
+        run: npm test --if-present
 
       - name: Production build
         run: npm run build
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-          NEXT_PUBLIC_API_URL: https://vultacore.techprogression.com/api
-          NEXT_PUBLIC_LS_VARIANT_STANDARD: ${{ vars.NEXT_PUBLIC_LS_VARIANT_STANDARD }}
-          NEXT_PUBLIC_LS_VARIANT_PREMIUM: ${{ vars.NEXT_PUBLIC_LS_VARIANT_PREMIUM }}
-          NEXT_PUBLIC_LS_VARIANT_ENTERPISE: ${{ vars.NEXT_PUBLIC_LS_VARIANT_ENTERPISE }}
-          NEXT_PUBLIC_LS_STORE_ID: ${{ vars.NEXT_PUBLIC_LS_STORE_ID }}
-          NEXT_PUBLIC_APP_URL: ${{ vars.NEXT_PUBLIC_APP_URL }}
+
+      - name: Upload tested build
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-out
+          path: web-dashboard/out
+          retention-days: 7
+          if-no-files-found: error

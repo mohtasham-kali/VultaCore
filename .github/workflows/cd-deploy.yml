@@ -3,128 +3,131 @@ name: CD — Deploy on Merge to Main
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read          # original had contents: write, which nothing needed
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false   # never cancel a deploy halfway
 
 jobs:
-   deploy-hostinger:
-    name: Build & Deploy to Hostinger
+  ci:
+    # Deploy only code that passed the same CI as PRs.
+    uses: ./.github/workflows/ci-web.yml
+    secrets: inherit
+
+  deploy-hostinger:
+    name: Deploy to Hostinger
+    needs: ci
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
+    timeout-minutes: 20
+    environment: production     # create it in Settings > Environments; add required reviewers if you want a manual gate
+    env:
+      # Set these under Settings > Secrets and variables. They were hardcoded
+      # in the original, which is public recon info in a public repo.
+      #   vars:    DEPLOY_PATH (the REAL app directory), HEALTH_URL
+      #   secrets: DEPLOY_HOST, DEPLOY_PORT, DEPLOY_USER, SSH_PRIVATE_KEY, DEPLOY_HOST_FINGERPRINT
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Deploy over SSH
+        id: deploy
+        uses: appleboy/ssh-action@v1.0.3   # let Dependabot (github-actions ecosystem) keep this current
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      - name: Install & Build Next.js
-        working-directory: web-dashboard
-        run: |
-          npm install
-          npm run build
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-          NEXT_PUBLIC_API_URL: https://techprogression.com
-
-      - name: Configure Git
-        run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-
-      - name: 🔍 Diagnose Hostinger Logs
-        uses: appleboy/ssh-action@v1.0.3
-        continue-on-error: true
-        with:
-          host: '45.130.228.127'
-          port: 65002
-          username: 'u879979656'
-          key: ${{ secrets.SSH_PRIVATE_KEY }}  # <--- Added Key here so this step passes
-          script: |
-            source ~/.bashrc 2>/dev/null || source ~/.bash_profile 2>/dev/null || true
-            echo "=== NODE VERSION ==="
-            node --version 2>&1 || echo "node not found in PATH"
-            echo "=== APP DIR CONTENTS ==="
-            ls -la ~/domains/://techprogression.com 2>/dev/null || echo "dir missing"
-            echo "=== HTTP-PROXY MODULE ==="
-            ls ~/domains/://techprogression.comnode_modules/http-proxy 2>/dev/null && echo "FOUND" || echo "MISSING"
-            echo "=== HOSTINGER STDERR.LOG (NODE APP CRASH) ==="
-            cat ~/domains/://techprogression.comstderr.log 2>/dev/null || echo "(no stderr.log)"
-            echo "=== HOSTINGER SERVER.LOG ==="
-            tail -n 100 ~/domains/://techprogression.comlogs/server.log 2>/dev/null || echo "(no server.log)"
-            echo "=== STARTUP TEST ==="
-            cd ~/domains/://techprogression.com
-            timeout 5 node app.js 2>&1 || echo "Test complete or crashed"
-
-      - name: Deploy to Hostinger via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        continue-on-error: true
-        with:
-          host: '45.130.228.127'
-          username: 'u879979656'
+          host: ${{ secrets.DEPLOY_HOST }}
+          port: ${{ secrets.DEPLOY_PORT }}
+          username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: 65002   
+          fingerprint: ${{ secrets.DEPLOY_HOST_FINGERPRINT }}   # pins the server host key
+          envs: DEPLOY_PATH
+          script_stop: true      # any failing command aborts the deploy
           script: |
-            set +e
+            set -euo pipefail
             source ~/.bashrc 2>/dev/null || source ~/.bash_profile 2>/dev/null || true
-            mkdir -p ~/domains/vultacore.techprogression.com/nodejs/public/downloads/
-            
-            # Prevent Git dubious ownership errors on shared Hostinger server
-            git config --global --add safe.directory "*" 2>/dev/null || true
 
-            cd ~/domains/://techprogression.com || mkdir -p ~/domains/://techprogression.com && cd ~/domains/://techprogression.com
+            # FIX: original cd'd into "~/domains/://techprogression.com", which is not a real
+            # path, and `mkdir -p ... && cd` silently created it. Fail instead of guessing.
+            [ -n "${DEPLOY_PATH:-}" ] || { echo "DEPLOY_PATH not set"; exit 1; }
+            [ -d "$DEPLOY_PATH/.git" ] || { echo "$DEPLOY_PATH is not a git checkout"; exit 1; }
+            cd "$DEPLOY_PATH"
 
-            echo "=== FETCHING LATEST CODE ==="
-            git fetch origin main 2>&1 || git fetch --all 2>&1 || echo "Git fetch warning"
-            git reset --hard origin/main 2>&1 || echo "Git reset warning"
+            git config --global --add safe.directory "$DEPLOY_PATH"
 
-            echo "=== INSTALLING NODE DEPENDENCIES ==="
-            npm install --omit=dev 2>&1 || echo "npm install warning — continuing build"
+            # Remember where we were so we can roll back.
+            git rev-parse HEAD > ~/.vultacore_prev_sha
 
-            echo "=== SETTING UP PYTHON AI SERVICE ==="
-            if [ -d "ai-services" ]; then
+            # saas.sqlite is tracked in git, so `reset --hard` would overwrite the live DB
+            # with the committed copy. Back it up and restore it. Remove this block once
+            # you `git rm --cached saas.sqlite` and gitignore it.
+            if [ -f saas.sqlite ]; then
+              mkdir -p ~/backups
+              cp saas.sqlite ~/backups/saas.$(date +%Y%m%d-%H%M%S).sqlite
+              cp saas.sqlite /tmp/saas.keep
+            fi
+
+            echo "=== FETCH ==="
+            git fetch origin main
+            git reset --hard origin/main
+            [ -f /tmp/saas.keep ] && cp /tmp/saas.keep saas.sqlite && rm -f /tmp/saas.keep
+
+            echo "=== NODE DEPS ==="
+            npm ci --omit=dev
+
+            echo "=== PYTHON AI SERVICE ==="
+            if [ -d ai-services ]; then
               cd ai-services
-              PYTHON_BIN=""
-              for py in /opt/alt/python311/bin/python3 /opt/alt/python310/bin/python3 /opt/alt/python39/bin/python3 python3.11 python3.10 python3.9 python3; do
-                if command -v $py &>/dev/null || [ -x "$py" ]; then
-                  PYTHON_BIN=$py
-                  break
-                fi
+              PY=""
+              for c in /opt/alt/python311/bin/python3 /opt/alt/python310/bin/python3 /opt/alt/python39/bin/python3 python3.11 python3.10 python3.9 python3; do
+                if command -v "$c" >/dev/null 2>&1 || [ -x "$c" ]; then PY="$c"; break; fi
               done
-              
-              if [ -n "$PYTHON_BIN" ]; then
-                echo "Using Python: $PYTHON_BIN"
-                if [ ! -d "venv" ] || [ ! -f "venv/bin/python" ]; then
-                  $PYTHON_BIN -m venv venv 2>/dev/null || true
-                fi
-                if [ -f "venv/bin/pip" ]; then
-                  ./venv/bin/pip install --quiet --upgrade pip 2>&1 || true
-                  ./venv/bin/pip install --quiet -r requirements.txt 2>&1 && echo "✅ AI deps installed in venv" || echo "AI deps install warning"
-                else
-                  $PYTHON_BIN -m pip --version &>/dev/null || (curl -sS https://pypa.io | $PYTHON_BIN 2>&1 || true)
-                  $PYTHON_BIN -m pip install --quiet --upgrade pip 2>&1 || true
-                  $PYTHON_BIN -m pip install --quiet --target ./.python_packages -r requirements.txt 2>&1 && echo "✅ AI deps installed locally in .python_packages" || echo "AI deps install warning"
-                fi
-              else
-                echo "⚠️ Python 3 not found on system"
-              fi
-              cd ~/domains/://techprogression.com
+              [ -n "$PY" ] || { echo "No Python 3 found"; exit 1; }
+              [ -x venv/bin/python ] || "$PY" -m venv venv
+              ./venv/bin/pip install --quiet --upgrade pip
+              ./venv/bin/pip install --quiet -r requirements.txt
+              cd "$DEPLOY_PATH"
             fi
 
-            echo "=== RESTARTING PASSENGER / NODE PROCESS ==="
-            if command -v passenger-config &>/dev/null; then
-              passenger-config restart-app ~/domains/://techprogression.com && echo "✅ passenger-config restart done"
-            elif command -v passenger &>/dev/null; then
-              passenger restart-app ~/domains/://techprogression.com && echo "✅ passenger restart done"
+            echo "=== RESTART ==="
+            if command -v passenger-config >/dev/null 2>&1; then
+              passenger-config restart-app "$DEPLOY_PATH"
             else
-              mkdir -p tmp && touch tmp/restart.txt && echo "✅ restart.txt touched"
+              mkdir -p tmp && touch tmp/restart.txt
             fi
+            echo "Deployed $(git rev-parse --short HEAD) at $(date -u)"
 
-            echo "Deploy complete at $(date)"
-            exit 0
+      # The original always went green. Now the job proves the site is up.
+      - name: Health check
+        id: health
+        run: |
+          URL="${{ vars.HEALTH_URL }}"
+          [ -n "$URL" ] || { echo "::error::HEALTH_URL not set"; exit 1; }
+          for i in 1 2 3 4 5 6; do
+            body=$(curl -fsS --max-time 20 "$URL" || true)
+            if echo "$body" | jq -e '.status=="up" and .ready.backend and .ready.dashboard and (.uptime < 600)' >/dev/null 2>&1; then
+              echo "Healthy and freshly restarted: $body"
+              echo "$body" | jq -e '.ready.ai' >/dev/null || echo "::warning::AI service is not ready"
+              exit 0
+            fi
+            echo "Attempt $i not healthy yet: $body"; sleep 10
+          done
+          echo "::error::Health check failed (down, not ready, or never restarted)"; exit 1
+
+      - name: Roll back on failure
+        if: failure() && steps.deploy.outcome == 'success' && steps.health.outcome == 'failure'
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          port: ${{ secrets.DEPLOY_PORT }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          fingerprint: ${{ secrets.DEPLOY_HOST_FINGERPRINT }}
+          envs: DEPLOY_PATH
+          script: |
+            set -e
+            source ~/.bashrc 2>/dev/null || true
+            cd "$DEPLOY_PATH"
+            git reset --hard "$(cat ~/.vultacore_prev_sha)"
+            npm ci --omit=dev
+            if command -v passenger-config >/dev/null 2>&1; then passenger-config restart-app "$DEPLOY_PATH"; else touch tmp/restart.txt; fi
+            echo "Rolled back to $(git rev-parse --short HEAD)"

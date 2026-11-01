@@ -2,72 +2,69 @@ name: Cron Jobs
 
 on:
   schedule:
-    # Keep Render API alive — runs every 14 minutes (Render sleeps after 15min)
+    # Keep-alive for Render free tier (sleeps after 15 min idle).
+    # GitHub cron is best-effort and can be delayed; an external pinger
+    # (UptimeRobot / cron-job.org, both free) is more reliable.
     - cron: '*/14 * * * *'
-    # Daily health report — runs every day at midnight UTC
-    - cron: '0 0 * * *'
-  workflow_dispatch: # Allow manual trigger from Actions tab
+    # Daily maintenance, offset from :00 to avoid GitHub's top-of-hour congestion.
+    - cron: '17 0 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: cron-${{ github.event.schedule || 'manual' }}
+  cancel-in-progress: false
 
 jobs:
   keep-alive:
-    name: Ping API (Prevent Sleep)
+    name: Ping API (prevent sleep)
+    # FIX: the original ran the daily job on BOTH schedules (every 14 min).
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '*/14 * * * *'
     runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+      AI_URL: ${{ secrets.AI_SERVICE_URL }}
     steps:
-      - name: Ping Backend API
+      - name: Ping services
         run: |
-          URL="${{ secrets.NEXT_PUBLIC_API_URL }}"
-          if [ -z "$URL" ]; then
-            echo "::warning::NEXT_PUBLIC_API_URL secret is not set, skipping ping..."
-          else
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL/" || echo "curl_failed")
-            echo "API responded with HTTP $STATUS"
-            if [ "$STATUS" != "200" ]; then
-              echo "::warning::API returned $STATUS — may be starting up"
-            fi
-          fi
-
-      - name: Ping AI Service
-        run: |
-          URL="${{ secrets.AI_SERVICE_URL }}"
-          if [ -z "$URL" ]; then
-            echo "::warning::AI_SERVICE_URL secret is not set, skipping ping..."
-          else
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL/health" || echo "000")
-            echo "AI Service responded with HTTP $STATUS"
-          fi
+          ping_url() {
+            name="$1"; url="$2"
+            if [ -z "$url" ]; then echo "::warning::$name URL not set, skipping"; return 0; fi
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 60 --retry 2 "$url" || true)
+            echo "$name -> HTTP $code"
+            case "$code" in 2*|3*) ;; *) echo "::warning::$name returned $code (may be waking up)";; esac
+          }
+          ping_url "API" "${API_URL%/}/"
+          ping_url "AI service" "${AI_URL%/}/health"
 
   daily-maintenance:
-    name: Daily Maintenance Tasks
+    name: Daily maintenance
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '17 0 * * *'
     runs-on: ubuntu-latest
-    # Only run on the midnight schedule
-    if: github.event_name == 'schedule'
+    timeout-minutes: 10
+    env:
+      API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
     steps:
-      - name: Trigger Analytics Aggregation
+      - name: Require config
         run: |
-          URL="${{ secrets.NEXT_PUBLIC_API_URL }}"
-          if [ -z "$URL" ]; then
-            echo "::warning::NEXT_PUBLIC_API_URL secret is not set, skipping aggregation..."
-          else
-            curl -s -X POST "$URL/analytics/aggregate" \
-              -H "Content-Type: application/json" \
-              -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
-              || echo "Aggregation endpoint failed or not yet implemented"
-          fi
+          [ -n "$API_URL" ] || { echo "::error::NEXT_PUBLIC_API_URL secret is not set"; exit 1; }
+          [ -n "$CRON_SECRET" ] || { echo "::error::CRON_SECRET secret is not set"; exit 1; }
 
-      - name: Clean Old Notifications (>30 days)
+      # -f makes curl fail on HTTP 4xx/5xx, so a broken endpoint turns the run red
+      # instead of being swallowed by `|| echo`.
+      - name: Trigger analytics aggregation
         run: |
-          URL="${{ secrets.NEXT_PUBLIC_API_URL }}"
-          if [ -z "$URL" ]; then
-            echo "::warning::NEXT_PUBLIC_API_URL secret is not set, skipping cleanup..."
-          else
-            curl -s -X DELETE "$URL/notifications/cleanup" \
-              -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
-              || echo "Cleanup endpoint failed or not yet implemented"
-          fi
+          curl -fsS --max-time 120 -X POST "${API_URL%/}/analytics/aggregate" \
+            -H "Content-Type: application/json" \
+            -H "x-cron-secret: $CRON_SECRET"
 
-      - name: Report Summary
+      - name: Clean old notifications (>30 days)
         run: |
-          echo "==============================="
-          echo "Daily Maintenance Complete"
-          echo "Timestamp: $(date -u)"
-          echo "==============================="
+          curl -fsS --max-time 120 -X DELETE "${API_URL%/}/notifications/cleanup" \
+            -H "x-cron-secret: $CRON_SECRET"
+
+      - name: Summary
+        run: echo "Daily maintenance complete at $(date -u)" >> "$GITHUB_STEP_SUMMARY"
