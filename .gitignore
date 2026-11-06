@@ -55,3 +55,16 @@ desktop-app/src-tauri/target/
 actions-runner/
 web-dashboard/public/downloads/
 /security-reports/
+*.sqlite
+.env
+.env.*
+!.env.example
+**/dist/
+**/.next/
+out/
+target/
+*.log
+*.AppImage
+*.deb
+downloaded-installers/
+public/downloads/
