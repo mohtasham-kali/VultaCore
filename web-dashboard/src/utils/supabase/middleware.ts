@@ -6,13 +6,17 @@ export async function updateSession(request: NextRequest) {
     request,
   })
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const DEFAULT_SUPABASE_URL = 'https://izimqwjupqzcogrtyuik.supabase.co';
+  const DEFAULT_SUPABASE_ANON_KEY =
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml6aW1xd2p1cHF6Y29ncnR5dWlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4NDAzMDYsImV4cCI6MjA5MTQxNjMwNn0.iYPKYStQvwtMYSERgjhomgwFuVQVnFHt1ksn0E-vhQY';
 
-  if (!supabaseUrl || !supabaseKey) {
-    console.error("Missing Supabase Environment Variables in Middleware!");
-    return supabaseResponse;
-  }
+  const envUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const envKey =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  const supabaseUrl = envUrl && !envUrl.includes('placeholder') ? envUrl : DEFAULT_SUPABASE_URL;
+  const supabaseKey = envKey && !envKey.includes('placeholder') ? envKey : DEFAULT_SUPABASE_ANON_KEY;
 
   const supabase = createServerClient(
     supabaseUrl,
