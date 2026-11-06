@@ -13,6 +13,9 @@ export async function GET(request: Request) {
 
   const cwd = process.cwd();
   const candidateDirs = [
+    '/home/u879979656/domains/vultacore.techprogression.com/nodejs/public/downloads',
+    path.join(cwd, '..', 'nodejs', 'public', 'downloads'),
+    path.join(cwd, 'nodejs', 'public', 'downloads'),
     path.join(cwd, 'public', 'downloads'),
     path.join(cwd, '..', 'public', 'downloads'),
     path.join(cwd, '..', 'downloaded-installers', 'installers-linux'),

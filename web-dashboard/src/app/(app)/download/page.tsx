@@ -6,37 +6,41 @@ const downloadOptions = [
   {
     platform: "Windows",
     version: "2.1.0",
-    format: ".exe",
+    format: ".exe Installer",
     icon: Monitor,
     color: "text-blue-400",
     bgColor: "bg-blue-500/10",
     borderColor: "border-blue-500/20",
     url: "/api/download?os=windows",
-    description: "Installable executable for Windows 10/11 with full hardware acceleration."
+    secondaryUrl: "/api/download?file=VultaCore_0.1.0_x64-setup.exe",
+    secondaryLabel: "Direct .exe Package",
+    description: "Installable setup executable (.exe) for Windows 10/11 with full hardware acceleration."
   },
   {
     platform: "Linux",
     version: "2.1.0",
-    format: "AppImage & .deb",
+    format: ".AppImage & .deb",
     icon: Terminal,
     color: "text-orange-400",
     bgColor: "bg-orange-500/10",
     borderColor: "border-orange-500/20",
-    url: "/api/download?os=linux",
+    url: "/api/download?os=linux&format=appimage",
     secondaryUrl: "/api/download?os=linux&format=deb",
     secondaryLabel: "Debian / Ubuntu (.deb)",
-    description: "Portable AppImage for all Linux distributions. No installation required."
+    description: "Portable standalone .AppImage for all Linux distributions. No installation required."
   },
   {
     platform: "macOS",
     version: "2.1.0",
-    format: ".dmg",
+    format: ".dmg & .AppImage",
     icon: Laptop,
     color: "text-purple-400",
     bgColor: "bg-purple-500/10",
     borderColor: "border-purple-500/20",
     url: "/api/download?os=macos",
-    description: "Universal disk image for Apple Silicon (M1/M2/M3) and Intel Macs."
+    secondaryUrl: "/api/download?os=macos&format=appimage",
+    secondaryLabel: "Universal .AppImage",
+    description: "Universal installer for Apple Silicon and Intel machines (.dmg and portable .AppImage)."
   }
 ];
 

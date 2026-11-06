@@ -455,6 +455,9 @@ const server = http.createServer((req, res) => {
         const format = (parsed.searchParams.get('format') || '').toLowerCase();
 
         const candidateDirs = [
+            '/home/u879979656/domains/vultacore.techprogression.com/nodejs/public/downloads',
+            path.join(rootDir, 'nodejs', 'public', 'downloads'),
+            path.join(rootDir, '..', 'nodejs', 'public', 'downloads'),
             path.join(rootDir, 'public', 'downloads'),
             path.join(rootDir, 'web-dashboard', 'public', 'downloads'),
             path.join(rootDir, 'downloaded-installers', 'installers-linux'),
@@ -462,11 +465,20 @@ const server = http.createServer((req, res) => {
         ];
 
         let targetFile = null;
+        const requestedFile = parsed.searchParams.get('file');
 
         for (const dir of candidateDirs) {
             if (!fs.existsSync(dir)) continue;
             let files = [];
             try { files = fs.readdirSync(dir); } catch (_) { }
+
+            if (requestedFile) {
+                const safeName = path.basename(requestedFile);
+                if (files.includes(safeName)) {
+                    targetFile = path.join(dir, safeName);
+                    break;
+                }
+            }
 
             if (os === 'windows' || os === 'win') {
                 targetFile = files.find(f => f.endsWith('.exe')) || files.find(f => f.endsWith('.msi'));
@@ -477,7 +489,11 @@ const server = http.createServer((req, res) => {
                     targetFile = files.find(f => f.endsWith('.AppImage')) || files.find(f => f.endsWith('.deb'));
                 }
             } else if (os === 'macos' || os === 'mac' || os === 'darwin') {
-                targetFile = files.find(f => f.endsWith('.dmg')) || files.find(f => f.endsWith('.pkg'));
+                if (format === 'appimage') {
+                    targetFile = files.find(f => f.endsWith('.AppImage')) || files.find(f => f.endsWith('.dmg')) || files.find(f => f.endsWith('.pkg'));
+                } else {
+                    targetFile = files.find(f => f.endsWith('.dmg')) || files.find(f => f.endsWith('.pkg')) || files.find(f => f.endsWith('.AppImage'));
+                }
             }
             if (targetFile) {
                 targetFile = path.join(dir, targetFile);
