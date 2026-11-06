@@ -54,3 +54,4 @@ analytics-engine/target/
 desktop-app/src-tauri/target/
 actions-runner/
 web-dashboard/public/downloads/
+/security-reports/
