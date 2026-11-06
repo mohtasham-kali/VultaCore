@@ -1,0 +1,48 @@
+# Git and DevSecOps
+.git
+.github
+.semgrep
+.zap
+.vscode
+
+# Secrets and environment variables
+.env*
+!.env.example
+*.pem
+*.key
+*.cert
+*.sqlite
+*.sqlite-journal
+
+# Build outputs and dependencies
+node_modules/
+dist/
+out/
+.next/
+web-dashboard/.next/
+web-dashboard/out/
+backend-api/dist/
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# System and logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+error_log.txt
+.engine-state.json
+.engine.lock
+
+# Desktop & Mobile
+desktop-app/src-tauri/target/
+analytics-engine/target/
+downloaded-installers/
+actions-runner/
+

@@ -8,7 +8,32 @@ async function bootstrap() {
       // Capture raw body buffer — required for Lemon Squeezy webhook HMAC verification
       rawBody: true,
     });
-    app.enableCors();
+
+    // Enforce strict CORS with production origin whitelisting
+    const allowedOrigins = [
+      'https://vultacore.techprogression.com',
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      process.env.APP_URL,
+    ].filter(Boolean) as string[];
+
+    app.enableCors({
+      origin: (
+        origin: string | undefined,
+        callback: (err: Error | null, allow?: boolean) => void,
+      ) => {
+        // Allow requests with no origin (e.g. mobile apps, master proxy, or curl)
+        if (!origin || allowedOrigins.includes(origin)) {
+          callback(null, true);
+        } else {
+          callback(new Error(`CORS blocked request from origin: ${origin}`));
+        }
+      },
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'x-signature', 'apikey'],
+    });
+
     app.setGlobalPrefix('api');
     const port = process.env.PORT || 3001;
 

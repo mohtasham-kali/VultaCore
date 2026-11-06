@@ -1,0 +1,94 @@
+name: Container Security & Image Build (Docker & Trivy)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend-api/**'
+      - 'web-dashboard/**'
+      - 'ai-services/**'
+      - 'docker/**'
+      - '.github/workflows/docker.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend-api/**'
+      - 'web-dashboard/**'
+      - 'ai-services/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-scan:
+    name: Build & Scan Container Images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - name: backend-api
+            context: ./backend-api
+            dockerfile: ./backend-api/Dockerfile
+            image: vultacore-api
+          - name: ai-services
+            context: ./ai-services
+            dockerfile: ./ai-services/Dockerfile
+            image: vultacore-ai
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Container Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.service.context }}
+          file: ${{ matrix.service.dockerfile }}
+          load: true
+          tags: ${{ matrix.service.image }}:local-test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify Non-Root User Execution
+        run: |
+          USER_ID=$(docker run --rm ${{ matrix.service.image }}:local-test id -u)
+          echo "Container running as UID: $USER_ID"
+          if [ "$USER_ID" -eq 0 ]; then
+            echo "::error::Container runs as root (UID 0)! Non-root user required."
+            exit 1
+          fi
+
+      - name: Run Trivy Image Vulnerability Scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ matrix.service.image }}:local-test
+          format: table
+          exit-code: '0' # Non-blocking on high/crit base image CVEs, reports findings
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
+
+      - name: Generate Software Bill of Materials (SBOM)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ matrix.service.image }}:local-test
+          format: spdx-json
+          output: sbom-${{ matrix.service.name }}.spdx.json
+
+      - name: Upload SBOM Artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sbom-${{ matrix.service.name }}
+          path: sbom-${{ matrix.service.name }}.spdx.json
+          retention-days: 30
+

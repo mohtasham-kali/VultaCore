@@ -39,24 +39,30 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // Simplified redirect logic: Only redirect if definitely not logged in and trying to access protected paths
   const isAuthPage = request.nextUrl.pathname.startsWith('/auth');
-  const isHomePage = request.nextUrl.pathname === '/';
-  const isStaticAsset = request.nextUrl.pathname.includes('.');
+  const isAdminPage = request.nextUrl.pathname.startsWith('/admin');
 
-  // DEBUG: Add a header to see if the server detected a user
-  supabaseResponse.headers.set('X-Vultacore-User', user ? 'detected' : 'none');
-  supabaseResponse.headers.set('X-Vultacore-Debug', isAuthPage ? 'auth-page' : 'protected-page');
+  // Enforce server-side route protection for admin panel
+  if (isAdminPage) {
+    if (!user) {
+      const loginUrl = request.nextUrl.clone();
+      loginUrl.pathname = '/auth';
+      loginUrl.searchParams.set('redirect', request.nextUrl.pathname);
+      return NextResponse.redirect(loginUrl);
+    }
 
-  /*
-  // Temporary disable redirect to see if session works at all
-  if (!user && !isAuthPage && !isHomePage && !isStaticAsset) {
-    // no user, potentially respond by redirecting the user to the login page
-    const url = request.nextUrl.clone()
-    url.pathname = '/auth'
-    return NextResponse.redirect(url)
+    const adminEmail = (process.env.ADMIN_EMAIL || 'mohtasham.siddiqui17@gmail.com').toLowerCase().trim();
+    if ((user.email || '').toLowerCase().trim() !== adminEmail) {
+      const homeUrl = request.nextUrl.clone();
+      homeUrl.pathname = '/';
+      return NextResponse.redirect(homeUrl);
+    }
   }
-  */
+
+  // Only emit debug headers in development environment
+  if (process.env.NODE_ENV === 'development') {
+    supabaseResponse.headers.set('X-Vultacore-User', user ? 'detected' : 'none');
+  }
 
   // IMPORTANT: You *must* return the supabaseResponse object as it is. If you're creating a new
   // response object with NextResponse.next() make sure to:

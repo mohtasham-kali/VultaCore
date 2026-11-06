@@ -152,12 +152,18 @@ export class BillingService {
    * Verifies the Lemon Squeezy webhook signature and processes the event.
    */
   async handleWebhook(rawBody: Buffer, signature: string): Promise<void> {
-    // 1. Verify HMAC-SHA256 signature
+    // 1. Verify HMAC-SHA256 signature using constant-time comparison (prevents timing attacks)
     const hmac = crypto.createHmac('sha256', this.lsWebhookSecret);
     hmac.update(rawBody);
     const digest = hmac.digest('hex');
 
-    if (digest !== signature) {
+    const digestBuf = Buffer.from(digest, 'utf8');
+    const signatureBuf = Buffer.from(signature || '', 'utf8');
+
+    if (
+      digestBuf.length !== signatureBuf.length ||
+      !crypto.timingSafeEqual(digestBuf, signatureBuf)
+    ) {
       this.logger.warn('❌ Webhook signature mismatch — ignoring.');
       throw new Error('Invalid webhook signature');
     }

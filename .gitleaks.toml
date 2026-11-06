@@ -1,0 +1,35 @@
+title = "VultaCore Gitleaks Configuration"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Global allowlist for harmless placeholders and test fixtures"
+paths = [
+  '''^\.next/''',
+  '''^node_modules/''',
+  '''^web-dashboard/\.next/''',
+  '''^dist/''',
+  '''^out/''',
+  '''^package-lock\.json$''',
+]
+regexes = [
+  '''placeholder-anon-key''',
+  '''https://placeholder\.supabase\.co''',
+  '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.eyJpc3MiOiJzdXBhYmFzZS''', # Supabase public anon key prefix
+]
+
+[[rules]]
+id = "vultacore-lemonsqueezy-api-key"
+description = "Lemon Squeezy API Key Detection"
+regex = '''(?i)(?:lemonsqueezy|ls)[-_]?(?:api[-_]?key|secret|token)\s*[:=]\s*['"][a-zA-Z0-9_\-\.]{20,}['"]'''
+secretGroup = 0
+keywords = ["lemonsqueezy", "ls_api_key", "ls_webhook_secret"]
+
+[[rules]]
+id = "vultacore-supabase-service-role"
+description = "Supabase Service Role Secret Key"
+regex = '''(?i)(?:supabase|service)[-_]?(?:role|secret)[-_]?(?:key)?\s*[:=]\s*['"]ey[a-zA-Z0-9_\-\.]{50,}['"]'''
+secretGroup = 0
+keywords = ["supabase", "service_role", "SUPABASE_SERVICE_KEY"]
+

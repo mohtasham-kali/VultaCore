@@ -1,0 +1,44 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: isolate-ai-service
+  labels:
+    app: vultacore-ai
+spec:
+  podSelector:
+    matchLabels:
+      app: vultacore-ai
+  policyTypes:
+  - Ingress
+  ingress:
+  # Allow incoming traffic ONLY from backend-api pods
+  - from:
+    - podSelector:
+        matchLabels:
+          app: vultacore-api
+    ports:
+    - protocol: TCP
+      port: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: protect-backend-api
+  labels:
+    app: vultacore-api
+spec:
+  podSelector:
+    matchLabels:
+      app: vultacore-api
+  policyTypes:
+  - Ingress
+  ingress:
+  # Allow ingress from ingress-controller and web-dashboard
+  - from:
+    - podSelector:
+        matchLabels:
+          app: vultacore-web
+    ports:
+    - protocol: TCP
+      port: 3001
+

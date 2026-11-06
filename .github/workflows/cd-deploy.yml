@@ -13,14 +13,19 @@ concurrency:
   cancel-in-progress: false   # never cancel a deploy halfway
 
 jobs:
-  ci:
-    # Deploy only code that passed the same CI as PRs.
+  ci-web:
+    # Deploy only code that passed frontend CI
     uses: ./.github/workflows/ci-web.yml
+    secrets: inherit
+
+  ci-api:
+    # Deploy only code that passed backend API CI
+    uses: ./.github/workflows/ci-api.yml
     secrets: inherit
 
   deploy-hostinger:
     name: Deploy to Hostinger
-    needs: ci
+    needs: [ci-web, ci-api]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production     # create it in Settings > Environments; add required reviewers if you want a manual gate

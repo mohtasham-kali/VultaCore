@@ -1,15 +1,17 @@
-name: Security
+name: Security Pipeline (SAST, SCA, Secrets)
 
 on:
   pull_request:
+    branches: [main, develop]
   push:
     branches: [main]
   schedule:
-    - cron: '23 3 * * 1'    # weekly full scan, Mondays
+    - cron: '23 3 * * 1' # Weekly full scan, Mondays at 03:23 UTC
   workflow_dispatch:
 
 permissions:
   contents: read
+  security-events: write
 
 concurrency:
   group: security-${{ github.ref }}
@@ -17,72 +19,78 @@ concurrency:
 
 jobs:
   secrets:
-    name: Gitleaks (secrets, full history)
+    name: Gitleaks (Secrets Detection)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
-      # Container instead of a third-party action. Pin to a digest once you pick a version.
-      - run: |
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks Scanner
+        run: |
           docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:latest \
-            detect --source /repo --redact --exit-code 1
+            detect --source /repo --config /repo/.gitleaks.toml --redact --exit-code 1
 
   sast-semgrep:
     name: Semgrep (SAST)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: '3.12' }
-      - run: |
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install & Run Semgrep
+        run: |
           pip install semgrep
-          semgrep scan --config p/default --config p/typescript --config p/python \
-            --metrics=off --error --exclude node_modules --exclude out
+          semgrep scan \
+            --config p/default \
+            --config p/typescript \
+            --config p/python \
+            --config .semgrep/rules.yml \
+            --metrics=off \
+            --error \
+            --exclude node_modules \
+            --exclude out \
+            --exclude dist \
+            --exclude .next
 
   trivy:
-    name: Trivy (deps, secrets, IaC / Dockerfiles)
+    name: Trivy (SCA & Misconfigurations)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - run: |
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy File System Scan
+        run: |
           docker run --rm -v "$PWD:/src" aquasec/trivy:latest fs \
-            --scanners vuln,secret,misconfig \
-            --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
-            --skip-dirs node_modules --skip-dirs out --skip-dirs target /src
+            --config /src/.trivy.yaml \
+            /src
 
   codeql:
-    name: CodeQL (free on public repos)
+    name: CodeQL Deep Analysis
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    permissions:
-      contents: read
-      security-events: write
     strategy:
       fail-fast: false
       matrix:
         language: [javascript-typescript, python]
     steps:
-      - uses: actions/checkout@v4
-      - uses: github/codeql-action/init@v3
-        with: { languages: '${{ matrix.language }}' }
-      - uses: github/codeql-action/analyze@v3
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-  zap-baseline:
-    name: OWASP ZAP baseline (passive scan)
-    # Set repo variable ZAP_TARGET (staging or preview URL). Never scan someone else's site.
-    if: ${{ vars.ZAP_TARGET != '' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - run: mkdir -p zap && chmod 777 zap
-      - run: |
-          docker run --rm -v "$PWD/zap:/zap/wrk:rw" ghcr.io/zaproxy/zaproxy:stable \
-            zap-baseline.py -t "${{ vars.ZAP_TARGET }}" -r report.html -I
-      - uses: actions/upload-artifact@v4
-        if: always()
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
         with:
-          name: zap-report
-          path: zap/report.html
+          languages: ${{ matrix.language }}
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3

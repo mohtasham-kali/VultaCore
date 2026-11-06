@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vultacore-ai
+  labels:
+    app: vultacore-ai
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vultacore-ai
+  template:
+    metadata:
+      labels:
+        app: vultacore-ai
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10002
+        runAsGroup: 10002
+        fsGroup: 10002
+      containers:
+      - name: ai
+        image: ghcr.io/mohtasham-kali/vultacore-ai:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000
+          name: http
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+        env:
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: PORT
+          value: "8000"
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vultacore-ai
+  labels:
+    app: vultacore-ai
+spec:
+  type: ClusterIP
+  selector:
+    app: vultacore-ai
+  ports:
+  - port: 8000
+    targetPort: 8000
+    name: http
+

@@ -1,0 +1,65 @@
+rules:
+  - id: nestjs-missing-guard-mutation
+    languages: [typescript]
+    severity: WARNING
+    message: "Detected NestJS state-changing HTTP endpoint without @UseGuards(). Verify authorization is enforced."
+    metadata:
+      cwe: "CWE-285: Improper Authorization"
+      owasp: "A01:2021 - Broken Access Control"
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: |
+              @Patch(...)
+              $METHOD(...) { ... }
+          - pattern: |
+              @Delete(...)
+              $METHOD(...) { ... }
+      - pattern-not-inside: |
+          @UseGuards(...)
+          ...
+          $METHOD(...) { ... }
+
+  - id: timing-attack-signature-comparison
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: "Direct string comparison of cryptographic signatures or HMAC digests is vulnerable to timing attacks. Use crypto.timingSafeEqual()."
+    metadata:
+      cwe: "CWE-208: Observable Timing Discrepancy"
+      owasp: "A02:2021 - Cryptographic Failures"
+      category: security
+    pattern-either:
+      - pattern: $DIGEST === $SIGNATURE
+      - pattern: $DIGEST !== $SIGNATURE
+    metavariable-regex:
+      metavariable: $SIGNATURE
+      regex: "(?i)(sig|signature|hmac|hash|digest|token)"
+
+  - id: nestjs-unrestricted-cors
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: "app.enableCors() without explicit origin restriction allows all domains (*). Restrict to trusted production origins."
+    metadata:
+      cwe: "CWE-942: Permissive Cross-Domain Policy with Untrusted Domains"
+      owasp: "A05:2021 - Security Misconfiguration"
+      category: security
+    pattern: app.enableCors()
+
+  - id: typeorm-production-synchronize
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: "TypeOrmModule configured with synchronize: true. This can cause unexpected schema migrations or data loss in production."
+    metadata:
+      cwe: "CWE-668: Exposure of Resource to Wrong Sphere"
+      category: security
+    pattern: synchronize: true
+
+  - id: nextjs-debug-headers-leak
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: "Avoid leaking internal user detection or debug state via HTTP response headers in production."
+    metadata:
+      cwe: "CWE-200: Exposure of Sensitive Information"
+      category: security
+    pattern: $RES.headers.set('X-Vultacore-Debug', ...)
+

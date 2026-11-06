@@ -71,8 +71,13 @@ let BillingService = BillingService_1 = class BillingService {
         this.config = config;
         this.usersService = usersService;
         this.eventsGateway = eventsGateway;
-        this.lsApiKey = this.config.get('LS_API_KEY') || process.env.LS_API_KEY || '';
-        this.lsStoreId = this.config.get('LS_STORE_ID') || process.env.LS_STORE_ID || '';
+        this.lsApiKey =
+            this.config.get('LS_API_KEY') ||
+                this.config.get('LEMONSQUEEZY_API_KEY') ||
+                process.env.LS_API_KEY ||
+                process.env.LEMONSQUEEZY_API_KEY ||
+                '';
+        this.lsStoreId = this.config.get('LS_STORE_ID') || process.env.LS_STORE_ID || '410740';
         this.lsWebhookSecret = this.config.get('LS_WEBHOOK_SECRET') || process.env.LS_WEBHOOK_SECRET || '';
         this.appUrl = this.config.get('APP_URL') || process.env.APP_URL || 'https://vultacore.techprogression.com';
         const variantStandard = this.config.get('LS_VARIANT_STANDARD') || process.env.LS_VARIANT_STANDARD || '1820715';
@@ -141,13 +146,20 @@ let BillingService = BillingService_1 = class BillingService {
                 },
             },
         };
-        const response = await (0, rxjs_1.firstValueFrom)(this.http.post('https://api.lemonsqueezy.com/v1/checkouts', payload, {
-            headers: {
-                Accept: 'application/vnd.api+json',
-                'Content-Type': 'application/vnd.api+json',
-                Authorization: `Bearer ${this.lsApiKey}`,
-            },
-        }));
+        let response;
+        try {
+            response = await (0, rxjs_1.firstValueFrom)(this.http.post('https://api.lemonsqueezy.com/v1/checkouts', payload, {
+                headers: {
+                    Accept: 'application/vnd.api+json',
+                    'Content-Type': 'application/vnd.api+json',
+                    Authorization: `Bearer ${this.lsApiKey}`,
+                },
+            }));
+        }
+        catch (err) {
+            this.logger.error(`LS error (store="${this.lsStoreId}", variant="${variantId}"): ${JSON.stringify(err?.response?.data)}`);
+            throw new Error(err?.response?.data?.errors?.[0]?.detail || err.message);
+        }
         const checkoutUrl = response.data?.data?.attributes?.url;
         if (!checkoutUrl) {
             throw new Error('Lemon Squeezy did not return a checkout URL.');
@@ -159,7 +171,10 @@ let BillingService = BillingService_1 = class BillingService {
         const hmac = crypto.createHmac('sha256', this.lsWebhookSecret);
         hmac.update(rawBody);
         const digest = hmac.digest('hex');
-        if (digest !== signature) {
+        const digestBuf = Buffer.from(digest, 'utf8');
+        const signatureBuf = Buffer.from(signature || '', 'utf8');
+        if (digestBuf.length !== signatureBuf.length ||
+            !crypto.timingSafeEqual(digestBuf, signatureBuf)) {
             this.logger.warn('❌ Webhook signature mismatch — ignoring.');
             throw new Error('Invalid webhook signature');
         }

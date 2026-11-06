@@ -1,5 +1,7 @@
-import { Controller, Get, Patch, Body } from '@nestjs/common';
+import { Controller, Get, Patch, Body, UseGuards } from '@nestjs/common';
 import { SettingsService } from './settings.service';
+import { SupabaseAuthGuard } from '../common/guards/supabase-auth.guard';
+import { AdminGuard } from '../common/guards/admin.guard';
 
 @Controller('settings')
 export class SettingsController {
@@ -11,6 +13,7 @@ export class SettingsController {
   }
 
   @Patch()
+  @UseGuards(SupabaseAuthGuard, AdminGuard)
   async updateSettings(@Body() updateSettingsDto: Record<string, string>) {
     const promises = Object.entries(updateSettingsDto).map(([key, value]) =>
       this.settingsService.setValue(key, value.toString())

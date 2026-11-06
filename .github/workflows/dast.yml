@@ -1,0 +1,58 @@
+name: DAST — Dynamic Security Testing (OWASP ZAP)
+
+on:
+  schedule:
+    - cron: '0 4 * * 0' # Weekly Sunday scan at 04:00 UTC
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: 'Target URL to scan (e.g. staging or preview URL)'
+        required: false
+        default: 'https://vultacore.techprogression.com'
+
+permissions:
+  contents: read
+  security-events: write
+
+concurrency:
+  group: dast-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  zap-scan:
+    name: OWASP ZAP Baseline Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Prepare Report Workspace
+        run: |
+          mkdir -p zap-reports
+          chmod 777 zap-reports
+
+      - name: Run OWASP ZAP Scanner
+        env:
+          TARGET: ${{ inputs.target_url || vars.STAGING_URL || vars.ZAP_TARGET || 'https://vultacore.techprogression.com' }}
+        run: |
+          echo "Scanning target: $TARGET"
+          docker run --rm \
+            -v "$PWD/zap-reports:/zap/wrk:rw" \
+            -v "$PWD/.zap/rules.tsv:/zap/rules.tsv:ro" \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py \
+              -t "$TARGET" \
+              -c /zap/rules.tsv \
+              -r zap-report.html \
+              -J zap-report.json \
+              -I || true
+
+      - name: Upload ZAP Security Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zap-security-reports
+          path: zap-reports/
+          retention-days: 30
+

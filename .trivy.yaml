@@ -1,0 +1,27 @@
+# Trivy configuration file for VultaCore DevSecOps
+severity:
+  - HIGH
+  - CRITICAL
+
+ignore-unfixed: true
+
+scan:
+  scanners:
+    - vuln
+    - misconfig
+    - secret
+  skip-dirs:
+    - node_modules
+    - web-dashboard/node_modules
+    - backend-api/node_modules
+    - web-dashboard/.next
+    - dist
+    - out
+    - target
+    - desktop-app/src-tauri/target
+    - downloaded-installers
+    - .git
+
+format: table
+exit-code: 1
+

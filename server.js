@@ -399,34 +399,47 @@ function tryServeStatic(req, res) {
 
 // ─── Master HTTP Server ─────────────────────────────────────────────────────
 const server = http.createServer((req, res) => {
-    // Diagnostic endpoints — always available
-    if (req.url === '/logs' || req.url === '/_logs') {
+    const parsedUrl = new URL(req.url, 'http://localhost');
+    const logsSecret = process.env.ADMIN_KEY || process.env.SERVER_LOGS_SECRET || '';
+
+    // Diagnostic log endpoints — protected in production to prevent info disclosure
+    if (parsedUrl.pathname === '/logs' || parsedUrl.pathname === '/_logs') {
+        const providedKey = req.headers['x-admin-key'] || parsedUrl.searchParams.get('key');
+        if (logsSecret && providedKey !== logsSecret && process.env.NODE_ENV === 'production') {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Access forbidden' }));
+        }
         res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
         return res.end(bootLogs.join('\n'));
     }
-    if (req.url === '/health') {
+
+    // Health check endpoint (used by CI/CD deployment verification)
+    if (parsedUrl.pathname === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({
             status: 'up',
             ready: { backend: BACK_READY, dashboard: DASH_READY, ai: AI_READY },
-            targets: { backend: BACK_TARGET, dashboard: DASH_TARGET, ai: AI_TARGET },
             isPrimary: isPrimaryManager,
             pid: process.pid,
             uptime: process.uptime()
         }));
     }
+
     // Admin boot log endpoint
-    if (req.url === '/api/boot-logs') {
+    if (parsedUrl.pathname === '/api/boot-logs') {
+        const providedKey = req.headers['x-admin-key'] || parsedUrl.searchParams.get('key');
+        if (logsSecret && providedKey !== logsSecret && process.env.NODE_ENV === 'production') {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Access forbidden' }));
+        }
         const hasErrors = bootLogs.some(l => l.includes('❌'));
         res.writeHead(200, {
             'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
         });
         return res.end(JSON.stringify({
             logs: bootLogs,
             hasErrors,
             uptime: process.uptime(),
-            targets: { backend: BACK_TARGET, dashboard: DASH_TARGET, ai: AI_TARGET },
             booted: !!(BACK_READY && DASH_READY),
             ready: { backend: BACK_READY, dashboard: DASH_READY, ai: AI_READY },
             isPrimary: isPrimaryManager,

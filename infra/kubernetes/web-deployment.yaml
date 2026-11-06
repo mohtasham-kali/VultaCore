@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vultacore-web
+  labels:
+    app: vultacore-web
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: vultacore-web
+  template:
+    metadata:
+      labels:
+        app: vultacore-web
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+      containers:
+      - name: web
+        image: ghcr.io/mohtasham-kali/vultacore-web:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3000
+          name: http
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: PORT
+          value: "3000"
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "384Mi"
+          limits:
+            cpu: "750m"
+            memory: "768Mi"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 25
+          periodSeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 15
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vultacore-web
+  labels:
+    app: vultacore-web
+spec:
+  type: ClusterIP
+  selector:
+    app: vultacore-web
+  ports:
+  - port: 3000
+    targetPort: 3000
+    name: http
+

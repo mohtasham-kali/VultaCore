@@ -39,9 +39,9 @@ const staticModuleOptions = fs.existsSync(join(process.cwd(), 'out'))
       url: process.env.DATABASE_URL,
       database: process.env.DATABASE_URL ? undefined : 'saas.sqlite',
       autoLoadEntities: true,
-      synchronize: true,
+      synchronize: process.env.NODE_ENV === 'production' ? false : true,
       ssl: process.env.DATABASE_URL
-        ? { rejectUnauthorized: false }
+        ? { rejectUnauthorized: process.env.DB_SSL_INSECURE === 'true' ? false : true }
         : false,
     }),
     UsersModule,
