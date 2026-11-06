@@ -661,7 +661,13 @@ function startEngine(name, execBin, execArgs, portOrSocket, cwd, envExtra = {}, 
                 AI_READY = true;
             }
         });
-        child.stderr.on('data', d => log(`[${name}] ${d.toString().trim()}`));
+        child.stderr.on('data', d => {
+            const line = d.toString().trim();
+            log(`[${name}] ${line}`);
+            if (name === 'AI Engine' && (line.includes('Application startup complete') || line.includes('Uvicorn running on'))) {
+                AI_READY = true;
+            }
+        });
         child.on('error', err => {
             log(`❌ [${name}] spawn error: ${err.message}`);
         });
