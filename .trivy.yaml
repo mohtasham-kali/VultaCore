@@ -4,6 +4,7 @@ severity:
   - CRITICAL
 
 ignore-unfixed: true
+timeout: 15m
 
 scan:
   scanners:
