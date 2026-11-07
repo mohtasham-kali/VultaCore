@@ -19,6 +19,8 @@ spec:
         runAsUser: 10002
         runAsGroup: 10002
         fsGroup: 10002
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: ai
         image: ghcr.io/mohtasham-kali/vultacore-ai:latest
@@ -27,12 +29,18 @@ spec:
         - containerPort: 8000
           name: http
         securityContext:
+          runAsNonRoot: true
           allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
           capabilities:
             drop:
               - ALL
+          seccompProfile:
+            type: RuntimeDefault
         env:
         - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: PYTHONDONTWRITEBYTECODE
           value: "1"
         - name: PORT
           value: "8000"
@@ -43,6 +51,9 @@ spec:
           limits:
             cpu: "500m"
             memory: "512Mi"
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
         livenessProbe:
           httpGet:
             path: /
@@ -55,6 +66,9 @@ spec:
             port: 8000
           initialDelaySeconds: 10
           periodSeconds: 10
+      volumes:
+      - name: tmp
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
@@ -70,4 +84,3 @@ spec:
   - port: 8000
     targetPort: 8000
     name: http
-

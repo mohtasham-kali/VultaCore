@@ -19,6 +19,8 @@ spec:
         runAsUser: 10001
         runAsGroup: 10001
         fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: api
         image: ghcr.io/mohtasham-kali/vultacore-api:latest
@@ -27,10 +29,14 @@ spec:
         - containerPort: 3001
           name: http
         securityContext:
+          runAsNonRoot: true
           allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
           capabilities:
             drop:
               - ALL
+          seccompProfile:
+            type: RuntimeDefault
         env:
         - name: NODE_ENV
           value: "production"
@@ -43,6 +49,9 @@ spec:
           limits:
             cpu: "500m"
             memory: "512Mi"
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
         livenessProbe:
           httpGet:
             path: /api/health
@@ -55,6 +64,9 @@ spec:
             port: 3001
           initialDelaySeconds: 10
           periodSeconds: 10
+      volumes:
+      - name: tmp
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
@@ -70,4 +82,3 @@ spec:
   - port: 3001
     targetPort: 3001
     name: http
-

@@ -68,3 +68,7 @@ target/
 *.deb
 downloaded-installers/
 public/downloads/
+*.tfstate
+*.tfstate.*
+.terraform/
+*.tfvars
