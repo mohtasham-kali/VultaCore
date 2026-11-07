@@ -5,6 +5,8 @@ on:
     branches: [main, develop]
     paths:
       - 'backend-api/**'
+      - 'package.json'
+      - 'package-lock.json'
       - '.github/workflows/ci-api.yml'
   pull_request:
     branches: [main]
@@ -22,26 +24,29 @@ jobs:
     name: Backend TypeCheck & Build
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: backend-api
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: '20'
+          node-version: 22
           cache: npm
-          cache-dependency-path: backend-api/package-lock.json
+          # The lockfile lives at the repo root (npm workspaces), not in backend-api/.
+          cache-dependency-path: package-lock.json
 
+      # npm ci installs exactly what the lockfile says and fails if it is out of
+      # sync. If it stops with an ERESOLVE peer-dependency error, use
+      # `npm ci --legacy-peer-deps` as a temporary fallback.
       - name: Install Dependencies
-        run: npm install --legacy-peer-deps
+        run: npm ci
 
       - name: Type Check
-        run: npm run typecheck
+        run: npm run typecheck --workspace backend-api
 
       - name: Production Build
-        run: npm run build
+        run: npm run build --workspace backend-api
