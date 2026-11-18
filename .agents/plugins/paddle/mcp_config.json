@@ -4,7 +4,10 @@
       "url": "https://paddlehq.mcp.kapa.ai"
     },
     "paddle-live": {
-      "url": "https://mcp.paddle.com/mcp"
+      "url": "https://mcp.paddle.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${PADDLE_API_KEY}"
+      }
     },
     "paddle-sandbox": {
       "url": "https://sandbox-mcp.paddle.com/mcp",
@@ -14,3 +17,4 @@
     }
   }
 }
+
