@@ -1,0 +1,7 @@
+User-Agent: *
+Allow: /
+Disallow: /api/
+Disallow: /auth/callback
+Disallow: /admin/
+
+Sitemap: https://vultacore.techprogression.com/sitemap.xml

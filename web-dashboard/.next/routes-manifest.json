@@ -51,10 +51,24 @@
         },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://*.supabase.co https://*.lemonsqueezy.com https://pay.google.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https: wss: ws:; frame-src 'self' https://*.lemonsqueezy.com https://pay.google.com"
+          "value": "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://*.supabase.co https://cdn.paddle.com https://sandbox-cdn.paddle.com https://pay.google.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https: https://checkout.paddle.com; connect-src 'self' https: wss: ws: https://api.paddle.com https://sandbox-api.paddle.com; frame-src 'self' https://checkout.paddle.com https://sandbox-checkout.paddle.com https://buy.paddle.com https://pay.google.com"
         }
       ],
       "regex": "^(?:/((?:[^/]+?)(?:/(?:[^/]+?))*))?(?:/)?$"
+    },
+    {
+      "source": "/",
+      "headers": [
+        {
+          "key": "Link",
+          "value": "<https://vultacore.techprogression.com/llms.txt>; rel=\"alternate\"; type=\"text/plain\"; title=\"llms.txt\", <https://vultacore.techprogression.com/.well-known/mcp/server-card.json>; rel=\"mcp-server-card\", <https://vultacore.techprogression.com/api/markdown>; rel=\"alternate\"; type=\"text/markdown\"; title=\"Markdown\", <https://vultacore.techprogression.com/sitemap.xml>; rel=\"sitemap\"; type=\"application/xml\""
+        },
+        {
+          "key": "X-Content-Signal",
+          "value": "search=yes, ai-train=no, ai-inference=yes"
+        }
+      ],
+      "regex": "^/(?:/)?$"
     }
   ],
   "dynamicRoutes": [],
@@ -150,6 +164,12 @@
       "namedRegex": "^/bots/general(?:/)?$"
     },
     {
+      "page": "/contact",
+      "regex": "^/contact(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/contact(?:/)?$"
+    },
+    {
       "page": "/download",
       "regex": "^/download(?:/)?$",
       "routeKeys": {},
@@ -204,10 +224,28 @@
       "namedRegex": "^/pricing(?:/)?$"
     },
     {
+      "page": "/privacy",
+      "regex": "^/privacy(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/privacy(?:/)?$"
+    },
+    {
       "page": "/profile",
       "regex": "^/profile(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/profile(?:/)?$"
+    },
+    {
+      "page": "/refund",
+      "regex": "^/refund(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/refund(?:/)?$"
+    },
+    {
+      "page": "/robots.txt",
+      "regex": "^/robots\\.txt(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/robots\\.txt(?:/)?$"
     },
     {
       "page": "/settings",
@@ -216,10 +254,22 @@
       "namedRegex": "^/settings(?:/)?$"
     },
     {
+      "page": "/sitemap.xml",
+      "regex": "^/sitemap\\.xml(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/sitemap\\.xml(?:/)?$"
+    },
+    {
       "page": "/subscription",
       "regex": "^/subscription(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/subscription(?:/)?$"
+    },
+    {
+      "page": "/terms",
+      "regex": "^/terms(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/terms(?:/)?$"
     }
   ],
   "dataRoutes": [],
@@ -240,6 +290,18 @@
     "queryHeader": "x-nextjs-rewritten-query"
   },
   "rewrites": [
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "query",
+          "key": "format",
+          "value": "md"
+        }
+      ],
+      "destination": "/api/markdown",
+      "regex": "^/(?:/)?$"
+    },
     {
       "source": "/api/:path*",
       "destination": "http://localhost:3001/api/:path*",

@@ -286,6 +286,17 @@
       "beforeFiles": [],
       "afterFiles": [
         {
+          "source": "/",
+          "has": [
+            {
+              "type": "query",
+              "key": "format",
+              "value": "md"
+            }
+          ],
+          "destination": "/api/markdown"
+        },
+        {
           "source": "/api/:path*",
           "destination": "http://localhost:3001/api/:path*"
         },
