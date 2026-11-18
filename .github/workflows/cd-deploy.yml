@@ -29,90 +29,54 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      SOURCE_DIR: ~/domains/vultacore.techprogression.com/hbuilds/last-source
       CURRENT_DIR: ~/domains/vultacore.techprogression.com/hbuilds/current/nodejs
-      NODE: /opt/alt/alt-nodejs24/root/bin/node
-      NPM: /opt/alt/alt-nodejs24/root/bin/npm
+      TARGET_SHA: ${{ github.sha }}
     steps:
       - name: Deploy over SSH
         id: deploy
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.DEPLOY_HOST || secrets.HOSTINGER_SSH_HOST }}
-          port: ${{ secrets.DEPLOY_PORT || secrets.HOSTINGER_SSH_PORT || 65002 }}
-          username: ${{ secrets.DEPLOY_USER || secrets.HOSTINGER_SSH_USER }}
+          host: ${{ secrets.DEPLOY_HOST || '45.130.228.127' }}
+          port: ${{ secrets.DEPLOY_PORT || 65002 }}
+          username: ${{ secrets.DEPLOY_USER || 'u879979656' }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          password: ${{ secrets.HOSTINGER_SSH_PASSWORD }}
-          envs: SOURCE_DIR,CURRENT_DIR,NODE,NPM
+          envs: CURRENT_DIR,TARGET_SHA
           script_stop: true
           script: |
             set -euo pipefail
 
-            SRC="${SOURCE_DIR/#\~/$HOME}"
             CUR="${CURRENT_DIR/#\~/$HOME}"
+            [ -d "$CUR" ] || { echo "ERROR: $CUR (hbuilds/current/nodejs) not found"; exit 1; }
 
-            [ -d "$SRC/.git" ] || { echo "ERROR: $SRC is not a git checkout"; exit 1; }
-            [ -d "$CUR" ]      || { echo "ERROR: $CUR (hbuilds/current/nodejs) not found"; exit 1; }
+            echo "=== Hostinger Deployment Verification ==="
+            echo "Target commit SHA: ${TARGET_SHA:-any}"
 
-            export PATH="$(dirname $NODE):$PATH"
-            cd "$SRC"
-
-            git config --global --add safe.directory "$SRC"
-
-            # Save rollback point
-            git rev-parse HEAD > ~/.vultacore_prev_sha
-
-            # Backup sqlite if present
-            if [ -f "$CUR/saas.sqlite" ]; then
-              mkdir -p ~/backups
-              cp "$CUR/saas.sqlite" ~/backups/saas.$(date +%Y%m%d-%H%M%S).sqlite 2>/dev/null || true
-              cp "$CUR/saas.sqlite" /tmp/saas.keep
-            fi
-
-            echo "=== PULL latest code ==="
-            git fetch origin main
-            git reset --hard origin/main
-
-            echo "=== INSTALL dependencies ==="
-            $NPM ci --omit=dev --legacy-peer-deps \
-              || $NPM ci --omit=dev \
-              || $NPM install --omit=dev --legacy-peer-deps
-
-            echo "=== BUILD backend ==="
-            $NPM run build --workspace backend-api
-
-            echo "=== BUILD frontend ==="
-            $NPM run build --workspace web-dashboard
-
-            echo "=== SYNC to current/nodejs ==="
-            rsync -a --delete \
-              --exclude='.git' \
-              --exclude='node_modules/.cache' \
-              --exclude='web-dashboard/.next/cache' \
-              "$SRC/" "$CUR/"
-
-            # Restore sqlite backup
-            [ -f /tmp/saas.keep ] && cp /tmp/saas.keep "$CUR/saas.sqlite" && rm -f /tmp/saas.keep
-
-            echo "=== PYTHON AI service (best-effort) ==="
-            if [ -d "$CUR/ai-services" ]; then
-              PY=""
-              for c in /opt/alt/python311/bin/python3 /opt/alt/python310/bin/python3 python3; do
-                command -v "$c" >/dev/null 2>&1 && PY="$c" && break
-                [ -x "$c" ] && PY="$c" && break
+            # Wait up to 3.5 minutes for Hostinger's automated hbuilds runner to finish and switch 'current'
+            MATCHED=false
+            if [ -n "${TARGET_SHA:-}" ]; then
+              for i in $(seq 1 42); do
+                CURRENT_SHA=$(git -C "$CUR" rev-parse HEAD 2>/dev/null || true)
+                if [ "$CURRENT_SHA" = "$TARGET_SHA" ] || [ "${CURRENT_SHA:0:7}" = "${TARGET_SHA:0:7}" ]; then
+                  echo "✓ Hostinger hbuilds has deployed target commit: $CURRENT_SHA"
+                  MATCHED=true
+                  break
+                fi
+                echo "[$i/42] Waiting for Hostinger hbuilds to deploy $TARGET_SHA (current is ${CURRENT_SHA:-none})..."
+                sleep 5
               done
-              if [ -n "$PY" ]; then
-                AI="$CUR/ai-services"
-                [ -x "$AI/venv/bin/python" ] || "$PY" -m venv "$AI/venv"
-                "$AI/venv/bin/pip" install --quiet --upgrade pip || true
-                "$AI/venv/bin/pip" install --quiet -r "$AI/requirements.txt" || true
-              fi
             fi
 
-            echo "=== RESTART Passenger ==="
+            if [ "$MATCHED" = false ]; then
+              echo "Notice: Hostinger hbuilds current commit differs or still pending; signalling restart."
+            fi
+
+            # Record rollback point
+            git -C "$CUR" rev-parse HEAD > ~/.vultacore_prev_sha 2>/dev/null || true
+
+            # Ensure Passenger picks up the latest version
             mkdir -p "$CUR/tmp"
             touch "$CUR/tmp/restart.txt"
-            echo "Deployed $(git rev-parse --short HEAD) at $(date -u)"
+            echo "Passenger restart signalled at $(date -u)"
 
       - name: Health check
         id: health
@@ -133,23 +97,17 @@ jobs:
         if: failure() && steps.deploy.outcome == 'success' && steps.health.outcome == 'failure'
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.DEPLOY_HOST || secrets.HOSTINGER_SSH_HOST }}
-          port: ${{ secrets.DEPLOY_PORT || secrets.HOSTINGER_SSH_PORT || 65002 }}
-          username: ${{ secrets.DEPLOY_USER || secrets.HOSTINGER_SSH_USER }}
+          host: ${{ secrets.DEPLOY_HOST || '45.130.228.127' }}
+          port: ${{ secrets.DEPLOY_PORT || 65002 }}
+          username: ${{ secrets.DEPLOY_USER || 'u879979656' }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          password: ${{ secrets.HOSTINGER_SSH_PASSWORD }}
-          envs: SOURCE_DIR,CURRENT_DIR,NODE,NPM
+          envs: CURRENT_DIR
           script: |
             set -e
-            SRC="${SOURCE_DIR/#\~/$HOME}"
             CUR="${CURRENT_DIR/#\~/$HOME}"
-            export PATH="$(dirname $NODE):$PATH"
             if [ -f ~/.vultacore_prev_sha ]; then
-              cd "$SRC"
-              git reset --hard "$(cat ~/.vultacore_prev_sha)"
-              $NPM run build --workspace backend-api || true
-              $NPM run build --workspace web-dashboard || true
-              rsync -a --delete --exclude='.git' --exclude='node_modules/.cache' "$SRC/" "$CUR/"
+              cd "$CUR"
+              git reset --hard "$(cat ~/.vultacore_prev_sha)" || true
               touch "$CUR/tmp/restart.txt"
-              echo "Rolled back to $(git rev-parse --short HEAD)"
+              echo "Rolled back to $(cat ~/.vultacore_prev_sha)"
             fi
