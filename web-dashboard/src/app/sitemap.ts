@@ -20,3 +20,4 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${BASE_URL}/subscription`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
   ];
 }
+

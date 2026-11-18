@@ -15,3 +15,4 @@ export default function robots(): MetadataRoute.Robots {
     // Content-Signal header added via server.js / next.config.ts response headers
   };
 }
+

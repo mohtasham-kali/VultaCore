@@ -39,3 +39,4 @@ VultaCore is a SaaS platform built for developers and security researchers. It p
 search=yes, ai-train=no, ai-inference=yes
 
 This site may be read and summarised by AI agents. Training on its content requires explicit permission.
+
