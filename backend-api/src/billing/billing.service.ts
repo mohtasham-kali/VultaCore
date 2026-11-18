@@ -6,7 +6,6 @@ import { EventsGateway } from '../events/events.gateway';
 
 /**
  * Maps Paddle sandbox price IDs → plan names.
- * These are the price IDs created in the Paddle sandbox catalog.
  */
 const SANDBOX_PRICE_TO_PLAN: Record<string, string> = {
   // Standard — monthly & annual
@@ -38,35 +37,60 @@ export class BillingService {
   private readonly appUrl: string;
   private readonly environment: Environment;
   private readonly priceToPlan: Record<string, string>;
-
-  /**
-   * Plan name → sandbox Paddle price ID (monthly).
-   * Used by createCheckoutSession to build the transaction.
-   */
-  private readonly planToPrice: Record<string, string> = {
-    Standard: 'pri_01m7r41d01n8xa18z8kzwhchv1',
-    Premium: 'pri_01m7r41dwfzw108seb2ptyvzrh',
-    Enterprise: 'pri_01m7r41epjb34524nsn3nebdym',
-  };
+  private readonly planToPrice: Record<string, string>;
 
   constructor(
     private readonly config: ConfigService,
     private readonly usersService: UsersService,
     private readonly eventsGateway: EventsGateway,
   ) {
-    const apiKey =
+    const explicitEnv =
+      this.config.get<string>('PADDLE_ENV') || process.env.PADDLE_ENV || '';
+
+    const sandboxKey =
+      this.config.get<string>('PADDLE_SANDBOX_API_KEY') ||
+      process.env.PADDLE_SANDBOX_API_KEY ||
+      '';
+
+    let apiKey =
       this.config.get<string>('PADDLE_API_KEY') ||
       process.env.PADDLE_API_KEY ||
       '';
 
-    const env = this.config.get<string>('PADDLE_ENV') || process.env.PADDLE_ENV || 'sandbox';
-    this.environment = env === 'production' ? Environment.production : Environment.sandbox;
+    // If explicitEnv is sandbox or if key is empty, prefer the sandbox key
+    if (explicitEnv.toLowerCase() === 'sandbox' && sandboxKey) {
+      apiKey = sandboxKey;
+    } else if (!apiKey && sandboxKey) {
+      apiKey = sandboxKey;
+    }
 
-    // In production, switch to live price IDs
-    this.priceToPlan =
-      this.environment === Environment.production
-        ? LIVE_PRICE_TO_PLAN
-        : SANDBOX_PRICE_TO_PLAN;
+    // Automatically synchronize Environment with the API key prefix
+    // (pdl_live_* requires Environment.production, pdl_sdbx_* requires Environment.sandbox)
+    if (apiKey.startsWith('pdl_live_')) {
+      this.environment = Environment.production;
+    } else {
+      this.environment = Environment.sandbox;
+    }
+
+    this.logger.log(
+      `Paddle initialized in [${this.environment}] mode with key: ${apiKey.slice(0, 15)}...`,
+    );
+
+    // Map plans to appropriate prices for the active environment
+    if (this.environment === Environment.production) {
+      this.priceToPlan = { ...LIVE_PRICE_TO_PLAN };
+      this.planToPrice = {
+        Standard: 'pri_01m7r11zk5c3bma7a6k0y70g5n',
+        Premium: 'pri_01m7r12e4rwbrt25331y3sm88p',
+      };
+    } else {
+      this.priceToPlan = { ...SANDBOX_PRICE_TO_PLAN };
+      this.planToPrice = {
+        Standard: 'pri_01m7r41d01n8xa18z8kzwhchv1',
+        Premium: 'pri_01m7r41dwfzw108seb2ptyvzrh',
+        Enterprise: 'pri_01m7r41epjb34524nsn3nebdym',
+      };
+    }
 
     // Allow price IDs to be injected via env as JSON: PADDLE_PRICE_MAP='{"pri_xxx":"Standard"}'
     const extraMapRaw =
@@ -93,10 +117,6 @@ export class BillingService {
       this.config.get<string>('APP_URL') ||
       process.env.APP_URL ||
       'https://vultacore.techprogression.com';
-
-    if (!apiKey) {
-      this.logger.warn('PADDLE_API_KEY is not set — billing will not work.');
-    }
 
     this.paddle = new Paddle(apiKey || 'missing', { environment: this.environment });
   }
@@ -125,7 +145,7 @@ export class BillingService {
       );
     }
 
-    // Try to find or create customer to pre-fill their email on checkout
+    // Try to find or create customer to pre-fill their email on checkout (non-blocking)
     let customerId: string | undefined;
     if (userEmail) {
       try {
@@ -137,8 +157,8 @@ export class BillingService {
           const created = await this.paddle.customers.create({ email: userEmail });
           customerId = created.id;
         }
-      } catch (err) {
-        this.logger.warn(`Could not lookup/create Paddle customer: ${err}`);
+      } catch (err: any) {
+        this.logger.warn(`Customer lookup/create skipped: ${err?.message || err}`);
       }
     }
 
