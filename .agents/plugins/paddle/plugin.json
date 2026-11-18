@@ -1,0 +1,7 @@
+{
+  "name": "paddle",
+  "version": "0.1.0",
+  "description": "Paddle Billing agent skills and MCP servers for checkout, webhooks, subscriptions, and catalog management",
+  "homepage": "https://developer.paddle.com",
+  "repository": "https://github.com/PaddleHQ/paddle-agent-skills"
+}
