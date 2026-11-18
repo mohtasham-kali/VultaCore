@@ -1,0 +1,41 @@
+# VultaCore
+
+> A unified developer and cybersecurity platform combining AI-powered assistance, real-time analytics, community forums, and security tooling — all in one dashboard.
+
+## About
+
+VultaCore is a SaaS platform built for developers and security researchers. It provides AI mini-bots, dev and cybersecurity forums with reputation points, analytics, enterprise features, and downloadable desktop app releases.
+
+- Base URL: https://vultacore.techprogression.com
+- Contact: support@techprogression.com
+- Organization: TechProgression
+- License: Commercial (see /pricing for plans)
+
+## Key Pages
+
+- [Home](https://vultacore.techprogression.com/) — Platform overview and navigation hub
+- [Developer Forum](https://vultacore.techprogression.com/forum/dev) — Q&A forum with reputation and rewards
+- [Security Forum](https://vultacore.techprogression.com/forum/cyber) — Cybersecurity discussions and tool sharing
+- [AI Bots — General](https://vultacore.techprogression.com/bots/general) — General-purpose AI assistant
+- [AI Bots — Cyber](https://vultacore.techprogression.com/bots/cyber) — Cybersecurity-focused AI assistant
+- [Analytics](https://vultacore.techprogression.com/analytics) — Real-time usage insights and charts
+- [Pricing](https://vultacore.techprogression.com/pricing) — Free, Pro, and Enterprise plans
+- [Download](https://vultacore.techprogression.com/download) — Desktop app for Windows, macOS, and Linux
+- [Profile](https://vultacore.techprogression.com/profile) — User profile and leaderboard
+- [Settings](https://vultacore.techprogression.com/settings) — AI model and notification preferences
+- [Enterprise Contact](https://vultacore.techprogression.com/enterprise-contact) — Enterprise enquiries and custom plans
+- [Sign In](https://vultacore.techprogression.com/auth) — Authentication (Supabase / Google OAuth)
+
+## API & Machine-Readable Endpoints
+
+- [Health Check](https://vultacore.techprogression.com/health) — JSON: `{status, ready:{backend,dashboard,ai}, uptime}`
+- [Sitemap](https://vultacore.techprogression.com/sitemap.xml) — XML sitemap of all public pages
+- [robots.txt](https://vultacore.techprogression.com/robots.txt) — Crawl policy and content-signal directives
+- [MCP Server Card](https://vultacore.techprogression.com/.well-known/mcp/server-card.json) — MCP capabilities manifest
+- [Markdown alternate](https://vultacore.techprogression.com/?format=md) — Markdown representation of the homepage
+
+## Content Policy
+
+search=yes, ai-train=no, ai-inference=yes
+
+This site may be read and summarised by AI agents. Training on its content requires explicit permission.

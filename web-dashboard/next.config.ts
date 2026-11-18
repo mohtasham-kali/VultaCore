@@ -18,6 +18,7 @@ const nextConfig: NextConfig = {
     ? {}
     : {
       async headers() {
+        const BASE = 'https://vultacore.techprogression.com';
         return [
           {
             source: '/:path*',
@@ -41,11 +42,34 @@ const nextConfig: NextConfig = {
               },
             ],
           },
+          // RFC 8288 Link header on the homepage — advertises llms.txt and Markdown alternate to agents
+          {
+            source: '/',
+            headers: [
+              {
+                key: 'Link',
+                value: [
+                  `<${BASE}/llms.txt>; rel="alternate"; type="text/plain"; title="llms.txt"`,
+                  `<${BASE}/.well-known/mcp/server-card.json>; rel="mcp-server-card"`,
+                  `<${BASE}/api/markdown>; rel="alternate"; type="text/markdown"; title="Markdown"`,
+                  `<${BASE}/sitemap.xml>; rel="sitemap"; type="application/xml"`,
+                ].join(', '),
+              },
+              // Content-Signal: declare how content may be used
+              { key: 'X-Content-Signal', value: 'search=yes, ai-train=no, ai-inference=yes' },
+            ],
+          },
         ];
       },
       async rewrites() {
         const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001';
         return [
+          // Markdown alternate — serve /api/markdown when ?format=md or Accept: text/markdown
+          {
+            source: '/',
+            has: [{ type: 'query', key: 'format', value: 'md' }],
+            destination: '/api/markdown',
+          },
           {
             source: '/api/:path*',
             destination: `${backendUrl}/api/:path*`,

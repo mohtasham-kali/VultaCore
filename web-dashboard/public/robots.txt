@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /auth/callback
+Disallow: /admin/
+
+# Content-Signal: search=yes, ai-train=no, ai-inference=yes
+Sitemap: https://vultacore.techprogression.com/sitemap.xml
+
+# LLM / Agent discovery
+# llms.txt: https://vultacore.techprogression.com/llms.txt

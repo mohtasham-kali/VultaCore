@@ -413,6 +413,52 @@ const server = http.createServer((req, res) => {
         return res.end(bootLogs.join('\n'));
     }
 
+    // ─── Agent-ready static endpoints (robots, llms.txt, MCP card) ──────────
+    // These are served directly from the master proxy to guarantee availability
+    // even when the Next.js dashboard is still starting up.
+
+    if (parsedUrl.pathname === '/robots.txt') {
+        const robotsTxt = [
+            'User-agent: *',
+            'Allow: /',
+            'Disallow: /api/',
+            'Disallow: /auth/callback',
+            'Disallow: /admin/',
+            '',
+            '# Content-Signal: search=yes, ai-train=no, ai-inference=yes',
+            'Sitemap: https://vultacore.techprogression.com/sitemap.xml',
+            '',
+            '# LLM / Agent discovery',
+            '# llms.txt: https://vultacore.techprogression.com/llms.txt',
+        ].join('\n');
+        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=3600' });
+        return res.end(robotsTxt);
+    }
+
+    if (parsedUrl.pathname === '/llms.txt') {
+        const llmsTxt = fs.existsSync(path.join(rootDir, 'web-dashboard', 'public', 'llms.txt'))
+            ? fs.readFileSync(path.join(rootDir, 'web-dashboard', 'public', 'llms.txt'), 'utf8')
+            : '# VultaCore\nhttps://vultacore.techprogression.com';
+        res.writeHead(200, {
+            'Content-Type': 'text/plain; charset=utf-8',
+            'Cache-Control': 'public, max-age=3600',
+            'Link': '</llms.txt>; rel="self"',
+        });
+        return res.end(llmsTxt);
+    }
+
+    if (parsedUrl.pathname === '/.well-known/mcp/server-card.json') {
+        const mcpCard = fs.existsSync(path.join(rootDir, 'web-dashboard', 'public', '.well-known', 'mcp', 'server-card.json'))
+            ? fs.readFileSync(path.join(rootDir, 'web-dashboard', 'public', '.well-known', 'mcp', 'server-card.json'), 'utf8')
+            : JSON.stringify({ name: 'VultaCore', version: '1.0.0', url: 'https://vultacore.techprogression.com' });
+        res.writeHead(200, {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Cache-Control': 'public, max-age=3600',
+            'Access-Control-Allow-Origin': '*',
+        });
+        return res.end(mcpCard);
+    }
+
     // Health check endpoint (used by CI/CD deployment verification)
     if (parsedUrl.pathname === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -546,6 +592,23 @@ const server = http.createServer((req, res) => {
     } else {
         if (!DASH_READY || !DASH_TARGET) {
             return sendBooting(res);
+        }
+        // Inject RFC 8288 Link header on the homepage for agent discovery
+        const isHomepage = parsedUrl.pathname === '/' && !parsedUrl.search;
+        if (isHomepage) {
+            const BASE = 'https://vultacore.techprogression.com';
+            const origWriteHead = res.writeHead.bind(res);
+            res.writeHead = function(statusCode, headers) {
+                const merged = Object.assign({}, headers);
+                merged['Link'] = [
+                    `<${BASE}/llms.txt>; rel="alternate"; type="text/plain"; title="llms.txt"`,
+                    `<${BASE}/.well-known/mcp/server-card.json>; rel="mcp-server-card"`,
+                    `<${BASE}/api/markdown>; rel="alternate"; type="text/markdown"; title="Markdown"`,
+                    `<${BASE}/sitemap.xml>; rel="sitemap"; type="application/xml"`,
+                ].join(', ');
+                merged['X-Content-Signal'] = 'search=yes, ai-train=no, ai-inference=yes';
+                return origWriteHead(statusCode, merged);
+            };
         }
         return proxyRequest(req, res, DASH_TARGET);
     }

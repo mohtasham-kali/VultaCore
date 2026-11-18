@@ -2,6 +2,15 @@ import Link from 'next/link';
 import { UserDropdown } from '@/components/auth/UserDropdown';
 import { NotificationCenter } from '@/components/notifications/NotificationCenter';
 
+const BASE_URL = 'https://vultacore.techprogression.com';
+
+export const metadata = {
+  title: 'VultaCore — Developer & Cybersecurity Platform',
+  description:
+    'A unified ecosystem for developers and security researchers. AI-powered assistance, real-time analytics, community forums, and security tooling.',
+  alternates: { canonical: BASE_URL },
+};
+
 export default function Home() {
   return (
     <div className="min-h-screen bg-slate-950 text-white selection:bg-purple-500 selection:text-white">
@@ -103,6 +112,32 @@ export default function Home() {
           ))}
         </div>
       </div>
+
+      {/* Footer — about, contact & legal links + machine-readable contact for agents */}
+      <footer className="relative z-10 border-t border-white/5 mt-16 py-10">
+        <div className="container mx-auto px-6">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+            <div className="text-slate-500 text-sm">
+              © {new Date().getFullYear()} TechProgression · VultaCore
+            </div>
+            <nav aria-label="Footer links" className="flex flex-wrap gap-6 text-sm text-slate-400">
+              <Link href="/enterprise-contact" className="hover:text-white transition-colors">About</Link>
+              <a href="mailto:support@techprogression.com" className="hover:text-white transition-colors">Contact</a>
+              <Link href="/pricing" className="hover:text-white transition-colors">Pricing</Link>
+              <Link href="/download" className="hover:text-white transition-colors">Download</Link>
+              <Link href="/enterprise-contact" className="hover:text-white transition-colors">Enterprise</Link>
+              {/* Legal stubs — these pages will be linked once created */}
+              <span className="text-slate-600 cursor-default">Terms</span>
+              <span className="text-slate-600 cursor-default">Privacy</span>
+            </nav>
+          </div>
+          {/* Machine-readable contact — invisible to humans, readable by agents */}
+          <address className="hidden" aria-hidden="true">
+            <span itemProp="email">support@techprogression.com</span>
+            <a href="mailto:support@techprogression.com">Email VultaCore</a>
+          </address>
+        </div>
+      </footer>
     </div>
   );
 }

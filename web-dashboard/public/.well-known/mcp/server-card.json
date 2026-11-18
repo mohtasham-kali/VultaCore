@@ -1,0 +1,48 @@
+{
+  "schema_version": "1.0",
+  "name": "VultaCore",
+  "description": "Unified developer and cybersecurity platform. Provides AI-powered assistance, community forums, real-time analytics, and security tooling for developers and security researchers.",
+  "version": "1.0.0",
+  "url": "https://vultacore.techprogression.com",
+  "endpoint": "https://vultacore.techprogression.com/api",
+  "organization": {
+    "name": "TechProgression",
+    "url": "https://techprogression.com",
+    "contact": "support@techprogression.com"
+  },
+  "capabilities": {
+    "tools": false,
+    "resources": true,
+    "prompts": false
+  },
+  "resources": [
+    {
+      "name": "health",
+      "description": "Platform health status — reports readiness of backend, dashboard and AI engine",
+      "uri": "https://vultacore.techprogression.com/health",
+      "mimeType": "application/json"
+    },
+    {
+      "name": "llms-txt",
+      "description": "Human and agent-readable site summary with key page links",
+      "uri": "https://vultacore.techprogression.com/llms.txt",
+      "mimeType": "text/plain"
+    },
+    {
+      "name": "sitemap",
+      "description": "XML sitemap listing all public pages",
+      "uri": "https://vultacore.techprogression.com/sitemap.xml",
+      "mimeType": "application/xml"
+    }
+  ],
+  "content_policy": {
+    "search": "yes",
+    "ai_train": "no",
+    "ai_inference": "yes"
+  },
+  "links": {
+    "privacy": "https://vultacore.techprogression.com/privacy",
+    "terms": "https://vultacore.techprogression.com/terms",
+    "contact": "https://vultacore.techprogression.com/enterprise-contact"
+  }
+}
