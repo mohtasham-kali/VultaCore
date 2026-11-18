@@ -79,6 +79,9 @@ jobs:
             echo "=== NODE DEPS ==="
             npm ci --omit=dev
 
+            echo "=== BUILD BACKEND ==="
+            cd backend-api && npm run build && cd "$DEPLOY_PATH"
+
             echo "=== PYTHON AI SERVICE ==="
             if [ -d ai-services ]; then
               cd ai-services

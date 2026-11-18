@@ -1049,10 +1049,28 @@ async function bootEngines() {
 
     // 2. Backend (NestJS)
     const backendEntry = path.join(rootDir, 'backend-api', 'dist', 'main.js');
-    if (!fs.existsSync(backendEntry)) {
+    const shouldBuildBackend = !fs.existsSync(backendEntry) || (() => {
         try {
-            log('🔨 Building backend-api dist bundle...');
-            execSync('npm run build', { cwd: path.join(rootDir, 'backend-api'), stdio: 'ignore' });
+            const entryTime = fs.statSync(backendEntry).mtimeMs;
+            const checkFiles = [
+                'package.json',
+                'src/main.ts',
+                'src/app.module.ts',
+                'src/billing/billing.service.ts',
+                'src/billing/billing.controller.ts'
+            ];
+            for (const f of checkFiles) {
+                const p = path.join(rootDir, 'backend-api', f);
+                if (fs.existsSync(p) && fs.statSync(p).mtimeMs > entryTime) return true;
+            }
+            return false;
+        } catch (_) { return false; }
+    })();
+
+    if (shouldBuildBackend) {
+        try {
+            log('🔨 Building backend-api dist bundle (source updated)...');
+            execSync('npx nest build || npm run build', { cwd: path.join(rootDir, 'backend-api'), stdio: 'inherit' });
         } catch (e) {
             log(`❌ Failed to build backend-api: ${e.message}`);
         }
