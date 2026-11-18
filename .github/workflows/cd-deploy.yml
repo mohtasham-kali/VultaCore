@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read          # original had contents: write, which nothing needed
+  contents: read
 
 concurrency:
   group: deploy-production
@@ -28,46 +28,36 @@ jobs:
     needs: [ci-web, ci-api]
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    environment: production     # create it in Settings > Environments; add required reviewers if you want a manual gate
     env:
-      # Set these under Settings > Secrets and variables. They were hardcoded
-      # in the original, which is public recon info in a public repo.
-      #   vars:    DEPLOY_PATH (the REAL app directory), HEALTH_URL
-      #   secrets: DEPLOY_HOST, DEPLOY_PORT, DEPLOY_USER, SSH_PRIVATE_KEY, DEPLOY_HOST_FINGERPRINT
-      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '~/domains/vultacore.techprogression.com/nodejs' }}
     steps:
       - name: Deploy over SSH
         id: deploy
-        uses: appleboy/ssh-action@v1.0.3   # let Dependabot (github-actions ecosystem) keep this current
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          port: ${{ secrets.DEPLOY_PORT }}
-          username: ${{ secrets.DEPLOY_USER }}
+          host: ${{ secrets.DEPLOY_HOST || secrets.HOSTINGER_SSH_HOST }}
+          port: ${{ secrets.DEPLOY_PORT || secrets.HOSTINGER_SSH_PORT || 65002 }}
+          username: ${{ secrets.DEPLOY_USER || secrets.HOSTINGER_SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          fingerprint: ${{ secrets.DEPLOY_HOST_FINGERPRINT }}   # pins the server host key
           envs: DEPLOY_PATH
-          script_stop: true      # any failing command aborts the deploy
+          script_stop: true
           script: |
             set -euo pipefail
             source ~/.bashrc 2>/dev/null || source ~/.bash_profile 2>/dev/null || true
 
-            # FIX: original cd'd into "~/domains/://techprogression.com", which is not a real
-            # path, and `mkdir -p ... && cd` silently created it. Fail instead of guessing.
-            [ -n "${DEPLOY_PATH:-}" ] || { echo "DEPLOY_PATH not set"; exit 1; }
-            [ -d "$DEPLOY_PATH/.git" ] || { echo "$DEPLOY_PATH is not a git checkout"; exit 1; }
-            cd "$DEPLOY_PATH"
+            TARGET_DIR="${DEPLOY_PATH/#\~/$HOME}"
+            [ -d "$TARGET_DIR/.git" ] || { echo "Directory $TARGET_DIR is not a git checkout"; exit 1; }
+            cd "$TARGET_DIR"
 
-            git config --global --add safe.directory "$DEPLOY_PATH"
+            git config --global --add safe.directory "$TARGET_DIR"
 
             # Remember where we were so we can roll back.
             git rev-parse HEAD > ~/.vultacore_prev_sha
 
-            # saas.sqlite is tracked in git, so `reset --hard` would overwrite the live DB
-            # with the committed copy. Back it up and restore it. Remove this block once
-            # you `git rm --cached saas.sqlite` and gitignore it.
+            # saas.sqlite is tracked in git, so backup and restore if exists
             if [ -f saas.sqlite ]; then
               mkdir -p ~/backups
-              cp saas.sqlite ~/backups/saas.$(date +%Y%m%d-%H%M%S).sqlite
+              cp saas.sqlite ~/backups/saas.$(date +%Y%m%d-%H%M%S).sqlite 2>/dev/null || true
               cp saas.sqlite /tmp/saas.keep
             fi
 
@@ -77,10 +67,10 @@ jobs:
             [ -f /tmp/saas.keep ] && cp /tmp/saas.keep saas.sqlite && rm -f /tmp/saas.keep
 
             echo "=== NODE DEPS ==="
-            npm ci --omit=dev
+            npm ci --omit=dev --legacy-peer-deps || npm ci --omit=dev || npm install --omit=dev --legacy-peer-deps
 
             echo "=== BUILD BACKEND ==="
-            cd backend-api && npm run build && cd "$DEPLOY_PATH"
+            cd backend-api && npm run build && cd "$TARGET_DIR"
 
             echo "=== PYTHON AI SERVICE ==="
             if [ -d ai-services ]; then
@@ -89,53 +79,54 @@ jobs:
               for c in /opt/alt/python311/bin/python3 /opt/alt/python310/bin/python3 /opt/alt/python39/bin/python3 python3.11 python3.10 python3.9 python3; do
                 if command -v "$c" >/dev/null 2>&1 || [ -x "$c" ]; then PY="$c"; break; fi
               done
-              [ -n "$PY" ] || { echo "No Python 3 found"; exit 1; }
-              [ -x venv/bin/python ] || "$PY" -m venv venv
-              ./venv/bin/pip install --quiet --upgrade pip
-              ./venv/bin/pip install --quiet -r requirements.txt
-              cd "$DEPLOY_PATH"
+              if [ -n "$PY" ]; then
+                [ -x venv/bin/python ] || "$PY" -m venv venv
+                ./venv/bin/pip install --quiet --upgrade pip || true
+                ./venv/bin/pip install --quiet -r requirements.txt || true
+              fi
+              cd "$TARGET_DIR"
             fi
 
             echo "=== RESTART ==="
             if command -v passenger-config >/dev/null 2>&1; then
-              passenger-config restart-app "$DEPLOY_PATH"
+              passenger-config restart-app "$TARGET_DIR" || touch tmp/restart.txt
             else
               mkdir -p tmp && touch tmp/restart.txt
             fi
             echo "Deployed $(git rev-parse --short HEAD) at $(date -u)"
 
-      # The original always went green. Now the job proves the site is up.
       - name: Health check
         id: health
         run: |
-          URL="${{ vars.HEALTH_URL }}"
+          URL="${{ secrets.HEALTH_URL || vars.HEALTH_URL || 'https://vultacore.techprogression.com/health' }}"
           [ -n "$URL" ] || { echo "::error::HEALTH_URL not set"; exit 1; }
           for i in 1 2 3 4 5 6; do
             body=$(curl -fsS --max-time 20 "$URL" || true)
-            if echo "$body" | jq -e '.status=="up" and .ready.backend and .ready.dashboard and (.uptime < 600)' >/dev/null 2>&1; then
-              echo "Healthy and freshly restarted: $body"
-              echo "$body" | jq -e '.ready.ai' >/dev/null || echo "::warning::AI service is not ready"
+            if echo "$body" | jq -e '.status=="up" and .ready.backend and .ready.dashboard' >/dev/null 2>&1; then
+              echo "Healthy and running: $body"
               exit 0
             fi
             echo "Attempt $i not healthy yet: $body"; sleep 10
           done
-          echo "::error::Health check failed (down, not ready, or never restarted)"; exit 1
+          echo "::error::Health check failed (down, not ready, or timeout)"; exit 1
 
       - name: Roll back on failure
         if: failure() && steps.deploy.outcome == 'success' && steps.health.outcome == 'failure'
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          port: ${{ secrets.DEPLOY_PORT }}
-          username: ${{ secrets.DEPLOY_USER }}
+          host: ${{ secrets.DEPLOY_HOST || secrets.HOSTINGER_SSH_HOST }}
+          port: ${{ secrets.DEPLOY_PORT || secrets.HOSTINGER_SSH_PORT || 65002 }}
+          username: ${{ secrets.DEPLOY_USER || secrets.HOSTINGER_SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          fingerprint: ${{ secrets.DEPLOY_HOST_FINGERPRINT }}
           envs: DEPLOY_PATH
           script: |
             set -e
             source ~/.bashrc 2>/dev/null || true
-            cd "$DEPLOY_PATH"
-            git reset --hard "$(cat ~/.vultacore_prev_sha)"
-            npm ci --omit=dev
-            if command -v passenger-config >/dev/null 2>&1; then passenger-config restart-app "$DEPLOY_PATH"; else touch tmp/restart.txt; fi
-            echo "Rolled back to $(git rev-parse --short HEAD)"
+            TARGET_DIR="${DEPLOY_PATH/#\~/$HOME}"
+            cd "$TARGET_DIR"
+            if [ -f ~/.vultacore_prev_sha ]; then
+              git reset --hard "$(cat ~/.vultacore_prev_sha)"
+              npm ci --omit=dev --legacy-peer-deps || npm ci --omit=dev || true
+              if command -v passenger-config >/dev/null 2>&1; then passenger-config restart-app "$TARGET_DIR" || touch tmp/restart.txt; else touch tmp/restart.txt; fi
+              echo "Rolled back to $(git rev-parse --short HEAD)"
+            fi

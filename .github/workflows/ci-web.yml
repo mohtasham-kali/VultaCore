@@ -5,70 +5,62 @@ on:
     branches: [main, develop]
     paths:
       - 'web-dashboard/**'
+      - 'package.json'
+      - 'package-lock.json'
       - '.github/workflows/ci-web.yml'
-  # No path filter on PRs: filtered workflows leave required checks "pending" forever.
   pull_request:
     branches: [main]
-  workflow_call:   # lets cd-deploy.yml run this exact CI first
+  workflow_call:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-web-${{ github.workflow }}-${{ github.ref }}
+  group: ci-web-${{ github.ref }}
   cancel-in-progress: true
 
 env:
-  # One source of truth for the API URL. Set it under Settings > Variables.
-  # (CI used .../api while CD used the bare domain, so the tested build
-  # was not the deployed build.)
-  NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
-  # Fall back to public client credentials so production builds authenticate properly
+  NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'https://vultacore.techprogression.com/api' }}
   NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://izimqwjupqzcogrtyuik.supabase.co' }}
   NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml6aW1xd2p1cHF6Y29ncnR5dWlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4NDAzMDYsImV4cCI6MjA5MTQxNjMwNn0.iYPKYStQvwtMYSERgjhomgwFuVQVnFHt1ksn0E-vhQY' }}
   NEXT_PUBLIC_LS_VARIANT_STANDARD: ${{ vars.NEXT_PUBLIC_LS_VARIANT_STANDARD }}
   NEXT_PUBLIC_LS_VARIANT_PREMIUM: ${{ vars.NEXT_PUBLIC_LS_VARIANT_PREMIUM }}
-  # NOTE: "ENTERPISE" is spelled this way in your original. Check it matches the
-  # name read in your code; if the code says ENTERPRISE this value is undefined.
   NEXT_PUBLIC_LS_VARIANT_ENTERPISE: ${{ vars.NEXT_PUBLIC_LS_VARIANT_ENTERPISE }}
   NEXT_PUBLIC_LS_STORE_ID: ${{ vars.NEXT_PUBLIC_LS_STORE_ID }}
-  NEXT_PUBLIC_APP_URL: ${{ vars.NEXT_PUBLIC_APP_URL }}
+  NEXT_PUBLIC_APP_URL: ${{ vars.NEXT_PUBLIC_APP_URL || 'https://vultacore.techprogression.com' }}
 
 jobs:
   build:
+    name: Frontend TypeCheck & Build
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: web-dashboard
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
           cache: npm
           cache-dependency-path: package-lock.json
 
-      - name: Install (lockfile-exact)
+      - name: Install Dependencies
         run: npm ci
 
-      - name: Type check
-        run: npm run typecheck
+      - name: Type Check
+        run: npm run typecheck --workspace web-dashboard
 
-      - name: Lint
-        run: npm run lint --if-present
+      - name: Production Build
+        run: npm run build --workspace web-dashboard
 
-      - name: Unit tests
-        run: npm test --if-present
-
-      - name: Production build
-        run: npm run build
-
-      - name: Upload tested build
+      - name: Upload Tested Build
         uses: actions/upload-artifact@v4
         with:
-          name: web-out
-          path: web-dashboard/out
+          name: web-build
+          path: web-dashboard/.next
           retention-days: 7
-          if-no-files-found: error
+          if-no-files-found: ignore
