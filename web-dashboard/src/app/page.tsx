@@ -122,13 +122,12 @@ export default function Home() {
             </div>
             <nav aria-label="Footer links" className="flex flex-wrap gap-6 text-sm text-slate-400">
               <Link href="/enterprise-contact" className="hover:text-white transition-colors">About</Link>
-              <a href="mailto:support@techprogression.com" className="hover:text-white transition-colors">Contact</a>
+              <Link href="/contact" className="hover:text-white transition-colors">Contact</Link>
               <Link href="/pricing" className="hover:text-white transition-colors">Pricing</Link>
               <Link href="/download" className="hover:text-white transition-colors">Download</Link>
-              <Link href="/enterprise-contact" className="hover:text-white transition-colors">Enterprise</Link>
-              {/* Legal stubs — these pages will be linked once created */}
-              <span className="text-slate-600 cursor-default">Terms</span>
-              <span className="text-slate-600 cursor-default">Privacy</span>
+              <Link href="/terms" className="hover:text-white transition-colors">Terms of Service</Link>
+              <Link href="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link>
+              <Link href="/refund" className="hover:text-white transition-colors">Refund Policy</Link>
             </nav>
           </div>
           {/* Machine-readable contact — invisible to humans, readable by agents */}

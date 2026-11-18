@@ -18,6 +18,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${BASE_URL}/enterprise-contact`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
     { url: `${BASE_URL}/auth`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
     { url: `${BASE_URL}/subscription`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
+    { url: `${BASE_URL}/terms`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
+    { url: `${BASE_URL}/privacy`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
+    { url: `${BASE_URL}/refund`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
+    { url: `${BASE_URL}/contact`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
   ];
 }
 
