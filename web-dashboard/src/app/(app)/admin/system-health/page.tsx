@@ -11,13 +11,16 @@ import {
   Zap,
   Circle,
   Clock,
+  HardDrive,
 } from "lucide-react";
 
 interface BootData {
   logs: string[];
   hasErrors: boolean;
   uptime: number;
-  ports: { backend: number | null; dashboard: number | null; ai: number | null };
+  ports?: { backend: number | string | null; dashboard: number | string | null; ai: number | string | null };
+  ready?: { backend: boolean; dashboard: boolean; ai: boolean };
+  memory?: { rss: number; heapTotal: number; heapUsed: number };
   booted: boolean;
   ts: string;
 }
@@ -29,6 +32,12 @@ function formatUptime(seconds: number) {
   if (h > 0) return `${h}h ${m}m ${s}s`;
   if (m > 0) return `${m}m ${s}s`;
   return `${s}s`;
+}
+
+function formatBytes(bytes?: number) {
+  if (!bytes) return "—";
+  const mb = bytes / (1024 * 1024);
+  return `${mb.toFixed(1)} MB`;
 }
 
 function logClass(line: string) {
@@ -63,10 +72,10 @@ export default function SystemHealthPage() {
     }
   }, []);
 
-  // Initial load + auto-refresh every 10s
+  // Initial load + auto-refresh every 8s
   useEffect(() => {
     fetchLogs();
-    const interval = setInterval(() => fetchLogs(), 10_000);
+    const interval = setInterval(() => fetchLogs(), 8_000);
     return () => clearInterval(interval);
   }, [fetchLogs]);
 
@@ -74,25 +83,28 @@ export default function SystemHealthPage() {
     {
       name: "Backend API",
       icon: Server,
-      port: data?.ports.backend,
+      online: Boolean(data?.ready?.backend ?? data?.ports?.backend),
+      port: data?.ports?.backend,
       color: "purple",
     },
     {
       name: "Dashboard",
       icon: Cpu,
-      port: data?.ports.dashboard,
+      online: Boolean(data?.ready?.dashboard ?? data?.ports?.dashboard),
+      port: data?.ports?.dashboard,
       color: "blue",
     },
     {
       name: "AI Engine",
       icon: Zap,
-      port: data?.ports.ai,
+      online: Boolean(data?.ready?.ai ?? data?.ports?.ai),
+      port: data?.ports?.ai,
       color: "amber",
     },
   ];
 
   const errorCount = data?.logs.filter((l) => l.includes("❌")).length ?? 0;
-  const warnCount  = data?.logs.filter((l) => l.includes("⚠️")).length ?? 0;
+  const warnCount = data?.logs.filter((l) => l.includes("⚠️")).length ?? 0;
 
   return (
     <div className="space-y-8">
@@ -103,7 +115,7 @@ export default function SystemHealthPage() {
             System Health
           </h1>
           <p className="text-slate-500 mt-2 font-medium italic">
-            Live boot diagnostics &amp; engine status — admin eyes only
+            Live boot diagnostics &amp; real-time engine telemetry
           </p>
         </div>
         <button
@@ -119,7 +131,7 @@ export default function SystemHealthPage() {
       {/* Overall status banner */}
       {data && (
         <div
-          className={`flex items-center gap-4 p-5 rounded-2xl border ${
+          className={`flex items-center justify-between p-5 rounded-2xl border ${
             data.booted && !data.hasErrors
               ? "bg-emerald-500/10 border-emerald-500/20"
               : data.booted && data.hasErrors
@@ -127,69 +139,82 @@ export default function SystemHealthPage() {
               : "bg-red-500/10 border-red-500/20"
           }`}
         >
-          {data.booted && !data.hasErrors ? (
-            <CheckCircle2 className="w-6 h-6 text-emerald-400 shrink-0" />
-          ) : (
-            <AlertTriangle
-              className={`w-6 h-6 shrink-0 ${
-                data.booted ? "text-amber-400" : "text-red-400"
-              }`}
-            />
-          )}
-          <div>
-            <div className="font-bold text-white text-sm">
-              {data.booted && !data.hasErrors
-                ? "All engines running normally"
-                : data.booted
-                ? `Running with ${errorCount} error(s) and ${warnCount} warning(s)`
-                : "Engines failed to start — check logs below"}
-            </div>
-            <div className="text-xs text-slate-500 mt-0.5">
-              Uptime: {formatUptime(data.uptime)} · Last checked:{" "}
-              {lastRefresh?.toLocaleTimeString()}
+          <div className="flex items-center gap-4">
+            {data.booted && !data.hasErrors ? (
+              <CheckCircle2 className="w-6 h-6 text-emerald-400 shrink-0" />
+            ) : (
+              <AlertTriangle
+                className={`w-6 h-6 shrink-0 ${
+                  data.booted ? "text-amber-400" : "text-red-400"
+                }`}
+              />
+            )}
+            <div>
+              <div className="font-bold text-white text-sm">
+                {data.booted && !data.hasErrors
+                  ? "All core engines running normally"
+                  : data.booted
+                  ? `Operational with ${errorCount} error(s) and ${warnCount} warning(s)`
+                  : "Engines failed to start — check logs below"}
+              </div>
+              <div className="text-xs text-slate-500 mt-0.5">
+                Uptime: {formatUptime(data.uptime)} · Last checked:{" "}
+                {lastRefresh?.toLocaleTimeString()}
+              </div>
             </div>
           </div>
+
+          {data.memory && (
+            <div className="hidden md:flex items-center gap-3 bg-white/5 border border-white/5 px-4 py-2 rounded-xl text-xs">
+              <HardDrive className="w-4 h-4 text-purple-400" />
+              <div>
+                <span className="text-slate-400">RAM (RSS): </span>
+                <span className="text-white font-bold">{formatBytes(data.memory.rss)}</span>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* Engine status cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        {engines.map(({ name, icon: Icon, port, color }) => {
-          const online = !!port;
-          return (
+        {engines.map(({ name, icon: Icon, online, port, color }) => (
+          <div
+            key={name}
+            className="bg-slate-900 border border-white/5 rounded-2xl p-6 flex items-center gap-4"
+          >
             <div
-              key={name}
-              className="bg-slate-900 border border-white/5 rounded-2xl p-6 flex items-center gap-4"
+              className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                online
+                  ? `bg-${color}-500/10 text-${color}-400`
+                  : "bg-red-500/10 text-red-400"
+              }`}
             >
-              <div
-                className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                  online
-                    ? `bg-${color}-500/10 text-${color}-400`
-                    : "bg-red-500/10 text-red-400"
-                }`}
-              >
-                <Icon className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="text-sm font-bold text-white">{name}</div>
-                <div className="flex items-center gap-1.5 mt-1">
-                  <Circle
-                    className={`w-2 h-2 fill-current ${
-                      online ? "text-emerald-400" : "text-red-400"
-                    }`}
-                  />
-                  <span
-                    className={`text-xs font-semibold ${
-                      online ? "text-emerald-400" : "text-red-400"
-                    }`}
-                  >
-                    {online ? `Port ${port}` : "Offline"}
-                  </span>
-                </div>
+              <Icon className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-sm font-bold text-white">{name}</div>
+              <div className="flex items-center gap-1.5 mt-1">
+                <Circle
+                  className={`w-2 h-2 fill-current ${
+                    online ? "text-emerald-400" : "text-red-400"
+                  }`}
+                />
+                <span
+                  className={`text-xs font-semibold ${
+                    online ? "text-emerald-400" : "text-red-400"
+                  }`}
+                >
+                  {online
+                    ? port
+                      ? `Online (${port})`
+                      : "Operational"
+                    : "Offline"}
+                </span>
               </div>
             </div>
-          );
-        })}
+          </div>
+        ))}
       </div>
 
       {/* Boot Log Terminal */}
@@ -197,7 +222,7 @@ export default function SystemHealthPage() {
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
           <div className="flex items-center gap-3">
             <Activity className="w-4 h-4 text-purple-400" />
-            <span className="text-sm font-bold text-white">Boot Log</span>
+            <span className="text-sm font-bold text-white">Live System Log</span>
             {errorCount > 0 && (
               <span className="px-2 py-0.5 bg-red-500/15 border border-red-500/20 text-red-400 text-[10px] font-bold rounded-full uppercase tracking-widest">
                 {errorCount} error{errorCount !== 1 ? "s" : ""}
@@ -213,7 +238,7 @@ export default function SystemHealthPage() {
         <div className="p-6 font-mono text-xs space-y-1 max-h-[480px] overflow-y-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10">
           {loading && (
             <p className="text-slate-500 animate-pulse">
-              Fetching boot diagnostics…
+              Fetching system diagnostics…
             </p>
           )}
           {!loading && (!data || data.logs.length === 0) && (

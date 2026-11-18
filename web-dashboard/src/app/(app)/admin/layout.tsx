@@ -105,7 +105,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         <div className="pt-4 border-t border-white/5">
           <div className="px-4 py-2 mb-1">
-            <div className="text-[10px] text-slate-600 font-mono truncate">{user.email}</div>
+            <div className="text-[10px] text-slate-600 font-mono truncate">{user?.email}</div>
           </div>
           <Link
             href="/"

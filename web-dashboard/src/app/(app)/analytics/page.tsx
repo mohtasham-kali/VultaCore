@@ -2,11 +2,6 @@
 
 import dynamic from 'next/dynamic';
 import type { ComponentType } from 'react';
-const PieChart = dynamic(() => import('recharts').then(mod => mod.PieChart), { ssr: false }) as ComponentType<any>;
-const Pie = dynamic(() => import('recharts').then(mod => mod.Pie), { ssr: false }) as ComponentType<any>;
-const Cell = dynamic(() => import('recharts').then(mod => mod.Cell), { ssr: false }) as ComponentType<any>;
-const ResponsiveContainer = dynamic(() => import('recharts').then(mod => mod.ResponsiveContainer), { ssr: false }) as ComponentType<any>;
-const Tooltip = dynamic(() => import('recharts').then(mod => mod.Tooltip), { ssr: false }) as ComponentType<any>;
 const BarChart = dynamic(() => import('recharts').then(mod => mod.BarChart), { ssr: false }) as ComponentType<any>;
 const Bar = dynamic(() => import('recharts').then(mod => mod.Bar), { ssr: false }) as ComponentType<any>;
 const XAxis = dynamic(() => import('recharts').then(mod => mod.XAxis), { ssr: false }) as ComponentType<any>;
@@ -14,11 +9,16 @@ const YAxis = dynamic(() => import('recharts').then(mod => mod.YAxis), { ssr: fa
 const LineChart = dynamic(() => import('recharts').then(mod => mod.LineChart), { ssr: false }) as ComponentType<any>;
 const Line = dynamic(() => import('recharts').then(mod => mod.Line), { ssr: false }) as ComponentType<any>;
 const CartesianGrid = dynamic(() => import('recharts').then(mod => mod.CartesianGrid), { ssr: false }) as ComponentType<any>;
-import { BarChart as LucideBarChart, Activity, CheckCircle, XCircle, Loader2 } from "lucide-react";
+const ResponsiveContainer = dynamic(() => import('recharts').then(mod => mod.ResponsiveContainer), { ssr: false }) as ComponentType<any>;
+const Tooltip = dynamic(() => import('recharts').then(mod => mod.Tooltip), { ssr: false }) as ComponentType<any>;
+
+import { BarChart as LucideBarChart, Activity, CheckCircle, Zap, Loader2, RefreshCw } from "lucide-react";
 import { useSettings } from '@/providers/SettingsProvider';
 import { useAuth } from '@/context/AuthContext';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { fetchAnalytics } from '@/lib/api';
+import { io, Socket } from "socket.io-client";
+import { SOCKET_URL } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
 interface ActivityLogEntry {
@@ -32,6 +32,7 @@ interface AnalyticsStats {
   total_points: number;
   rank_estimate: string;
   engagement_score: number;
+  completion_rate?: number;
   activityLog?: ActivityLogEntry[];
   temporalData?: { name: string; value: number }[];
 }
@@ -41,24 +42,50 @@ export default function AnalyticsPage() {
   const { user } = useAuth();
   const [stats, setStats] = useState<AnalyticsStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadStats = useCallback(async (isManual = false) => {
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
+    if (isManual) setRefreshing(true);
+    try {
+      const data = await fetchAnalytics(user.id);
+      setStats(data);
+    } catch (e) {
+      console.error("Failed to load analytics", e);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [user?.id]);
 
   useEffect(() => {
-    async function loadStats() {
-      if (!user?.id) {
-        setLoading(false);
-        return;
-      }
-      try {
-        const data = await fetchAnalytics(user.id);
-        setStats(data);
-      } catch (e) {
-        console.error("Failed to load analytics", e);
-      } finally {
-        setLoading(false);
-      }
-    }
     loadStats();
-  }, [user?.id]);
+  }, [loadStats]);
+
+  // Real-time socket sync: refresh analytics when posts or activities occur
+  useEffect(() => {
+    if (!user?.id) return;
+    const socket: Socket = io(SOCKET_URL, { transports: ["websocket"] });
+
+    socket.on("connect", () => {
+      socket.emit("subscribeToUserEvents", user.id);
+    });
+
+    socket.on("activityLogged", () => {
+      loadStats();
+    });
+
+    socket.on("subscriptionUpdated", () => {
+      loadStats();
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [user?.id, loadStats]);
 
   const chartData = stats?.temporalData || [
     { name: 'Mon', value: 0 },
@@ -99,7 +126,6 @@ export default function AnalyticsPage() {
           </LineChart>
         );
       default:
-        // Area or default line for generic temporal view
         return (
           <LineChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
@@ -126,21 +152,34 @@ export default function AnalyticsPage() {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
-          Performance Analytics
-          <LucideBarChart className="w-8 h-8 text-indigo-500" />
-        </h1>
-        <p className="text-slate-400">Track your overall usage, points, and QnA statistics using Rust-powered analytics.</p>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
+            Performance Analytics
+            <LucideBarChart className="w-8 h-8 text-indigo-500" />
+          </h1>
+          <p className="text-slate-400">
+            Real-time activity telemetry, points breakdown, and performance analytics.
+          </p>
+        </div>
+
+        <button
+          onClick={() => loadStats(true)}
+          disabled={refreshing}
+          className="flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 border border-white/5 rounded-xl text-slate-300 hover:text-white text-xs font-semibold transition-all disabled:opacity-50"
+        >
+          <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />
+          Sync Analytics
+        </button>
       </div>
 
       {/* Stats Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { label: "Total Points", value: stats?.total_points?.toLocaleString() || "0", icon: Activity, color: "text-purple-400" },
-          { label: "Rank", value: stats?.rank_estimate || "Calculating...", icon: CheckCircle, color: "text-emerald-400" },
-          { label: "Engagement", value: `${stats?.engagement_score || 0}%`, icon: XCircle, color: "text-red-400" },
-          { label: "Completion", value: "60%", icon: LucideBarChart, color: "text-blue-400" },
+          { label: "Rank Tier", value: stats?.rank_estimate || "Recruit", icon: CheckCircle, color: "text-emerald-400" },
+          { label: "Engagement", value: `${stats?.engagement_score ?? 0}%`, icon: Zap, color: "text-amber-400" },
+          { label: "Completion", value: `${stats?.completion_rate ?? 100}%`, icon: LucideBarChart, color: "text-blue-400" },
         ].map((stat, i) => (
           <div key={i} className="bg-slate-900/50 border border-white/5 p-6 rounded-xl flex items-center justify-between">
             <div>
@@ -156,14 +195,13 @@ export default function AnalyticsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Points & Usage Chart */}
         <div className="bg-slate-900/50 border border-white/5 p-6 rounded-2xl h-[400px]">
-          <h3 className="text-lg font-bold text-white mb-6 uppercase text-xs tracking-widest opacity-50">Rust Analytics Engine Output ({chartType})</h3>
+          <h3 className="text-lg font-bold text-white mb-6 uppercase text-xs tracking-widest opacity-50">
+            7-Day Activity Telemetry ({chartType.toUpperCase()})
+          </h3>
           <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               {renderChart()}
             </ResponsiveContainer>
-          </div>
-          <div className="flex justify-center gap-6 mt-[-20px]">
-             {/* Legend removed for temporal chart */}
           </div>
         </div>
 
@@ -174,19 +212,19 @@ export default function AnalyticsPage() {
             {stats?.activityLog?.map((action: ActivityLogEntry, i: number) => (
               <div key={i} className="flex items-center gap-4 p-3 rounded-lg hover:bg-white/5 transition-colors border border-transparent hover:border-white/5">
                 <div className={cn(
-                  "w-8 h-8 rounded-full flex items-center justify-center text-xs border border-white/5",
+                  "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border border-white/5",
                   action.type === 'post' ? 'bg-purple-500/10 text-purple-400' : 'bg-blue-500/10 text-blue-400'
                 )}>
                   {action.type === 'post' ? 'P' : 'C'}
                 </div>
-                <div className="flex-1">
-                  <p className="text-sm text-slate-200">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-slate-200 truncate">
                     {action.type === 'post' ? `Created post: ${action.title}` : action.title}
                   </p>
                   <p className="text-xs text-slate-500 font-mono">{new Date(action.date).toLocaleString()}</p>
                 </div>
                 <span className={cn(
-                  "text-xs font-bold px-2 py-1 rounded-md border",
+                  "text-xs font-bold px-2 py-1 rounded-md border shrink-0",
                   action.type === 'post' ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' : 'text-blue-400 bg-blue-500/10 border-blue-500/20'
                 )}>
                   +{action.points} pts

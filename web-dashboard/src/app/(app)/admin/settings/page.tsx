@@ -1,56 +1,125 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Settings, Save, Server, ShieldCheck, Mail, Database } from "lucide-react";
+import { Settings, Save, Server, ShieldCheck, Mail, Database, CheckCircle2, AlertCircle, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { API_BASE_URL } from "@/lib/constants";
+import { useAuth } from "@/context/AuthContext";
 
 export default function AdminSettingsPage() {
+  const { session } = useAuth();
+  const token = session?.access_token;
+
+  const [platformName, setPlatformName] = useState("VultaCore");
+  const [supportEmail, setSupportEmail] = useState("support@vultacore.io");
+  const [analyticsEngineUrl, setAnalyticsEngineUrl] = useState("http://localhost:8080");
   const [maintenanceMode, setMaintenanceMode] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const loadSettings = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch(`${API_BASE_URL}/settings`);
+      if (!res.ok) throw new Error("Failed to load settings");
+      const data = await res.json();
+      
+      if (data.platformName) setPlatformName(data.platformName);
+      if (data.supportEmail) setSupportEmail(data.supportEmail);
+      if (data.analyticsEngineUrl) setAnalyticsEngineUrl(data.analyticsEngineUrl);
+      if (typeof data.maintenanceMode !== "undefined") {
+        setMaintenanceMode(data.maintenanceMode === "true" || data.maintenanceMode === true);
+      }
+    } catch (err) {
+      console.error("Failed to load settings:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    fetch(`${API_BASE_URL}/settings`)
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to load settings');
-        return res.json();
-      })
-      .then(data => {
-        if (data.maintenanceMode === 'true') setMaintenanceMode(true);
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error("Failed to load settings:", err);
-        setLoading(false);
-      });
+    loadSettings();
   }, []);
 
   const handleSave = async () => {
     setSaving(true);
+    setFeedback(null);
     try {
-      await fetch(`${API_BASE_URL}/settings`, {
+      const payload: Record<string, string> = {
+        platformName,
+        supportEmail,
+        analyticsEngineUrl,
+        maintenanceMode: maintenanceMode ? "true" : "false",
+      };
+
+      const res = await fetch(`${API_BASE_URL}/settings`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ maintenanceMode: maintenanceMode.toString() }),
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(payload),
       });
-    } catch (err) {
+
+      if (!res.ok) {
+        throw new Error(`Failed to save (Status ${res.status}). Administrator rights required.`);
+      }
+
+      setFeedback({ type: "success", text: "Platform settings saved successfully to database." });
+      setTimeout(() => setFeedback(null), 4000);
+    } catch (err: any) {
       console.error("Failed to save settings:", err);
+      setFeedback({ type: "error", text: err.message || "Failed to persist configuration changes." });
     } finally {
       setSaving(false);
     }
   };
 
   if (loading) {
-    return <div className="p-8 text-slate-500 italic">Accessing VultaCore configuration...</div>;
+    return (
+      <div className="p-12 text-center text-slate-500 italic flex items-center justify-center gap-3">
+        <RefreshCw className="w-5 h-5 animate-spin text-purple-400" />
+        Accessing VultaCore configuration from database...
+      </div>
+    );
   }
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold text-white tracking-tight">Platform Settings</h1>
-        <p className="text-slate-500 text-sm mt-1">Manage global configuration for the VultaCore platform.</p>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-white tracking-tight">Platform Settings</h1>
+          <p className="text-slate-500 text-sm mt-1">Manage global configuration for the VultaCore platform.</p>
+        </div>
+        <button
+          onClick={loadSettings}
+          disabled={loading}
+          className="p-2.5 bg-slate-900 hover:bg-slate-800 border border-white/5 rounded-xl text-slate-400 hover:text-white transition-colors"
+          title="Reload Settings"
+        >
+          <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+        </button>
       </div>
+
+      {feedback && (
+        <div
+          className={cn(
+            "p-4 rounded-2xl flex items-center gap-3 border text-sm font-medium transition-all",
+            feedback.type === "success"
+              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+              : "bg-red-500/10 border-red-500/30 text-red-400"
+          )}
+        >
+          {feedback.type === "success" ? (
+            <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
+          ) : (
+            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+          )}
+          <span>{feedback.text}</span>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* General Settings */}
@@ -61,15 +130,25 @@ export default function AdminSettingsPage() {
             </div>
             <h2 className="text-xl font-bold text-white">General Info</h2>
           </div>
-          
+
           <div className="space-y-4">
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Platform Name</label>
-              <input type="text" defaultValue="VultaCore" className="w-full bg-slate-950 border border-white/5 rounded-xl py-2 px-4 text-sm text-white focus:border-purple-500 outline-none" />
+              <input
+                type="text"
+                value={platformName}
+                onChange={(e) => setPlatformName(e.target.value)}
+                className="w-full bg-slate-950 border border-white/5 rounded-xl py-2 px-4 text-sm text-white focus:border-purple-500 outline-none"
+              />
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Support Email</label>
-              <input type="email" defaultValue="support@vultacore.io" className="w-full bg-slate-950 border border-white/5 rounded-xl py-2 px-4 text-sm text-white focus:border-purple-500 outline-none" />
+              <input
+                type="email"
+                value={supportEmail}
+                onChange={(e) => setSupportEmail(e.target.value)}
+                className="w-full bg-slate-950 border border-white/5 rounded-xl py-2 px-4 text-sm text-white focus:border-purple-500 outline-none"
+              />
             </div>
           </div>
         </div>
@@ -82,25 +161,31 @@ export default function AdminSettingsPage() {
             </div>
             <h2 className="text-xl font-bold text-white">Engine Configuration</h2>
           </div>
-          
+
           <div className="space-y-4">
-             <div>
+            <div>
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Analytics Engine URL</label>
-              <input type="text" defaultValue="http://localhost:8080" className="w-full bg-slate-950 border border-white/5 rounded-xl py-2 px-4 text-sm text-white focus:border-blue-500 outline-none" />
+              <input
+                type="text"
+                value={analyticsEngineUrl}
+                onChange={(e) => setAnalyticsEngineUrl(e.target.value)}
+                className="w-full bg-slate-950 border border-white/5 rounded-xl py-2 px-4 text-sm text-white focus:border-blue-500 outline-none"
+              />
             </div>
             <div className="flex items-center justify-between p-4 bg-slate-950 rounded-xl border border-white/5">
               <div>
                 <div className="text-sm font-bold text-white">Maintenance Mode</div>
                 <div className="text-xs text-slate-500">Disable access for non-admin users</div>
               </div>
-              <button 
+              <button
+                type="button"
                 onClick={() => setMaintenanceMode(!maintenanceMode)}
                 className={cn(
-                  "w-12 h-6 rounded-full relative transition-colors",
+                  "w-12 h-6 rounded-full relative transition-colors cursor-pointer",
                   maintenanceMode ? "bg-red-500" : "bg-slate-800"
                 )}
               >
-                <div 
+                <div
                   className={cn(
                     "w-4 h-4 bg-white rounded-full absolute top-1 transition-transform",
                     maintenanceMode ? "translate-x-7" : "translate-x-1"
@@ -113,13 +198,13 @@ export default function AdminSettingsPage() {
       </div>
 
       <div className="flex justify-end">
-        <button 
+        <button
           onClick={handleSave}
           disabled={saving}
           className="flex items-center gap-2 bg-purple-500 hover:bg-purple-600 disabled:opacity-50 text-white px-6 py-3 rounded-xl font-bold text-sm transition-colors shadow-lg shadow-purple-500/20"
         >
           <Save className="w-4 h-4" />
-          {saving ? "Saving..." : "Save Settings"}
+          {saving ? "Saving Changes..." : "Save Settings"}
         </button>
       </div>
     </div>

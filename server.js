@@ -488,6 +488,12 @@ const server = http.createServer((req, res) => {
             uptime: process.uptime(),
             booted: !!(BACK_READY && DASH_READY),
             ready: { backend: BACK_READY, dashboard: DASH_READY, ai: AI_READY },
+            ports: {
+                backend: typeof BACK_TARGET === 'number' ? BACK_TARGET : (BACK_READY ? (process.env.PORT_BACKEND || 3001) : null),
+                dashboard: typeof DASH_TARGET === 'number' ? DASH_TARGET : (DASH_READY ? (process.env.PORT_DASHBOARD || 3000) : null),
+                ai: typeof AI_TARGET === 'number' ? AI_TARGET : (AI_READY ? (process.env.PORT_AI || 8000) : null),
+            },
+            memory: process.memoryUsage(),
             isPrimary: isPrimaryManager,
             pid: process.pid,
             ts: new Date().toISOString(),
