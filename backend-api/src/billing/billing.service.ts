@@ -1,202 +1,265 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
-import { firstValueFrom } from 'rxjs';
-import * as crypto from 'crypto';
+import { Paddle, Environment } from '@paddle/paddle-node-sdk';
 import { UsersService } from '../users/users.service';
 import { EventsGateway } from '../events/events.gateway';
 
-const PLAN_VARIANT_MAP: Record<string, string> = {
-  Standard: 'standard',
-  Premium: 'premium',
+/**
+ * Maps Paddle sandbox price IDs → plan names.
+ * These are the price IDs created in the Paddle sandbox catalog.
+ */
+const SANDBOX_PRICE_TO_PLAN: Record<string, string> = {
+  // Standard — monthly & annual
+  pri_01m7r41d01n8xa18z8kzwhchv1: 'Standard',
+  pri_01m7r41d7yphdthpr9jhkw3b00: 'Standard',
+  // Premium — monthly & annual
+  pri_01m7r41dwfzw108seb2ptyvzrh: 'Premium',
+  pri_01m7r41e4p5a3w63m65b6ewd05: 'Premium',
+  // Enterprise
+  pri_01m7r41epjb34524nsn3nebdym: 'Enterprise',
+  pri_01m7r41eyvfc4x09tr8dv3nmtm: 'Enterprise',
+  // Free
+  pri_01m7r6d5fzz6397fsw4c5a3xx4: 'Free',
+};
+
+/**
+ * Maps Paddle live price IDs → plan names.
+ */
+const LIVE_PRICE_TO_PLAN: Record<string, string> = {
+  pri_01m7r11zk5c3bma7a6k0y70g5n: 'Standard', // live monthly
+  pri_01m7r12e4rwbrt25331y3sm88p: 'Premium',   // live monthly
 };
 
 @Injectable()
 export class BillingService {
   private readonly logger = new Logger(BillingService.name);
-  private readonly lsApiKey: string;
-  private readonly lsStoreId: string;
-  private readonly lsWebhookSecret: string;
+  private readonly paddle: Paddle;
+  private readonly webhookSecret: string;
   private readonly appUrl: string;
+  private readonly environment: Environment;
+  private readonly priceToPlan: Record<string, string>;
 
-  // Map Lemon Squeezy variant IDs to plan names — fill these in from your LS dashboard
-  private readonly variantToPlan: Record<string, string> = {
-    // e.g. '123456': 'Standard', '789012': 'Premium'
-    // These are set via LS_VARIANT_STANDARD and LS_VARIANT_PREMIUM env vars
+  /**
+   * Plan name → sandbox Paddle price ID (monthly).
+   * Used by createCheckoutSession to build the transaction.
+   */
+  private readonly planToPrice: Record<string, string> = {
+    Standard: 'pri_01m7r41d01n8xa18z8kzwhchv1',
+    Premium: 'pri_01m7r41dwfzw108seb2ptyvzrh',
+    Enterprise: 'pri_01m7r41epjb34524nsn3nebdym',
   };
 
   constructor(
-    private readonly http: HttpService,
     private readonly config: ConfigService,
     private readonly usersService: UsersService,
     private readonly eventsGateway: EventsGateway,
   ) {
-    this.lsApiKey =
-      this.config.get<string>('LS_API_KEY') ||
-      this.config.get<string>('LEMONSQUEEZY_API_KEY') ||
-      process.env.LS_API_KEY ||
-      process.env.LEMONSQUEEZY_API_KEY ||
+    const apiKey =
+      this.config.get<string>('PADDLE_API_KEY') ||
+      process.env.PADDLE_API_KEY ||
       '';
-    this.lsStoreId = this.config.get<string>('LS_STORE_ID') || process.env.LS_STORE_ID || '410740';
-    this.lsWebhookSecret = this.config.get<string>('LS_WEBHOOK_SECRET') || process.env.LS_WEBHOOK_SECRET || '';
-    this.appUrl = this.config.get<string>('APP_URL') || process.env.APP_URL || 'https://vultacore.techprogression.com';
 
-    // Build variant → plan mapping from env
-    const variantStandard = this.config.get<string>('LS_VARIANT_STANDARD') || process.env.LS_VARIANT_STANDARD || '1820715';
-    const variantPremium = this.config.get<string>('LS_VARIANT_PREMIUM') || process.env.LS_VARIANT_PREMIUM || '1820708';
-    const variantEnterprise = this.config.get<string>('LS_VARIANT_ENTERPRISE') || this.config.get<string>('LS_VARIANT_ENTERPISE') || process.env.LS_VARIANT_ENTERPRISE || process.env.LS_VARIANT_ENTERPISE || '1860093';
+    const env = this.config.get<string>('PADDLE_ENV') || process.env.PADDLE_ENV || 'sandbox';
+    this.environment = env === 'production' ? Environment.production : Environment.sandbox;
 
-    if (variantStandard) this.variantToPlan[variantStandard] = 'Standard';
-    if (variantPremium) this.variantToPlan[variantPremium] = 'Premium';
-    if (variantEnterprise) this.variantToPlan[variantEnterprise] = 'Enterprise';
+    // In production, switch to live price IDs
+    this.priceToPlan =
+      this.environment === Environment.production
+        ? LIVE_PRICE_TO_PLAN
+        : SANDBOX_PRICE_TO_PLAN;
+
+    // Allow price IDs to be injected via env as JSON: PADDLE_PRICE_MAP='{"pri_xxx":"Standard"}'
+    const extraMapRaw =
+      this.config.get<string>('PADDLE_PRICE_MAP') || process.env.PADDLE_PRICE_MAP;
+    if (extraMapRaw) {
+      try {
+        const extra = JSON.parse(extraMapRaw) as Record<string, string>;
+        Object.assign(this.priceToPlan, extra);
+        Object.assign(
+          this.planToPrice,
+          Object.fromEntries(Object.entries(extra).map(([k, v]) => [v, k])),
+        );
+      } catch {
+        this.logger.warn('PADDLE_PRICE_MAP is not valid JSON — ignoring');
+      }
+    }
+
+    this.webhookSecret =
+      this.config.get<string>('PADDLE_WEBHOOK_SECRET') ||
+      process.env.PADDLE_WEBHOOK_SECRET ||
+      '';
+
+    this.appUrl =
+      this.config.get<string>('APP_URL') ||
+      process.env.APP_URL ||
+      'https://vultacore.techprogression.com';
+
+    if (!apiKey) {
+      this.logger.warn('PADDLE_API_KEY is not set — billing will not work.');
+    }
+
+    this.paddle = new Paddle(apiKey || 'missing', { environment: this.environment });
   }
 
   /**
-   * Creates a Lemon Squeezy hosted checkout session and returns the checkout URL.
+   * Creates a Paddle transaction (hosted checkout) and returns the checkout URL.
+   *
+   * POST /billing/checkout
+   * Body: { planName, userId, userEmail }
    */
   async createCheckoutSession(
     planName: string,
     userId: string,
     userEmail: string,
   ): Promise<string> {
-    const key = `LS_VARIANT_${planName.toUpperCase()}`;
-    let variantId = this.config.get<string>(key) || process.env[key];
+    if (planName.toLowerCase() === 'enterprise') {
+      // Enterprise is contact-sales only — no checkout.
+      return `${this.appUrl}/contact?subject=Enterprise+Plan+Inquiry`;
+    }
 
-    // Fallbacks for known plan variants
-    if (!variantId) {
-      const normalized = planName.toUpperCase();
-      if (normalized === 'STANDARD') {
-        variantId = this.config.get<string>('LS_VARIANT_STANDARD') || process.env.LS_VARIANT_STANDARD || '1820715';
-      } else if (normalized === 'PREMIUM') {
-        variantId = this.config.get<string>('LS_VARIANT_PREMIUM') || process.env.LS_VARIANT_PREMIUM || '1820708';
-      } else if (normalized.includes('ENTERP')) {
-        variantId = this.config.get<string>('LS_VARIANT_ENTERPRISE') || this.config.get<string>('LS_VARIANT_ENTERPISE') || process.env.LS_VARIANT_ENTERPRISE || process.env.LS_VARIANT_ENTERPISE || '1860093';
+    const priceId = this.planToPrice[planName];
+    if (!priceId) {
+      throw new Error(
+        `No Paddle price configured for plan "${planName}". ` +
+        `Add it to planToPrice in billing.service.ts or set PADDLE_PRICE_MAP in .env.`,
+      );
+    }
+
+    // Try to find or create customer to pre-fill their email on checkout
+    let customerId: string | undefined;
+    if (userEmail) {
+      try {
+        const collection = this.paddle.customers.list({ email: [userEmail] });
+        const existing = await collection.next();
+        if (existing && existing.length > 0) {
+          customerId = existing[0].id;
+        } else {
+          const created = await this.paddle.customers.create({ email: userEmail });
+          customerId = created.id;
+        }
+      } catch (err) {
+        this.logger.warn(`Could not lookup/create Paddle customer: ${err}`);
       }
     }
 
-    if (!variantId) {
-      throw new Error(
-        `No Lemon Squeezy variant configured for plan "${planName}". Set LS_VARIANT_${planName.toUpperCase()} in .env`,
-      );
-    }
-
-    const payload = {
-      data: {
-        type: 'checkouts',
-        attributes: {
-          checkout_data: {
-            custom: {
-              user_id: userId,
-              plan_name: planName,
-            },
-            email: userEmail,
-          },
-          checkout_options: {
-            embed: false,
-            media: true,
-            logo: true,
-            desc: true,
-            discount: true,
-            dark: true,
-            subscription_preview: true,
-          },
-          product_options: {
-            enabled_variants: [parseInt(variantId)],
-            redirect_url: `${this.appUrl}/subscription?upgraded=true`,
-            receipt_link_url: `${this.appUrl}/subscription`,
-            receipt_thank_you_note: 'Thank you for upgrading VultaCore!',
-          },
-          expires_at: null,
-        },
-        relationships: {
-          store: {
-            data: { type: 'stores', id: this.lsStoreId },
-          },
-          variant: {
-            data: { type: 'variants', id: variantId },
-          },
-        },
-      },
-    };
-
-    let response;
     try {
-      response = await firstValueFrom(
-        this.http.post('https://api.lemonsqueezy.com/v1/checkouts', payload, {
-          headers: {
-            Accept: 'application/vnd.api+json',
-            'Content-Type': 'application/vnd.api+json',
-            Authorization: `Bearer ${this.lsApiKey}`,
-          },
-        }),
+      const transaction = await this.paddle.transactions.create({
+        items: [{ priceId, quantity: 1 }],
+        customerId: customerId || undefined,
+        customData: { user_id: userId, plan_name: planName },
+        checkout: {
+          url: `${this.appUrl}/subscription?upgraded=true`,
+        },
+      });
+
+      const checkoutUrl = transaction.checkout?.url;
+      if (!checkoutUrl) {
+        throw new Error('Paddle did not return a checkout URL.');
+      }
+
+      this.logger.log(
+        `🛒 Paddle checkout created for user ${userId} plan=${planName} → ${checkoutUrl}`,
       );
-    } catch (err: any) {
-      this.logger.error(
-        `LS error (store="${this.lsStoreId}", variant="${variantId}"): ${JSON.stringify(err?.response?.data)}`,
-      );
-      throw new Error(err?.response?.data?.errors?.[0]?.detail || err.message);
+      return checkoutUrl;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Paddle checkout error: ${msg}`);
+      throw new Error(msg);
     }
-
-    const checkoutUrl: string =
-      response.data?.data?.attributes?.url;
-
-    if (!checkoutUrl) {
-      throw new Error('Lemon Squeezy did not return a checkout URL.');
-    }
-
-    this.logger.log(`🛒 Checkout created for user ${userId} → ${checkoutUrl}`);
-    return checkoutUrl;
   }
 
   /**
-   * Verifies the Lemon Squeezy webhook signature and processes the event.
+   * Verifies the Paddle webhook signature and handles billing events.
+   *
+   * POST /billing/webhook
+   * Header: paddle-signature
    */
-  async handleWebhook(rawBody: Buffer, signature: string): Promise<void> {
-    // 1. Verify HMAC-SHA256 signature using constant-time comparison (prevents timing attacks)
-    const hmac = crypto.createHmac('sha256', this.lsWebhookSecret);
-    hmac.update(rawBody);
-    const digest = hmac.digest('hex');
+  async handleWebhook(rawBody: Buffer, signatureHeader: string): Promise<void> {
+    if (!this.webhookSecret) {
+      this.logger.warn(
+        'PADDLE_WEBHOOK_SECRET is not set — skipping signature verification (unsafe in production!)',
+      );
+    }
 
-    const digestBuf = Buffer.from(digest, 'utf8');
-    const signatureBuf = Buffer.from(signature || '', 'utf8');
-
-    if (
-      digestBuf.length !== signatureBuf.length ||
-      !crypto.timingSafeEqual(digestBuf, signatureBuf)
-    ) {
-      this.logger.warn('❌ Webhook signature mismatch — ignoring.');
+    let event: any;
+    try {
+      event = await this.paddle.webhooks.unmarshal(
+        rawBody.toString(),
+        this.webhookSecret,
+        signatureHeader,
+      );
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`❌ Paddle webhook signature verification failed: ${msg}`);
       throw new Error('Invalid webhook signature');
     }
 
-    const event = JSON.parse(rawBody.toString());
-    const eventName: string = event?.meta?.event_name;
-    const customData = event?.meta?.custom_data;
-    const variantId: string = String(
-      event?.data?.attributes?.variant_id ?? '',
-    );
-
-    this.logger.log(`📩 Lemon Squeezy webhook: ${eventName}`);
+    const eventType: string = event?.eventType || '';
+    this.logger.log(`📩 Paddle webhook: ${eventType}`);
 
     if (
-      eventName === 'order_created' ||
-      eventName === 'subscription_payment_success' ||
-      eventName === 'subscription_created'
+      eventType === 'subscription.activated' ||
+      eventType === 'subscription.created' ||
+      eventType === 'transaction.completed'
     ) {
-      const userId: string = customData?.user_id;
-      const planName: string =
-        customData?.plan_name ?? this.variantToPlan[variantId] ?? 'Standard';
-
-      if (!userId) {
-        this.logger.warn('Webhook missing user_id in custom_data');
-        return;
-      }
-
-      // 2. Update user plan in DB
-      await this.usersService.updatePlan(userId, planName);
-      this.logger.log(`✅ Plan updated: user=${userId} plan=${planName}`);
-
-      // 3. Push real-time update via WebSocket
-      this.eventsGateway.emitSubscriptionUpdated(userId, planName);
+      await this.handleActivation(event);
+    } else if (eventType === 'subscription.canceled') {
+      await this.handleCancellation(event);
+    } else if (eventType === 'subscription.updated') {
+      await this.handleUpdate(event);
     }
+  }
+
+  // ─── Private event handlers ────────────────────────────────────────────────
+
+  private async handleActivation(event: any): Promise<void> {
+    const customData = event.data?.customData as Record<string, string> | null;
+    const userId: string = customData?.user_id ?? '';
+    if (!userId) {
+      this.logger.warn(`[${event.eventType}] Missing user_id in customData — skipping`);
+      return;
+    }
+
+    let planName = customData?.plan_name ?? '';
+    if (!planName) {
+      const items: any[] = event.data?.items ?? [];
+      const priceId: string = items[0]?.price?.id ?? '';
+      planName = this.priceToPlan[priceId] ?? 'Standard';
+    }
+
+    await this.usersService.updatePlan(userId, planName);
+    this.logger.log(`✅ Plan activated: user=${userId} plan=${planName}`);
+    this.eventsGateway.emitSubscriptionUpdated(userId, planName);
+  }
+
+  private async handleCancellation(event: any): Promise<void> {
+    const customData = event.data?.customData as Record<string, string> | null;
+    const userId: string = customData?.user_id ?? '';
+    if (!userId) {
+      this.logger.warn('[subscription.canceled] Missing user_id — skipping');
+      return;
+    }
+
+    await this.usersService.updatePlan(userId, 'Free');
+    this.logger.log(`🚫 Subscription canceled: user=${userId} → downgraded to Free`);
+    this.eventsGateway.emitSubscriptionUpdated(userId, 'Free');
+  }
+
+  private async handleUpdate(event: any): Promise<void> {
+    const customData = event.data?.customData as Record<string, string> | null;
+    const userId: string = customData?.user_id ?? '';
+    if (!userId) return;
+
+    const items: any[] = event.data?.items ?? [];
+    const priceId: string = items[0]?.price?.id ?? '';
+    const planName = this.priceToPlan[priceId];
+    if (!planName) {
+      this.logger.debug(`[subscription.updated] Unknown priceId=${priceId} — skipping plan update`);
+      return;
+    }
+
+    await this.usersService.updatePlan(userId, planName);
+    this.logger.log(`🔄 Plan updated: user=${userId} plan=${planName}`);
+    this.eventsGateway.emitSubscriptionUpdated(userId, planName);
   }
 }

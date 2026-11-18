@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
-import { Check, Loader2, Sparkles, Zap, ExternalLink } from "lucide-react";
+import { Check, Loader2, Sparkles, Zap, ExternalLink, Settings } from "lucide-react";
+import { ManageSubscriptionButton } from "@/components/manage-subscription-button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 import { io, Socket } from "socket.io-client";
@@ -156,13 +157,13 @@ function SubscriptionPageClient() {
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || "Failed to create checkout session.");
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || err.error || "Failed to create checkout session.");
       }
 
       const { checkoutUrl } = await res.json();
 
-      // Redirect to Lemon Squeezy hosted checkout
+      // Redirect to Paddle hosted checkout
       // Supports: Credit/Debit cards, PayPal, Google Pay, Apple Pay
       window.location.href = checkoutUrl;
     } catch (err: unknown) {
@@ -349,10 +350,32 @@ function SubscriptionPageClient() {
         })}
       </div>
 
+      {/* Manage / Cancel — shown only when the user has an active paid plan */}
+      {currentPlan !== "Free" && currentPlan !== "" && (
+        <div className="mt-12 flex flex-col items-center gap-3">
+          <p className="text-slate-500 text-sm">
+            Need to update your payment method, download invoices, or cancel?
+          </p>
+          <div className="flex flex-wrap gap-3 justify-center">
+            <ManageSubscriptionButton label="Manage Subscription" />
+            <ManageSubscriptionButton
+              label="Cancel Subscription"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-transparent hover:bg-red-500/10 border border-red-500/30 hover:border-red-500/60 text-red-400 hover:text-red-300 text-sm font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            />
+          </div>
+          <p className="text-slate-600 text-xs mt-1">
+            Powered by{" "}
+            <span className="text-slate-500 font-medium">Paddle</span> · Secure
+            billing portal
+          </p>
+        </div>
+      )}
+
       {/* Powered by footer */}
-      <div className="mt-16 text-center">
+      <div className="mt-10 text-center">
         <p className="text-slate-600 text-xs">
-          Payments securely processed by{" "}· All prices in USD · Cancel anytime
+          Payments securely processed by Paddle · All prices in USD · Cancel
+          anytime
         </p>
       </div>
     </div>

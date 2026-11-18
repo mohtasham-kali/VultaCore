@@ -23,7 +23,7 @@ export class BillingController {
   constructor(private readonly billingService: BillingService) {}
 
   /**
-   * Frontend calls this to get a Lemon Squeezy checkout URL.
+   * Frontend calls this to get a Paddle hosted checkout URL.
    * POST /billing/checkout
    * Body: { planName: "Standard" | "Premium", userId: "...", userEmail: "..." }
    */
@@ -31,7 +31,9 @@ export class BillingController {
   async createCheckout(@Body() body: CheckoutDto) {
     const { planName, userId, userEmail } = body;
     if (!planName || !userId || !userEmail) {
-      throw new BadRequestException('planName, userId and userEmail are required.');
+      throw new BadRequestException(
+        'planName, userId and userEmail are required.',
+      );
     }
 
     try {
@@ -49,19 +51,25 @@ export class BillingController {
   }
 
   /**
-   * Lemon Squeezy fires this webhook after payment.
+   * Paddle fires this webhook after payment events.
    * POST /billing/webhook
-   * Must receive raw body for HMAC verification — uses RawBodyMiddleware.
+   *
+   * Paddle sends the signature in the `paddle-signature` header.
+   * Raw body must be preserved for HMAC verification — ensure rawBody middleware
+   * is configured in main.ts (bodyParser: false + RawBodyMiddleware, or
+   * app.useGlobalMiddleware with rawBody: true in NestFactory.create options).
    */
   @Post('webhook')
   async handleWebhook(
     @Req() req: Request,
-    @Headers('x-signature') signature: string,
+    @Headers('paddle-signature') signature: string,
   ) {
     const rawBody: Buffer = (req as any).rawBody;
 
     if (!rawBody) {
-      throw new BadRequestException('No raw body found. Check middleware config.');
+      throw new BadRequestException(
+        'No raw body found. Ensure rawBody is preserved in main.ts.',
+      );
     }
 
     try {

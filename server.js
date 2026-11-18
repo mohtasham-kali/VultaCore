@@ -1063,7 +1063,7 @@ async function bootEngines() {
 
     startEngine('Backend', process.execPath, [backendEntry], BACK_TARGET,
         path.join(rootDir, 'backend-api'),
-        { ...process.env, AI_SERVICE_URL: aiServiceUrl, HOSTNAME: '127.0.0.1' }, 0);
+        { ...process.env, AI_SERVICE_URL: aiServiceUrl, HOSTNAME: '127.0.0.1', DB_SSL_INSECURE: 'true' }, 0);
 
     // 3. Analytics Engine (Rust)
     const rustBin = path.join(rootDir, 'analytics-engine', 'target', 'release', 'analytics-engine');
