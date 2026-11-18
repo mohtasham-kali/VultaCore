@@ -39,6 +39,7 @@ jobs:
           port: ${{ secrets.DEPLOY_PORT || secrets.HOSTINGER_SSH_PORT || 65002 }}
           username: ${{ secrets.DEPLOY_USER || secrets.HOSTINGER_SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          password: ${{ secrets.HOSTINGER_SSH_PASSWORD }}
           envs: DEPLOY_PATH
           script_stop: true
           script: |
@@ -118,6 +119,7 @@ jobs:
           port: ${{ secrets.DEPLOY_PORT || secrets.HOSTINGER_SSH_PORT || 65002 }}
           username: ${{ secrets.DEPLOY_USER || secrets.HOSTINGER_SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          password: ${{ secrets.HOSTINGER_SSH_PASSWORD }}
           envs: DEPLOY_PATH
           script: |
             set -e
