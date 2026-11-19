@@ -78,16 +78,15 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Run Trivy (SARIF output)
-        uses: aquasecurity/trivy-action@v0.28.0
-        with:
-          scan-type: 'fs'
-          scan-ref: '.'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          severity: 'HIGH,CRITICAL'
-          ignore-unfixed: true
-          skip-dirs: 'node_modules,web-dashboard/.next,dist,out,target,desktop-app/src-tauri/target,.git'
-          exit-code: '0'
+        run: |
+          docker run --rm -v "$PWD:/src" aquasec/trivy:latest fs \
+            --format sarif \
+            --output /src/trivy-results.sarif \
+            --severity HIGH,CRITICAL \
+            --ignore-unfixed \
+            --skip-dirs node_modules,web-dashboard/.next,dist,out,target,desktop-app/src-tauri/target,.git \
+            --exit-code 0 \
+            /src
 
       - name: Upload Trivy Results to GitHub Security
         uses: github/codeql-action/upload-sarif@v3
