@@ -55,11 +55,19 @@ jobs:
             --config p/python \
             --config .semgrep/rules.yml \
             --metrics=off \
-            --error \
+            --sarif \
+            --sarif-output=semgrep-results.sarif \
             --exclude node_modules \
             --exclude out \
             --exclude dist \
             --exclude .next
+
+      - name: Upload Semgrep Results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'semgrep-results.sarif'
+          category: 'semgrep'
 
   trivy:
     name: Trivy (SCA & Misconfigurations)
@@ -70,7 +78,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Run Trivy (SARIF output)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.28.0
         with:
           scan-type: 'fs'
           scan-ref: '.'

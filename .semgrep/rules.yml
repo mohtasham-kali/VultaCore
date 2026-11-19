@@ -17,7 +17,16 @@ rules:
               $METHOD(...) { ... }
       - pattern-not-inside: |
           @UseGuards(...)
-          ...
+          class $CLASS {
+            ...
+          }
+      - pattern-not: |
+          @UseGuards(...)
+          @Patch(...)
+          $METHOD(...) { ... }
+      - pattern-not: |
+          @UseGuards(...)
+          @Delete(...)
           $METHOD(...) { ... }
 
   - id: timing-attack-signature-comparison
@@ -28,12 +37,13 @@ rules:
       cwe: "CWE-208: Observable Timing Discrepancy"
       owasp: "A02:2021 - Cryptographic Failures"
       category: security
-    pattern-either:
-      - pattern: $DIGEST === $SIGNATURE
-      - pattern: $DIGEST !== $SIGNATURE
-    metavariable-regex:
-      metavariable: $SIGNATURE
-      regex: "(?i)(sig|signature|hmac|hash|digest|token)"
+    patterns:
+      - pattern-either:
+          - pattern: $DIGEST === $SIGNATURE
+          - pattern: $DIGEST !== $SIGNATURE
+      - metavariable-regex:
+          metavariable: $SIGNATURE
+          regex: ".*(?i)(sig|signature|hmac|hash|digest|token).*"
 
   - id: nestjs-unrestricted-cors
     languages: [typescript, javascript]
