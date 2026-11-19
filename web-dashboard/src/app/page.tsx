@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Mail } from 'lucide-react';
 import { UserDropdown } from '@/components/auth/UserDropdown';
 import { NotificationCenter } from '@/components/notifications/NotificationCenter';
 
@@ -113,12 +114,21 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Footer — about, contact & legal links + machine-readable contact for agents */}
+      {/* Footer — about, contact & legal links + visible support email */}
       <footer className="relative z-10 border-t border-white/5 mt-16 py-10">
         <div className="container mx-auto px-6">
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-            <div className="text-slate-500 text-sm">
-              © {new Date().getFullYear()} TechProgression · VultaCore
+            <div className="flex flex-col sm:flex-row items-center gap-3 text-slate-500 text-sm">
+              <span>© {new Date().getFullYear()} TechProgression · VultaCore</span>
+              <span className="hidden sm:inline text-slate-700">•</span>
+              <a
+                href="mailto:support@techprogression.com"
+                className="flex items-center gap-1.5 text-slate-400 hover:text-purple-400 transition-colors"
+                title="Contact Customer Support"
+              >
+                <Mail className="w-3.5 h-3.5 text-purple-400" />
+                support@techprogression.com
+              </a>
             </div>
             <nav aria-label="Footer links" className="flex flex-wrap gap-6 text-sm text-slate-400">
               <Link href="/enterprise-contact" className="hover:text-white transition-colors">About</Link>
@@ -130,11 +140,6 @@ export default function Home() {
               <Link href="/refund" className="hover:text-white transition-colors">Refund Policy</Link>
             </nav>
           </div>
-          {/* Machine-readable contact — invisible to humans, readable by agents */}
-          <address className="hidden" aria-hidden="true">
-            <span itemProp="email">support@techprogression.com</span>
-            <a href="mailto:support@techprogression.com">Email VultaCore</a>
-          </address>
         </div>
       </footer>
     </div>
