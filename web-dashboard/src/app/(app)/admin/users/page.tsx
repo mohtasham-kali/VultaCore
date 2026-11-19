@@ -21,6 +21,8 @@ export default function AdminUsersPage() {
   const [search, setSearch] = useState("");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [successId, setSuccessId] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<string | null>(null);
 
   const token = session?.access_token;
 
@@ -49,6 +51,7 @@ export default function AdminUsersPage() {
   const handleUpdateRank = async (userId: string, newRank: string) => {
     try {
       setUpdatingId(userId);
+      setErrorMessage(null);
       const res = await fetch(`${API_BASE_URL}/users/${userId}/plan`, {
         method: "PATCH",
         headers: {
@@ -59,17 +62,30 @@ export default function AdminUsersPage() {
       });
 
       if (!res.ok) {
-        throw new Error("Failed to update rank");
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.message || "Failed to update rank");
       }
+
+      const updated = await res.json().catch(() => null);
 
       setUsers((prev) =>
         prev.map((u) => (u.id === userId ? { ...u, rank: newRank } : u))
       );
       setSuccessId(userId);
+
+      if (updated?.paddleSync?.message) {
+        setSyncStatus(`Updated to ${newRank}: ${updated.paddleSync.message}`);
+        setTimeout(() => setSyncStatus(null), 5000);
+      }
+
       setTimeout(() => setSuccessId(null), 3000);
     } catch (err) {
       console.error("Update error:", err);
-      alert("Failed to update user tier. Make sure you are signed in as an administrator.");
+      setErrorMessage(
+        (err as Error).message ||
+          "Failed to update user tier. Make sure you are signed in as an administrator."
+      );
+      setTimeout(() => setErrorMessage(null), 6000);
     } finally {
       setUpdatingId(null);
     }
@@ -118,6 +134,30 @@ export default function AdminUsersPage() {
           </button>
         </div>
       </div>
+
+      {syncStatus && (
+        <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl flex items-center justify-between gap-3 animate-in fade-in">
+          <p className="text-emerald-400 font-semibold text-sm">✓ {syncStatus}</p>
+          <button
+            onClick={() => setSyncStatus(null)}
+            className="text-emerald-400 hover:text-emerald-300 text-xs font-bold shrink-0"
+          >
+            ✕ Dismiss
+          </button>
+        </div>
+      )}
+
+      {errorMessage && (
+        <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-2xl flex items-center justify-between gap-3 animate-in fade-in">
+          <p className="text-red-400 font-semibold text-sm">⚠️ {errorMessage}</p>
+          <button
+            onClick={() => setErrorMessage(null)}
+            className="text-red-400 hover:text-red-300 text-xs font-bold shrink-0"
+          >
+            ✕ Dismiss
+          </button>
+        </div>
+      )}
 
       <div className="bg-slate-900 border border-white/5 rounded-3xl overflow-hidden shadow-2xl">
         <table className="w-full text-left">

@@ -98,7 +98,6 @@ export function PaymentModal({ isOpen, onClose, planName, planPrice, userId }: P
       setIsProcessing(false);
       setIsSuccess(true);
       setTimeout(() => {
-        alert("Payment Successful! Your plan is now active.");
         onClose();
       }, 1500);
     } catch (err) {
@@ -116,7 +115,6 @@ export function PaymentModal({ isOpen, onClose, planName, planPrice, userId }: P
       await syncPlanToBackend();
       setIsSuccess(true);
       setTimeout(() => {
-        alert(`Success! VultaCore ${planName} is now active.`);
         onClose();
       }, 1500);
     }, 2000);
