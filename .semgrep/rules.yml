@@ -52,7 +52,7 @@ rules:
     metadata:
       cwe: "CWE-668: Exposure of Resource to Wrong Sphere"
       category: security
-    pattern: synchronize: true
+    pattern: "synchronize: true"
 
   - id: nextjs-debug-headers-leak
     languages: [typescript, javascript]

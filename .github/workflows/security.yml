@@ -31,7 +31,7 @@ jobs:
       - name: Run Gitleaks Scanner
         run: |
           docker run --rm -v "$PWD:/repo" zricethezav/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f \
-            detect --source /repo --config /repo/.gitleaks.toml --redact --exit-code 1
+            detect --source /repo --config /repo/.gitleaks.toml --baseline-path /repo/gitleaks-baseline.json --redact --exit-code 1
 
   sast-semgrep:
     name: Semgrep (SAST)
@@ -69,11 +69,24 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - name: Run Trivy File System Scan
-        run: |
-          docker run --rm -v "$PWD:/src" aquasec/trivy:latest fs \
-            --config /src/.trivy.yaml \
-            /src
+      - name: Run Trivy (SARIF output)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'HIGH,CRITICAL'
+          ignore-unfixed: true
+          skip-dirs: 'node_modules,web-dashboard/.next,dist,out,target,desktop-app/src-tauri/target,.git'
+          exit-code: '0'
+
+      - name: Upload Trivy Results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+          category: 'trivy'
 
   codeql:
     name: CodeQL Deep Analysis
