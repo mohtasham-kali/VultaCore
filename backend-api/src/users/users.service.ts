@@ -1,13 +1,16 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
+import { BillingService } from '../billing/billing.service';
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectRepository(User)
     private usersRepository: Repository<User>,
+    @Inject(forwardRef(() => BillingService))
+    private billingService: BillingService,
   ) {}
 
   async findOne(id: string): Promise<User | null> {
@@ -42,7 +45,7 @@ export class UsersService {
     return this.usersRepository.save(user);
   }
 
-  async updatePlan(userId: string, planName: string): Promise<User> {
+  async updatePlan(userId: string, planName: string, syncPaddle: boolean = true): Promise<User & { paddleSync?: any }> {
     let user = await this.usersRepository.findOneBy({ id: userId });
     
     if (!user) {
@@ -53,12 +56,23 @@ export class UsersService {
         username: `user_${userId.slice(0, 4)}`,
         email: `${userId}@vultacore.app`,
         password: 'demo_password_placeholder', // Required by database schema
-        rank: planName
+        rank: planName,
       });
     } else {
       user.rank = planName;
     }
     
-    return this.usersRepository.save(user);
+    const savedUser = await this.usersRepository.save(user);
+
+    let paddleSyncResult: any = undefined;
+    if (syncPaddle && this.billingService) {
+      try {
+        paddleSyncResult = await this.billingService.syncUserPlanToPaddle(savedUser, planName);
+      } catch (err: any) {
+        console.error('Paddle sync error in updatePlan:', err?.message || err);
+      }
+    }
+
+    return Object.assign(savedUser, { paddleSync: paddleSyncResult });
   }
 }

@@ -1,7 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Paddle, Environment } from '@paddle/paddle-node-sdk';
 import { UsersService } from '../users/users.service';
+import { User } from '../users/entities/user.entity';
 import { EventsGateway } from '../events/events.gateway';
 
 /**
@@ -41,6 +42,7 @@ export class BillingService {
 
   constructor(
     private readonly config: ConfigService,
+    @Inject(forwardRef(() => UsersService))
     private readonly usersService: UsersService,
     private readonly eventsGateway: EventsGateway,
   ) {
@@ -133,8 +135,12 @@ export class BillingService {
     userEmail: string,
   ): Promise<string> {
     if (planName.toLowerCase() === 'enterprise') {
-      // Enterprise is contact-sales only — no checkout.
-      return `${this.appUrl}/contact?subject=Enterprise+Plan+Inquiry`;
+      // Enterprise is contact-sales only — redirect to compose email to sales@techprogression.com
+      const subject = encodeURIComponent(`Enterprise Plan Inquiry - ${userEmail || 'VultaCore'}`);
+      const body = encodeURIComponent(
+        `Hi TechProgression Sales Team,\n\nI would like to inquire about the Enterprise Plan for my account.\n\nAccount Details:\n- Email: ${userEmail}\n- User ID: ${userId}\n- Requested Tier: Enterprise\n\nPlease get in touch regarding custom contract setup and provisioning.\n\nThank you!`,
+      );
+      return `mailto:sales@techprogression.com?subject=${subject}&body=${body}`;
     }
 
     const priceId = this.planToPrice[planName];
@@ -247,7 +253,7 @@ export class BillingService {
       planName = this.priceToPlan[priceId] ?? 'Standard';
     }
 
-    await this.usersService.updatePlan(userId, planName);
+    await this.usersService.updatePlan(userId, planName, false);
     this.logger.log(`✅ Plan activated: user=${userId} plan=${planName}`);
     this.eventsGateway.emitSubscriptionUpdated(userId, planName);
   }
@@ -260,7 +266,7 @@ export class BillingService {
       return;
     }
 
-    await this.usersService.updatePlan(userId, 'Free');
+    await this.usersService.updatePlan(userId, 'Free', false);
     this.logger.log(`🚫 Subscription canceled: user=${userId} → downgraded to Free`);
     this.eventsGateway.emitSubscriptionUpdated(userId, 'Free');
   }
@@ -278,8 +284,105 @@ export class BillingService {
       return;
     }
 
-    await this.usersService.updatePlan(userId, planName);
+    await this.usersService.updatePlan(userId, planName, false);
     this.logger.log(`🔄 Plan updated: user=${userId} plan=${planName}`);
     this.eventsGateway.emitSubscriptionUpdated(userId, planName);
+  }
+
+  /**
+   * Synchronizes a user's plan assignment directly with Paddle.
+   * - Finds or creates the customer in Paddle using their email.
+   * - Updates customData on the customer record (plan_name, rank, assigned_by: admin).
+   * - If an active or trialing Paddle subscription exists, upgrades the subscription item.
+   * - Emits real-time websocket event to connected web clients.
+   */
+  async syncUserPlanToPaddle(
+    user: User,
+    planName: string,
+  ): Promise<{ success: boolean; customerId?: string; subscriptionId?: string; message: string }> {
+    try {
+      this.logger.log(`Syncing plan "${planName}" to Paddle for user ${user.id} (${user.email})...`);
+
+      // 1. Find or create customer in Paddle
+      let customerId: string | undefined;
+      try {
+        const collection = this.paddle.customers.list({ email: [user.email] });
+        const existing = await collection.next();
+
+        if (existing && existing.length > 0) {
+          customerId = existing[0].id;
+          await this.paddle.customers.update(customerId, {
+            name: user.username || undefined,
+            customData: {
+              user_id: user.id,
+              plan_name: planName,
+              rank: planName,
+              updated_at: new Date().toISOString(),
+              assigned_by: 'admin',
+            },
+          });
+          this.logger.log(`Updated existing Paddle customer ${customerId} customData to plan: ${planName}`);
+        } else {
+          const created = await this.paddle.customers.create({
+            email: user.email,
+            name: user.username || user.email.split('@')[0],
+            customData: {
+              user_id: user.id,
+              plan_name: planName,
+              rank: planName,
+              created_at: new Date().toISOString(),
+              assigned_by: 'admin',
+            },
+          });
+          customerId = created.id;
+          this.logger.log(`Created new Paddle customer ${customerId} for ${user.email} with plan: ${planName}`);
+        }
+      } catch (custErr: any) {
+        this.logger.warn(`Paddle customer sync warning: ${custErr?.message || custErr}`);
+      }
+
+      // 2. Check for active subscription and update if present
+      let subscriptionId: string | undefined;
+      if (customerId) {
+        try {
+          const subCollection = this.paddle.subscriptions.list({
+            customerId: [customerId],
+            status: ['active', 'trialing'],
+          });
+          const subs = await subCollection.next();
+          if (subs && subs.length > 0) {
+            const activeSub = subs[0];
+            subscriptionId = activeSub.id;
+            const targetPriceId = this.planToPrice[planName];
+            if (targetPriceId) {
+              await this.paddle.subscriptions.update(activeSub.id, {
+                items: [{ priceId: targetPriceId, quantity: 1 }],
+                prorationBillingMode: 'full_immediately',
+              });
+              this.logger.log(`Updated Paddle subscription ${activeSub.id} to price ${targetPriceId} (${planName})`);
+            }
+          }
+        } catch (subErr: any) {
+          this.logger.warn(`Paddle subscription update warning: ${subErr?.message || subErr}`);
+        }
+      }
+
+      // 3. Emit real-time update to active clients via websocket
+      this.eventsGateway.emitSubscriptionUpdated(user.id, planName);
+
+      return {
+        success: true,
+        customerId,
+        subscriptionId,
+        message: `Successfully synchronized ${planName} tier to Paddle for ${user.email}`,
+      };
+    } catch (err: any) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Error syncing plan to Paddle for user ${user.id}: ${msg}`);
+      return {
+        success: false,
+        message: `Database updated, but Paddle sync encountered: ${msg}`,
+      };
+    }
   }
 }

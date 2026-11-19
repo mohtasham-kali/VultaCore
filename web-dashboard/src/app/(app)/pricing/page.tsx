@@ -72,7 +72,7 @@ const PLANS = [
       "Custom Vendor Security Audits",
     ],
     buttonText: "Contact Enterprise Sales",
-    buttonHref: "/enterprise-contact",
+    buttonHref: "mailto:sales@techprogression.com?subject=Enterprise%20Plan%20Inquiry%20-%20VultaCore&body=Hi%20TechProgression%20Sales%20Team%2C%0A%0AI%20would%20like%20to%20inquire%20about%20the%20VultaCore%20Enterprise%20Plan.%0A%0APlease%20contact%20me%20to%20discuss%20custom%20pricing%20and%20onboarding.%0A%0AThank%20you%21",
     highlight: false,
     gradient: "from-emerald-500 to-teal-500",
   },

@@ -86,6 +86,7 @@ function SubscriptionPageClient() {
   const [upgradingPlan, setUpgradingPlan] = useState<string | null>(null);
   const [isSocketConnected, setIsSocketConnected] = useState(false);
   const [justUpgraded, setJustUpgraded] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   // Detect return from Lemon Squeezy checkout
   useEffect(() => {
@@ -132,14 +133,18 @@ function SubscriptionPageClient() {
 
   const handleUpgrade = async (planId: string, planName: string) => {
     if (planId === "enterprise") {
-      window.location.href = "mailto:sales@vultacore.com?subject=Enterprise Plan Inquiry";
+      const subject = encodeURIComponent("Enterprise Plan Inquiry - VultaCore");
+      const body = encodeURIComponent(
+        `Hi TechProgression Sales Team,\n\nI would like to inquire about the VultaCore Enterprise Plan.\n\nMy Account Details:\n- Email: ${user?.email ?? "N/A"}\n- Username: ${user?.user_metadata?.username ?? user?.email?.split("@")[0] ?? "N/A"}\n- User ID: ${user?.id ?? "N/A"}\n\nPlease contact me to discuss custom pricing and onboarding.\n\nThank you!`
+      );
+      window.open(`mailto:sales@techprogression.com?subject=${subject}&body=${body}`, "_blank");
       return;
     }
 
     if (planName === currentPlan) return;
 
     if (!user?.id || !user?.email) {
-      alert("Please log in to upgrade your plan.");
+      setCheckoutError("Please log in to upgrade your plan.");
       return;
     }
 
@@ -168,7 +173,7 @@ function SubscriptionPageClient() {
       window.location.href = checkoutUrl;
     } catch (err: unknown) {
       console.error("Checkout Error:", err);
-      alert(`Checkout failed: ${(err as Error).message}`);
+      setCheckoutError(`Checkout failed: ${(err as Error).message}`);
       setUpgradingPlan(null);
     }
   };
@@ -198,6 +203,19 @@ function SubscriptionPageClient() {
             <p className="text-emerald-400 font-semibold text-sm">
               🎉 Payment successful! Your plan is being activated. It will update automatically in a few seconds.
             </p>
+          </div>
+        )}
+
+        {/* Checkout error banner */}
+        {checkoutError && (
+          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-2xl text-center animate-in fade-in slide-in-from-top-2 duration-300 flex items-center justify-between gap-3">
+            <p className="text-red-400 font-semibold text-sm">⚠️ {checkoutError}</p>
+            <button
+              onClick={() => setCheckoutError(null)}
+              className="text-red-400 hover:text-red-300 text-xs font-bold shrink-0"
+            >
+              ✕ Dismiss
+            </button>
           </div>
         )}
 
