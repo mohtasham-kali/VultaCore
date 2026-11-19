@@ -461,11 +461,21 @@ const server = http.createServer((req, res) => {
 
     // Health check endpoint (used by CI/CD deployment verification)
     if (parsedUrl.pathname === '/health') {
+        const hasPrimary = isPrimaryManager || (() => {
+            try {
+                if (fs.existsSync(stateFile)) {
+                    const s = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+                    return !!(s && s.managerPid && (Date.now() - (s.updatedAt || 0) < 60000));
+                }
+            } catch (_) { }
+            return false;
+        })();
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({
             status: 'up',
             ready: { backend: BACK_READY, dashboard: DASH_READY, ai: AI_READY },
-            isPrimary: isPrimaryManager,
+            isPrimary: hasPrimary,
             pid: process.pid,
             uptime: process.uptime()
         }));
@@ -883,7 +893,32 @@ function resolvePython() {
         }
     }
 
-    // 4. Check global uvicorn
+    // 4. Check user .local site-packages (Hostinger / CloudLinux CageFS compatibility)
+    const userLocalCandidates = [
+        path.join(process.env.HOME || '', '.local/lib/python3.11/site-packages'),
+        path.join(process.env.HOME || '', '.local/lib/python3.10/site-packages'),
+        '/home/u879979656/.local/lib/python3.11/site-packages',
+        '/home/u879979656/.local/lib/python3.10/site-packages',
+        '/home/u879979656/domains/vultacore.techprogression.com/.local/lib/python3.11/site-packages'
+    ].filter(p => fs.existsSync(p));
+
+    for (const sitePackages of userLocalCandidates) {
+        for (const py of pythonCandidates) {
+            if (canImportUvicorn(py, { PYTHONPATH: sitePackages })) {
+                log(`AI Engine: resolved → ${py} using user site-packages (${sitePackages})`);
+                return {
+                    bin: py,
+                    args: getUvicornArgs,
+                    env: {
+                        PYTHONPATH: sitePackages,
+                        PATH: `${path.join(path.dirname(path.dirname(sitePackages)), 'bin')}:${process.env.PATH || ''}`
+                    }
+                };
+            }
+        }
+    }
+
+    // 5. Check global uvicorn
     for (const py of pythonCandidates) {
         if (canImportUvicorn(py)) {
             log(`AI Engine: resolved → ${py} (global uvicorn)`);
