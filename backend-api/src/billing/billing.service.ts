@@ -189,7 +189,7 @@ export class BillingService {
         customerId: customerId || undefined,
         customData: { user_id: userId, plan_name: planName },
         checkout: {
-          url: `${this.appUrl}/subscription?upgraded=true`,
+          url: `${this.appUrl}/subscription`,
         },
       });
 

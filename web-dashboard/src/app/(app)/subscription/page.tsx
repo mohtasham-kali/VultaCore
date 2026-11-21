@@ -7,9 +7,18 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 import { io, Socket } from "socket.io-client";
 import { useSearchParams } from "next/navigation";
+import { initializePaddle, type Paddle, type Environments } from "@paddle/paddle-js";
 import { API_BASE_URL, SOCKET_URL } from "@/lib/constants";
 import { getUserSubscription } from "@/utils/paddle/get-user-subscription";
 import { hasActiveSubscription } from "@/utils/paddle/access";
+import { createPortalSession } from "@/actions/portal";
+
+const PLAN_RANKS: Record<string, number> = {
+  free: 0,
+  standard: 1,
+  premium: 2,
+  enterprise: 3,
+};
 
 const PLANS = [
   {
@@ -23,7 +32,7 @@ const PLANS = [
       "Public Analytics",
       "Standard Support",
     ],
-    buttonText: "Current Plan",
+    buttonText: "Get Started Free",
     highlight: false,
     gradient: "from-slate-500 to-slate-600",
   },
@@ -53,7 +62,7 @@ const PLANS = [
       "Advanced Threat Intel",
       "Unlimited API Calls",
     ],
-    buttonText: "Go Premium",
+    buttonText: "Upgrade to Premium",
     highlight: false,
     gradient: "from-amber-500 to-rose-500",
   },
@@ -89,6 +98,7 @@ function SubscriptionPageClient() {
   const [isSocketConnected, setIsSocketConnected] = useState(false);
   const [justUpgraded, setJustUpgraded] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [paddle, setPaddle] = useState<Paddle | undefined>();
 
   // Detect return from Paddle checkout
   useEffect(() => {
@@ -96,6 +106,35 @@ function SubscriptionPageClient() {
       setJustUpgraded(true);
       setTimeout(() => setJustUpgraded(false), 5000);
     }
+  }, [searchParams]);
+
+  // Initialize Paddle.js and handle _ptxn parameter if returning from hosted payment link
+  useEffect(() => {
+    const paddleEnv = process.env.NEXT_PUBLIC_PADDLE_ENV;
+    const paddleToken = process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN;
+    if (!paddleEnv || !paddleToken) return;
+
+    initializePaddle({
+      token: paddleToken,
+      environment: paddleEnv as Environments,
+    })
+      .then((p) => {
+        if (p) {
+          setPaddle(p);
+          const ptxn = searchParams.get("_ptxn");
+          if (ptxn) {
+            p.Checkout.open({
+              transactionId: ptxn,
+              settings: {
+                displayMode: "overlay",
+                theme: "dark",
+                successUrl: `${window.location.origin}/subscription?upgraded=true`,
+              },
+            });
+          }
+        }
+      })
+      .catch((err) => console.error("Paddle init error on subscription page:", err));
   }, [searchParams]);
 
   // Real-time WebSocket subscription sync
@@ -175,11 +214,35 @@ function SubscriptionPageClient() {
       return;
     }
 
-    if (planName === currentPlan) return;
+    if (planName.toLowerCase() === currentPlan.toLowerCase()) return;
 
     if (!user?.id || !user?.email) {
-      setCheckoutError("Please log in to upgrade your plan.");
+      setCheckoutError("Please log in to manage your plan.");
       return;
+    }
+
+    const planKey = planName.toLowerCase();
+    const currentKey = currentPlan.toLowerCase();
+    const planRank = PLAN_RANKS[planKey] ?? 0;
+    const currentRank = PLAN_RANKS[currentKey] ?? 0;
+
+    // Downgrading to a lower tier (including Free) from an active paid plan:
+    // Open the customer portal where the user can cancel/downgrade their active subscription
+    if (planRank < currentRank) {
+      try {
+        setUpgradingPlan(planId);
+        const result = await createPortalSession();
+        if ("error" in result) {
+          throw new Error(result.error);
+        }
+        window.location.href = result.url;
+        return;
+      } catch (err: any) {
+        console.error("Portal Error:", err);
+        setCheckoutError(err.message || "Failed to open subscription management portal. Please use Manage Subscription below.");
+        setUpgradingPlan(null);
+        return;
+      }
     }
 
     try {
@@ -202,8 +265,24 @@ function SubscriptionPageClient() {
 
       const { checkoutUrl } = await res.json();
 
-      // Redirect to Paddle hosted checkout
-      // Supports: Credit/Debit cards, PayPal, Google Pay, Apple Pay
+      // Extract transaction ID if present in checkoutUrl (e.g. _ptxn=txn_...)
+      const ptxnMatch = checkoutUrl ? checkoutUrl.match(/[?&]_ptxn=([a-zA-Z0-9_]+)/) : null;
+      const ptxn = ptxnMatch ? ptxnMatch[1] : null;
+
+      if (paddle && ptxn) {
+        paddle.Checkout.open({
+          transactionId: ptxn,
+          settings: {
+            displayMode: "overlay",
+            theme: "dark",
+            successUrl: `${window.location.origin}/subscription?upgraded=true`,
+          },
+        });
+        setUpgradingPlan(null);
+        return;
+      }
+
+      // Fallback: Redirect to Paddle checkout URL
       window.location.href = checkoutUrl;
     } catch (err: unknown) {
       console.error("Checkout Error:", err);
@@ -293,9 +372,26 @@ function SubscriptionPageClient() {
       {/* Plan Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
         {PLANS.map((plan) => {
-          const isCurrentPlan =
-            plan.name.toLowerCase() === currentPlan.toLowerCase();
+          const planKey = plan.name.toLowerCase();
+          const currentKey = currentPlan.toLowerCase();
+          const planRank = PLAN_RANKS[planKey] ?? 0;
+          const currentRank = PLAN_RANKS[currentKey] ?? 0;
+
+          const isCurrentPlan = planKey === currentKey;
+          const isDowngrade = !isCurrentPlan && planRank < currentRank;
+          const isUpgrade = !isCurrentPlan && planRank > currentRank && plan.id !== "enterprise";
           const isLoading = upgradingPlan === plan.id;
+
+          let buttonText: string = plan.buttonText;
+          if (isCurrentPlan) {
+            buttonText = "Current Plan";
+          } else if (plan.id === "enterprise") {
+            buttonText = "Contact Sales";
+          } else if (isDowngrade) {
+            buttonText = `Downgrade to ${plan.name}`;
+          } else if (isUpgrade) {
+            buttonText = `Upgrade to ${plan.name}`;
+          }
 
           return (
             <div
@@ -379,9 +475,11 @@ function SubscriptionPageClient() {
                   "w-full py-4 rounded-2xl font-bold transition-all duration-300 flex items-center justify-center gap-2 relative z-10",
                   isCurrentPlan
                     ? "bg-white/5 text-slate-400 cursor-not-allowed border border-white/5"
-                    : plan.highlight
-                      ? "bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-xl shadow-purple-500/20 hover:opacity-90 active:scale-95"
-                      : `bg-gradient-to-r ${plan.gradient} text-white opacity-80 hover:opacity-100 active:scale-95`
+                    : isDowngrade
+                      ? "bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-white/10 hover:border-white/20 active:scale-95"
+                      : plan.highlight
+                        ? "bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-xl shadow-purple-500/20 hover:opacity-90 active:scale-95"
+                        : `bg-gradient-to-r ${plan.gradient} text-white opacity-80 hover:opacity-100 active:scale-95`
                 )}
               >
                 {isLoading ? (
@@ -392,7 +490,7 @@ function SubscriptionPageClient() {
                   "Contact Sales"
                 ) : (
                   <>
-                    {plan.buttonText}
+                    {buttonText}
                     <ExternalLink className="w-4 h-4 opacity-70" />
                   </>
                 )}
