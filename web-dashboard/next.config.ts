@@ -1,10 +1,13 @@
 import type { NextConfig } from "next";
 
 const isExport = process.env.STATIC_EXPORT === 'true';
+const isVercel = process.env.VERCEL === '1';
 
 const nextConfig: NextConfig = {
-  // 'export' generates a static /out folder, required for Tauri to load CSS/JS locally
-  output: isExport ? 'export' : 'standalone',
+  // 'export' generates a static /out folder, required for Tauri to load CSS/JS locally.
+  // On Vercel, omit 'standalone' (leave undefined) so Vercel handles serverless function routing.
+  // In self-hosted Node environments (Hostinger / Docker), use 'standalone'.
+  output: isExport ? 'export' : (isVercel ? undefined : 'standalone'),
   // Tauri serves files from disk, trailing slashes ensure index.html routing works.
   // In server (standalone) mode, disable trailing slashes so API route handlers like
   // /api/webhook are not 308-redirected to /api/webhook/ before Paddle can POST to them.
