@@ -597,6 +597,15 @@ const server = http.createServer((req, res) => {
 
     if (tryServeStatic(req, res)) return;
 
+    // Next.js Route Handlers in web-dashboard
+    const isDashboardApi = req.url.startsWith('/api/webhook') || req.url.startsWith('/api/markdown');
+    if (isDashboardApi) {
+        if (!DASH_READY || !DASH_TARGET) {
+            return sendBooting(res);
+        }
+        return proxyRequest(req, res, DASH_TARGET);
+    }
+
     const isApi = req.url.startsWith('/api') || req.url.startsWith('/socket.io');
 
     if (isApi) {
