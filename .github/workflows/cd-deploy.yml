@@ -73,8 +73,9 @@ jobs:
             # Record rollback point
             git -C "$CUR" rev-parse HEAD > ~/.vultacore_prev_sha 2>/dev/null || true
 
-            # Ensure Passenger picks up the latest version
+            # Ensure Passenger picks up the latest version and clears stale engine state
             mkdir -p "$CUR/tmp"
+            rm -f "$CUR/.engine-state.json" "$CUR/.engine.lock"
             touch "$CUR/tmp/restart.txt"
             echo "Passenger restart signalled at $(date -u)"
 

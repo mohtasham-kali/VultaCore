@@ -5,6 +5,7 @@ import { Settings, Save, Server, ShieldCheck, Mail, Database, CheckCircle2, Aler
 import { cn } from "@/lib/utils";
 import { API_BASE_URL } from "@/lib/constants";
 import { useAuth } from "@/context/AuthContext";
+import { supabase } from "@/lib/supabase";
 
 export default function AdminSettingsPage() {
   const { session } = useAuth();
@@ -47,6 +48,14 @@ export default function AdminSettingsPage() {
     setSaving(true);
     setFeedback(null);
     try {
+      // Ensure we have a fresh, valid token from Supabase
+      const { data: sessionData } = await supabase.auth.getSession();
+      const activeToken = sessionData?.session?.access_token || token;
+
+      if (!activeToken) {
+        throw new Error("Missing administrator session. Please log in again.");
+      }
+
       const payload: Record<string, string> = {
         platformName,
         supportEmail,
@@ -58,13 +67,14 @@ export default function AdminSettingsPage() {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          Authorization: `Bearer ${activeToken}`,
         },
         body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
-        throw new Error(`Failed to save (Status ${res.status}). Administrator rights required.`);
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.message || `Failed to save (Status ${res.status}). Administrator rights required.`);
       }
 
       setFeedback({ type: "success", text: "Platform settings saved successfully to database." });

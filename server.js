@@ -995,6 +995,20 @@ async function waitForReadiness(backTarget, dashTarget, aiTarget) {
 }
 
 async function bootEngines() {
+    const restartFile = path.join(rootDir, 'tmp', 'restart.txt');
+    // Check if restart.txt was touched AFTER stateFile was created
+    if (fs.existsSync(restartFile) && fs.existsSync(stateFile)) {
+        try {
+            const restartMtime = fs.statSync(restartFile).mtimeMs;
+            const stateMtime = fs.statSync(stateFile).mtimeMs;
+            if (restartMtime > stateMtime) {
+                log(`🔄 Restart signalled via restart.txt (${new Date(restartMtime).toISOString()} > ${new Date(stateMtime).toISOString()}). Removing stale engine state.`);
+                try { fs.unlinkSync(stateFile); } catch (_) { }
+                try { fs.unlinkSync(lockFile); } catch (_) { }
+            }
+        } catch (_) { }
+    }
+
     // ── Phase 1: Check if sibling worker already manages healthy engines ──
     if (fs.existsSync(stateFile)) {
         try {
