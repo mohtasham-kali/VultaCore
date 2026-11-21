@@ -4,11 +4,12 @@ title = "VultaCore Gitleaks Configuration"
 useDefault = true
 
 [allowlist]
-description = "Global allowlist for harmless placeholders and test fixtures"
+description = "Global allowlist for harmless placeholders, public client tokens, and test fixtures"
 paths = [
   '''^\.next/''',
   '''^node_modules/''',
   '''^web-dashboard/\.next/''',
+  '''^web-dashboard/\.env\.production$''',
   '''^dist/''',
   '''^out/''',
   '''^package-lock\.json$''',
@@ -17,6 +18,13 @@ regexes = [
   '''placeholder-anon-key''',
   '''https://placeholder\.supabase\.co''',
   '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.eyJpc3MiOiJzdXBhYmFzZS''', # Supabase public anon key prefix
+  '''test_9e29179d58ce76ae5336e35a234''', # Paddle sandbox client token (browser-public)
+  '''live_5bafc73b23c79ca1e42182ec16a''', # Paddle live client token (browser-public)
+  '''(?:test|live)_[0-9a-f]{27}''', # Paddle browser-public client token pattern
+  '''pdl_ntfset_your_destination_secret_here''',
+  '''pdl_sdbx_apikey_your_api_key_here''',
+  '''your_paddle_webhook_secret''',
+  '''your_supabase_service_role_secret''',
 ]
 
 [[rules]]

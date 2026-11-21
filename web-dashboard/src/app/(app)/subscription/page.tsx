@@ -142,11 +142,21 @@ function SubscriptionPageClient() {
       .then((sub) => {
         if (sub && hasActiveSubscription(sub)) {
           const planMap: Record<string, string> = {
+            // Live Prices
+            "pri_01m7r11zk5c3bma7a6k0y70g5n": "Standard",
+            "pri_01m7zg022mbd9npg4k7d9462w4": "Standard",
+            "pri_01m7r12e4rwbrt25331y3sm88p": "Premium",
+            "pri_01m7zga0kvb5ycrvpa9mw8n1f1": "Premium",
+            "pri_01m7zga1swv0y3tfj78g7bkqvj": "Enterprise",
+            "pri_01m7zga22j5raphwqxbe31fgex": "Enterprise",
+            "pri_01m7zga17631vansgnv8844tqp": "Free",
+            // Sandbox Prices (backward compatibility)
             "pri_01m7r41d01n8xa18z8kzwhchv1": "Standard",
             "pri_01m7r41d7yphdthpr9jhkw3b00": "Standard",
             "pri_01m7r41dwfzw108seb2ptyvzrh": "Premium",
             "pri_01m7r41e4p5a3w63m65b6ewd05": "Premium",
             "pri_01m7r41epjb34524nsn3nebdym": "Enterprise",
+            "pri_01m7r6d5fzz6397fsw4c5a3xx4": "Free",
           };
           const resolved = planMap[sub.price_id] || "Standard";
           setCurrentPlan(resolved);

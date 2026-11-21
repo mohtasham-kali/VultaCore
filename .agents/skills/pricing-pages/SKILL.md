@@ -47,7 +47,7 @@ A typical setup keeps tier metadata (name, features) in a constants file, with t
 // constants/pricing-tier.ts
 export interface Tier {
   name: string;
-  id: "starter" | "pro" | "advanced";
+  id: "free" | "standard" | "premium" | "enterprise";
   description: string;
   features: string[];
   featured: boolean;
@@ -56,8 +56,8 @@ export interface Tier {
 
 export const PricingTier: Tier[] = [
   {
-    name: "Starter",
-    id: "starter",
+    name: "Standard",
+    id: "standard",
     description: "Get going.",
     features: ["1 workspace", "Limited collaboration"],
     featured: false,

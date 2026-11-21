@@ -26,8 +26,17 @@ const SANDBOX_PRICE_TO_PLAN: Record<string, string> = {
  * Maps Paddle live price IDs → plan names.
  */
 const LIVE_PRICE_TO_PLAN: Record<string, string> = {
-  pri_01m7r11zk5c3bma7a6k0y70g5n: 'Standard', // live monthly
-  pri_01m7r12e4rwbrt25331y3sm88p: 'Premium',   // live monthly
+  // Free
+  pri_01m7zga17631vansgnv8844tqp: 'Free',
+  // Standard — monthly & annual
+  pri_01m7r11zk5c3bma7a6k0y70g5n: 'Standard',
+  pri_01m7zg022mbd9npg4k7d9462w4: 'Standard',
+  // Premium — monthly & annual
+  pri_01m7r12e4rwbrt25331y3sm88p: 'Premium',
+  pri_01m7zga0kvb5ycrvpa9mw8n1f1: 'Premium',
+  // Enterprise — monthly & annual
+  pri_01m7zga1swv0y3tfj78g7bkqvj: 'Enterprise',
+  pri_01m7zga22j5raphwqxbe31fgex: 'Enterprise',
 };
 
 @Injectable()
@@ -86,8 +95,10 @@ export class BillingService {
     if (this.environment === Environment.production) {
       this.priceToPlan = { ...LIVE_PRICE_TO_PLAN };
       this.planToPrice = {
+        Free: 'pri_01m7zga17631vansgnv8844tqp',
         Standard: 'pri_01m7r11zk5c3bma7a6k0y70g5n',
         Premium: 'pri_01m7r12e4rwbrt25331y3sm88p',
+        Enterprise: 'pri_01m7zga1swv0y3tfj78g7bkqvj',
       };
     } else {
       this.priceToPlan = { ...SANDBOX_PRICE_TO_PLAN };

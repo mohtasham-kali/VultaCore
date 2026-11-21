@@ -19,8 +19,8 @@ export const PricingTiers: Tier[] = [
       'Standard Community Support',
     ],
     priceId: {
-      month: 'pri_01m7r6d5fzz6397fsw4c5a3xx4',
-      year: 'pri_01m7r6d5fzz6397fsw4c5a3xx4',
+      month: 'pri_01m7zga17631vansgnv8844tqp', // live Free monthly
+      year: 'pri_01m7zga17631vansgnv8844tqp',  // live Free annual
     },
     highlight: false,
     gradient: 'from-slate-700 to-slate-800',
@@ -37,8 +37,8 @@ export const PricingTiers: Tier[] = [
       '7-day free trial included',
     ],
     priceId: {
-      month: 'pri_01m7r41d01n8xa18z8kzwhchv1',
-      year: 'pri_01m7r41d7yphdthpr9jhkw3b00',
+      month: 'pri_01m7r11zk5c3bma7a6k0y70g5n', // live Standard monthly ($29)
+      year: 'pri_01m7zg022mbd9npg4k7d9462w4',  // live Standard annual ($348)
     },
     highlight: true,
     badge: 'Most Popular',
@@ -56,8 +56,8 @@ export const PricingTiers: Tier[] = [
       'Priority Email & Slack Support',
     ],
     priceId: {
-      month: 'pri_01m7r41dwfzw108seb2ptyvzrh',
-      year: 'pri_01m7r41e4p5a3w63m65b6ewd05',
+      month: 'pri_01m7r12e4rwbrt25331y3sm88p', // live Premium monthly ($99)
+      year: 'pri_01m7zga0kvb5ycrvpa9mw8n1f1',  // live Premium annual ($1188)
     },
     highlight: false,
     gradient: 'from-amber-500 to-rose-500',
@@ -73,8 +73,8 @@ export const PricingTiers: Tier[] = [
       'Custom Vendor Security Audits',
     ],
     priceId: {
-      month: 'pri_01m7r41epjb34524nsn3nebdym',
-      year: 'pri_01m7r41eyvfc4x09tr8dv3nmtm',
+      month: 'pri_01m7zga1swv0y3tfj78g7bkqvj', // live Enterprise monthly
+      year: 'pri_01m7zga22j5raphwqxbe31fgex',  // live Enterprise annual
     },
     highlight: false,
     gradient: 'from-emerald-500 to-teal-500',

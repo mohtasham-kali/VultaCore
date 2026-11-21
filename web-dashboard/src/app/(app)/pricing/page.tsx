@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { PricingClient } from "@/components/pricing/PricingClient";
+import { getCustomerId } from "@/utils/paddle/get-customer-id";
 
 export const metadata = {
   title: "Pricing Plans — VultaCore",
@@ -23,6 +24,16 @@ export default async function PricingPage() {
       ? rawCountry.trim().toUpperCase()
       : null;
 
+  let customerId: string | null = null;
+  try {
+    const cid = await getCustomerId();
+    if (cid && cid.startsWith("ctm_")) {
+      customerId = cid;
+    }
+  } catch {
+    // Non-fatal if visitor is anonymous
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 selection:bg-purple-500 selection:text-white">
       {/* Background Gradients */}
@@ -31,7 +42,7 @@ export default async function PricingPage() {
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-700/15 rounded-full blur-[100px]" />
       </div>
 
-      <PricingClient initialCountry={country} />
+      <PricingClient initialCountry={country} initialCustomerId={customerId} />
     </div>
   );
 }

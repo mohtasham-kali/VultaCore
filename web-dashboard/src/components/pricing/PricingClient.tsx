@@ -10,9 +10,10 @@ import { usePaddlePrices } from "@/hooks/usePaddlePrices";
 
 interface PricingClientProps {
   initialCountry?: string | null;
+  initialCustomerId?: string | null;
 }
 
-export function PricingClient({ initialCountry }: PricingClientProps) {
+export function PricingClient({ initialCountry, initialCustomerId }: PricingClientProps) {
   const { user } = useAuth();
   const [frequency, setFrequency] = useState<"month" | "year">("month");
   const [paddle, setPaddle] = useState<Paddle | undefined>();
@@ -39,6 +40,9 @@ export function PricingClient({ initialCountry }: PricingClientProps) {
     initializePaddle({
       token: paddleToken,
       environment: paddleEnv as Environments,
+      ...(initialCustomerId && initialCustomerId.startsWith("ctm_")
+        ? { pwCustomer: { id: initialCustomerId } }
+        : {}),
     })
       .then((p) => {
         if (p) {
