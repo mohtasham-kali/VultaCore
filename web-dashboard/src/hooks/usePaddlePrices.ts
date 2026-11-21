@@ -61,3 +61,4 @@ export function usePaddlePrices(
 
   return { prices, loading, error };
 }
+

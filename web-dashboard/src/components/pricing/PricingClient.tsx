@@ -247,3 +247,4 @@ export function PricingClient({ initialCountry }: PricingClientProps) {
     </div>
   );
 }
+
