@@ -36,7 +36,6 @@ export function PricingClient({ initialCountry }: PricingClientProps) {
       setPaddleInitError(err);
       return;
     }
-
     initializePaddle({
       token: paddleToken,
       environment: paddleEnv as Environments,
@@ -74,6 +73,11 @@ export function PricingClient({ initialCountry }: PricingClientProps) {
         successUrl,
       },
       ...(user?.email ? { customer: { email: user.email } } : {}),
+      customData: {
+        userId: user?.id ?? "",
+        user_id: user?.id ?? "",
+        plan_name: tier.name,
+      },
     });
   };
 

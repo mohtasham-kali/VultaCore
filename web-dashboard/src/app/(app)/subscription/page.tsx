@@ -8,6 +8,8 @@ import { useAuth } from "@/context/AuthContext";
 import { io, Socket } from "socket.io-client";
 import { useSearchParams } from "next/navigation";
 import { API_BASE_URL, SOCKET_URL } from "@/lib/constants";
+import { getUserSubscription } from "@/utils/paddle/get-user-subscription";
+import { hasActiveSubscription } from "@/utils/paddle/access";
 
 const PLANS = [
   {
@@ -80,7 +82,7 @@ const PAYMENT_METHODS = [
 ];
 
 function SubscriptionPageClient() {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const searchParams = useSearchParams();
   const [currentPlan, setCurrentPlan] = useState<string>("Free");
   const [upgradingPlan, setUpgradingPlan] = useState<string | null>(null);
@@ -88,7 +90,7 @@ function SubscriptionPageClient() {
   const [justUpgraded, setJustUpgraded] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
-  // Detect return from Lemon Squeezy checkout
+  // Detect return from Paddle checkout
   useEffect(() => {
     if (searchParams.get("upgraded") === "true") {
       setJustUpgraded(true);
@@ -120,16 +122,38 @@ function SubscriptionPageClient() {
     };
   }, [user]);
 
-  // Fetch current plan from backend on load
+  // Fetch current plan from backend and mirrored Paddle subscription
   useEffect(() => {
     if (!user?.id) return;
-    fetch(`${API_BASE_URL}/users/${user.id}`)
+
+    const headers: Record<string, string> = {};
+    if (session?.access_token) {
+      headers["Authorization"] = `Bearer ${session.access_token}`;
+    }
+
+    fetch(`${API_BASE_URL}/users/${user.id}`, { headers })
       .then((r) => r.json())
       .then((u) => {
         if (u?.rank) setCurrentPlan(u.rank);
       })
       .catch(() => { });
-  }, [user]);
+
+    getUserSubscription()
+      .then((sub) => {
+        if (sub && hasActiveSubscription(sub)) {
+          const planMap: Record<string, string> = {
+            "pri_01m7r41d01n8xa18z8kzwhchv1": "Standard",
+            "pri_01m7r41d7yphdthpr9jhkw3b00": "Standard",
+            "pri_01m7r41dwfzw108seb2ptyvzrh": "Premium",
+            "pri_01m7r41e4p5a3w63m65b6ewd05": "Premium",
+            "pri_01m7r41epjb34524nsn3nebdym": "Enterprise",
+          };
+          const resolved = planMap[sub.price_id] || "Standard";
+          setCurrentPlan(resolved);
+        }
+      })
+      .catch(() => { });
+  }, [user, session]);
 
   const handleUpgrade = async (planId: string, planName: string) => {
     if (planId === "enterprise") {

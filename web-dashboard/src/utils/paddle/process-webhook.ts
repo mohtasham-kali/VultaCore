@@ -86,10 +86,28 @@ export async function saveSubscription(
   sub: PaddleSubscriptionData | Subscription,
   eventAt: string,
 ) {
-  const userId =
+  let userId =
     (sub.customData?.userId as string | undefined) ||
     (sub.customData?.user_id as string | undefined) ||
     null;
+
+  // If userId is missing from customData, resolve it from customers email -> auth.users id
+  if (!userId && sub.customerId) {
+    try {
+      const rows = await queryDb<{ id: string }>(
+        `SELECT u.id FROM auth.users u
+         JOIN customers c ON c.email = u.email
+         WHERE c.customer_id = $1
+         LIMIT 1;`,
+        [sub.customerId],
+      );
+      if (rows[0]?.id) {
+        userId = rows[0].id;
+      }
+    } catch (e) {
+      console.warn("[saveSubscription] could not resolve user by customerId:", e);
+    }
+  }
 
   const priceItem = sub.items?.[0]?.price;
   const priceId = priceItem?.id ?? "";
@@ -172,9 +190,14 @@ export async function saveSubscription(
         try {
           const admin = await createAdminClient();
           await admin.from("user").update({ rank: rankToSet }).eq("id", userId);
+          await admin.from("profiles").update({ plan: rankToSet.toLowerCase() }).eq("id", userId);
         } catch {
           await queryDb(`UPDATE "user" SET rank = $1 WHERE id = $2;`, [
             rankToSet,
+            userId,
+          ]);
+          await queryDb(`UPDATE profiles SET plan = $1 WHERE id = $2;`, [
+            rankToSet.toLowerCase(),
             userId,
           ]);
         }
