@@ -5,8 +5,10 @@ const isExport = process.env.STATIC_EXPORT === 'true';
 const nextConfig: NextConfig = {
   // 'export' generates a static /out folder, required for Tauri to load CSS/JS locally
   output: isExport ? 'export' : 'standalone',
-  // Tauri serves files from disk, trailing slashes ensure index.html routing works
-  trailingSlash: true,
+  // Tauri serves files from disk, trailing slashes ensure index.html routing works.
+  // In server (standalone) mode, disable trailing slashes so API route handlers like
+  // /api/webhook are not 308-redirected to /api/webhook/ before Paddle can POST to them.
+  trailingSlash: isExport ? true : false,
   eslint: {
     ignoreDuringBuilds: true,
   },
