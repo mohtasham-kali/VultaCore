@@ -47,7 +47,11 @@ export class BillingService {
     private readonly eventsGateway: EventsGateway,
   ) {
     const explicitEnv =
-      this.config.get<string>('PADDLE_ENV') || process.env.PADDLE_ENV || '';
+      this.config.get<string>('PADDLE_ENV') ||
+      process.env.PADDLE_ENV ||
+      this.config.get<string>('NEXT_PUBLIC_PADDLE_ENV') ||
+      process.env.NEXT_PUBLIC_PADDLE_ENV ||
+      '';
 
     const sandboxKey =
       this.config.get<string>('PADDLE_SANDBOX_API_KEY') ||
