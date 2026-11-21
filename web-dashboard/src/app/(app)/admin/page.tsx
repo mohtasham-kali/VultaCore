@@ -69,6 +69,7 @@ export default function AdminOverview() {
   const token = session?.access_token;
 
   const fetchData = useCallback(async () => {
+    if (!token) return;
     try {
       setLoading(true);
       const [usersRes, leadsRes] = await Promise.all([

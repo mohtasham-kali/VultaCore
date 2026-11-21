@@ -32,8 +32,34 @@ export class UsersService {
   }
 
 
-  findAll(): Promise<User[]> {
-    return this.usersRepository.find();
+  async findAll(): Promise<any[]> {
+    try {
+      const merged = await this.usersRepository.query(`
+        SELECT 
+          p.id, 
+          COALESCE(p.username, split_part(p.email, '@', 1)) as username, 
+          p.email, 
+          COALESCE(u.rank, INITCAP(p.plan), 'Free') as rank, 
+          COALESCE(p.airesponsestoday, u.points, 0) as points,
+          COALESCE(p.created_at, NOW()) as "createdAt"
+        FROM profiles p
+        LEFT JOIN "user" u ON u.id = p.id
+        UNION
+        SELECT
+          u.id,
+          u.username,
+          u.email,
+          u.rank,
+          u.points,
+          NOW() as "createdAt"
+        FROM "user" u
+        WHERE u.id NOT IN (SELECT id FROM profiles)
+        ORDER BY "createdAt" DESC
+      `);
+      return merged;
+    } catch {
+      return this.usersRepository.find();
+    }
   }
 
   findByUsername(username: string): Promise<User | null> {
@@ -63,6 +89,15 @@ export class UsersService {
     }
     
     const savedUser = await this.usersRepository.save(user);
+
+    try {
+      await this.usersRepository.query(
+        `UPDATE profiles SET plan = $1 WHERE id = $2`,
+        [planName.toLowerCase(), userId],
+      );
+    } catch {
+      // Non-fatal if profiles table does not contain the row yet
+    }
 
     let paddleSyncResult: any = undefined;
     if (syncPaddle && this.billingService) {

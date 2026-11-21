@@ -30,6 +30,7 @@ export default function AdminSubscriptionsPage() {
   const token = session?.access_token;
 
   const loadData = async () => {
+    if (!token) return;
     try {
       setLoading(true);
       const res = await fetch(`${API_BASE_URL}/users`, {

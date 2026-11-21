@@ -27,6 +27,7 @@ export default function AdminUsersPage() {
   const token = session?.access_token;
 
   const fetchUsers = async () => {
+    if (!token) return;
     try {
       setLoading(true);
       const res = await fetch(`${API_BASE_URL}/users`, {

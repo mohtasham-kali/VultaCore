@@ -25,6 +25,7 @@ export default function SalesPOSTerminal() {
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const fetchUsers = async () => {
+    if (!token) return;
     try {
       const res = await fetch(`${API_BASE_URL}/users`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
