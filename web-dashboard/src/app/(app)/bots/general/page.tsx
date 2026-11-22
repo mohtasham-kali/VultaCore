@@ -1,10 +1,12 @@
 "use client";
 
-import { Bot, Sparkles, Play, Terminal, Upload, File, X as CloseIcon } from "lucide-react";
+import { Bot, Sparkles, Play, Terminal, Upload, File, X as CloseIcon, Zap } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState, useRef } from "react";
 import { fetchBots, executeBot, fetchBotHistory } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { generateLocalResponse, LocalAIProgress } from "@/lib/local-ai";
+import { useEntitlements } from "@/hooks/useEntitlements";
 
 interface BotItem {
   id: string;
@@ -22,6 +24,7 @@ interface BotResult {
 
 export default function GeneralBotsPage() {
   const { user } = useAuth();
+  const { usage, plan } = useEntitlements();
   const [bots, setBots] = useState<BotItem[]>([]);
   const [selectedBot, setSelectedBot] = useState<BotItem | null>(null);
   const [userPrompt, setUserPrompt] = useState("");
@@ -348,6 +351,27 @@ export default function GeneralBotsPage() {
 
                   {/* Input Mechanism */}
                   <div className="space-y-4 pt-4 border-t border-white/5 bg-slate-900/50">
+                    {/* Quota Banner for Free/Limited Plans */}
+                    {usage.aiChatsLimit !== 'unlimited' && (
+                      <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-xs">
+                        <div className="flex items-center gap-2 text-blue-300">
+                          <Zap className="w-3.5 h-3.5 text-blue-400" />
+                          <span>
+                            Daily Quota: <strong className="text-white">{usage.aiChatsRemaining}</strong> / {usage.aiChatsLimit} messages left today ({plan.name} plan)
+                          </span>
+                        </div>
+                        {usage.aiChatsRemaining === 0 ? (
+                          <Link href="/subscription" className="text-xs font-bold text-amber-400 hover:text-amber-300 underline">
+                            Limit reached • Upgrade to Standard
+                          </Link>
+                        ) : (
+                          <Link href="/subscription" className="text-[11px] text-blue-400 hover:text-blue-300">
+                            Upgrade for unlimited
+                          </Link>
+                        )}
+                      </div>
+                    )}
+
                     <div className="flex flex-col gap-2">
                        <div className="flex items-center justify-between">
                           <label className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Prompt Sequence</label>
@@ -390,7 +414,7 @@ export default function GeneralBotsPage() {
                           </div>
                           <button 
                             onClick={handleLaunch}
-                            disabled={!userPrompt.trim() || !!executing}
+                            disabled={!userPrompt.trim() || !!executing || (usage.aiChatsRemaining !== 'unlimited' && usage.aiChatsRemaining === 0)}
                             className="bg-blue-600 hover:bg-blue-500 text-white p-3 rounded-lg flex items-center justify-center shrink-0 transition-colors disabled:opacity-50 shadow-md shadow-blue-500/20"
                           >
                             <Play className="w-5 h-5 fill-current ml-0.5" />

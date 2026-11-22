@@ -1,30 +1,18 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThan } from 'typeorm';
-import { resolvePlanTier } from './plan-limits';
+import { Injectable, Inject, forwardRef } from '@nestjs/common';
+import { EntitlementsService } from '../plans/entitlements.service';
 import { UsersService } from '../users/users.service';
-
-// Simple in-memory daily usage tracker (resets each day)
-// For production scale, replace with Redis
-interface UsageEntry {
-  count: number;
-  date: string; // YYYY-MM-DD
-}
 
 @Injectable()
 export class PlanGuardService {
-  private aiUsage = new Map<string, UsageEntry>();
-  private securityHubUsage = new Map<string, UsageEntry>();
-
-  constructor(private readonly usersService: UsersService) {}
-
-  private todayDate(): string {
-    return new Date().toISOString().split('T')[0];
-  }
+  constructor(
+    @Inject(forwardRef(() => EntitlementsService))
+    private readonly entitlementsService: EntitlementsService,
+    @Inject(forwardRef(() => UsersService))
+    private readonly usersService: UsersService,
+  ) {}
 
   /**
    * Checks if a user has reached their daily AI chat limit.
-   * Returns { allowed: boolean, remaining: number | 'unlimited', limit: number | 'unlimited' }
    */
   async checkAiChatLimit(userId: string): Promise<{
     allowed: boolean;
@@ -32,50 +20,28 @@ export class PlanGuardService {
     limit: number | 'unlimited';
     tier: string;
   }> {
-    const user = await this.usersService.findOne(userId);
-    const rank = user?.rank ?? 'Free';
-    const plan = resolvePlanTier(rank);
-    const limit = plan.aiChatsPerDay;
+    const entitlements = await this.entitlementsService.getUserEntitlements(userId);
+    const basicAi = entitlements.features['basic_ai_chat'];
 
-    if (limit === 'unlimited') {
-      return { allowed: true, remaining: 'unlimited', limit: 'unlimited', tier: rank };
-    }
-
-    const today = this.todayDate();
-    const existing = this.aiUsage.get(userId);
-
-    // Reset if it's a new day
-    if (!existing || existing.date !== today) {
-      this.aiUsage.set(userId, { count: 0, date: today });
-    }
-
-    const entry = this.aiUsage.get(userId)!;
-    const remaining = Math.max(0, limit - entry.count);
+    const allowed = entitlements.usage.aiChatsRemaining === 'unlimited' || entitlements.usage.aiChatsRemaining > 0;
 
     return {
-      allowed: entry.count < limit,
-      remaining,
-      limit,
-      tier: rank,
+      allowed,
+      remaining: entitlements.usage.aiChatsRemaining,
+      limit: entitlements.usage.aiChatsLimit,
+      tier: entitlements.plan.name,
     };
   }
 
   /**
-   * Increments AI chat usage for the day.
+   * Atomically increments AI chat usage for the day.
    */
-  incrementAiUsage(userId: string): void {
-    const today = this.todayDate();
-    const existing = this.aiUsage.get(userId);
-
-    if (!existing || existing.date !== today) {
-      this.aiUsage.set(userId, { count: 1, date: today });
-    } else {
-      existing.count += 1;
-    }
+  async incrementAiUsage(userId: string): Promise<void> {
+    await this.entitlementsService.consumeUsage(userId, 'basic_ai_chat', 1);
   }
 
   /**
-   * Checks if a user has reached their daily Security Hub scan limit.
+   * Checks if a user has reached their daily Security Hub limit.
    */
   async checkSecurityHubLimit(userId: string): Promise<{
     allowed: boolean;
@@ -83,87 +49,61 @@ export class PlanGuardService {
     limit: number | 'unlimited';
     tier: string;
   }> {
-    const user = await this.usersService.findOne(userId);
-    const rank = user?.rank ?? 'Free';
-    const plan = resolvePlanTier(rank);
-    const limit = plan.securityHubScansPerDay;
+    const entitlements = await this.entitlementsService.getUserEntitlements(userId);
+    const secHub = entitlements.features['private_security_hub'];
 
-    if (limit === 'unlimited') {
-      return { allowed: true, remaining: 'unlimited', limit: 'unlimited', tier: rank };
+    if (!secHub || !secHub.enabled) {
+      return { allowed: false, remaining: 0, limit: 0, tier: entitlements.plan.name };
     }
-
-    const today = this.todayDate();
-    const existing = this.securityHubUsage.get(userId);
-
-    if (!existing || existing.date !== today) {
-      this.securityHubUsage.set(userId, { count: 0, date: today });
-    }
-
-    const entry = this.securityHubUsage.get(userId)!;
-    const remaining = Math.max(0, limit - entry.count);
-
-    return { allowed: entry.count < limit, remaining, limit, tier: rank };
-  }
-
-  incrementSecurityHubUsage(userId: string): void {
-    const today = this.todayDate();
-    const existing = this.securityHubUsage.get(userId);
-    if (!existing || existing.date !== today) {
-      this.securityHubUsage.set(userId, { count: 1, date: today });
-    } else {
-      existing.count += 1;
-    }
-  }
-
-  /**
-   * Returns the allowed AI models for a user's plan.
-   */
-  async getAllowedModels(userId: string): Promise<string[]> {
-    const user = await this.usersService.findOne(userId);
-    const plan = resolvePlanTier(user?.rank ?? 'Free');
-    return plan.aiModels;
-  }
-
-  /**
-   * Checks if a user can access API endpoints (Standard+ only).
-   */
-  async canUseApi(userId: string): Promise<boolean> {
-    const user = await this.usersService.findOne(userId);
-    const plan = resolvePlanTier(user?.rank ?? 'Free');
-    return plan.apiAccess;
-  }
-
-  /**
-   * Checks if a user can access the Security Hub (all plans, limited by quota).
-   */
-  async canAccessSecurityHub(userId: string): Promise<boolean> {
-    const user = await this.usersService.findOne(userId);
-    const plan = resolvePlanTier(user?.rank ?? 'Free');
-    return plan.securityHubScansPerDay === 'unlimited' || plan.securityHubScansPerDay > 0;
-  }
-
-  /**
-   * Returns full plan info for a user (used by frontend /api/users/:id/plan-info).
-   */
-  async getPlanInfo(userId: string) {
-    const user = await this.usersService.findOne(userId);
-    const rank = user?.rank ?? 'Free';
-    const plan = resolvePlanTier(rank);
-    const usage = this.aiUsage.get(userId);
-    const today = this.todayDate();
-    const usedToday = usage?.date === today ? usage.count : 0;
 
     return {
-      tier: rank,
-      limits: plan,
-      usage: {
-        aiChatsToday: usedToday,
-        aiChatsLimit: plan.aiChatsPerDay,
-        aiChatsRemaining:
-          plan.aiChatsPerDay === 'unlimited'
-            ? 'unlimited'
-            : Math.max(0, plan.aiChatsPerDay - usedToday),
+      allowed: secHub.remainingToday === 'unlimited' || secHub.remainingToday > 0,
+      remaining: secHub.remainingToday,
+      limit: secHub.limit === null ? 'unlimited' : secHub.limit,
+      tier: entitlements.plan.name,
+    };
+  }
+
+  async incrementSecurityHubUsage(userId: string): Promise<void> {
+    await this.entitlementsService.consumeUsage(userId, 'private_security_hub', 1);
+  }
+
+  /**
+   * Returns the allowed AI models for a user's dynamic subscription.
+   */
+  async getAllowedModels(userId: string): Promise<string[]> {
+    const entitlements = await this.entitlementsService.getUserEntitlements(userId);
+    return entitlements.allowedModels;
+  }
+
+  /**
+   * Checks if a user can access API endpoints.
+   */
+  async canUseApi(userId: string): Promise<boolean> {
+    return this.entitlementsService.hasEntitlement(userId, 'api_access');
+  }
+
+  /**
+   * Checks if a user can access the Security Hub.
+   */
+  async canAccessSecurityHub(userId: string): Promise<boolean> {
+    return this.entitlementsService.hasEntitlement(userId, 'private_security_hub');
+  }
+
+  /**
+   * Returns full plan info for a user (backward compatible for /api/users/:id/plan-info).
+   */
+  async getPlanInfo(userId: string) {
+    const entitlements = await this.entitlementsService.getUserEntitlements(userId);
+    return {
+      tier: entitlements.plan.name,
+      plan: entitlements.plan,
+      features: entitlements.features,
+      limits: {
+        aiModels: entitlements.allowedModels,
+        aiChatsPerDay: entitlements.usage.aiChatsLimit,
       },
+      usage: entitlements.usage,
     };
   }
 }

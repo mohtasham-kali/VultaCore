@@ -1,9 +1,10 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { PlanGuardService } from './plan-guard.service';
 import { UsersModule } from '../users/users.module';
+import { PlansModule } from '../plans/plans.module';
 
 @Module({
-  imports: [UsersModule],
+  imports: [forwardRef(() => UsersModule), forwardRef(() => PlansModule)],
   providers: [PlanGuardService],
   exports: [PlanGuardService],
 })

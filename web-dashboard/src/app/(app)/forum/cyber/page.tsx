@@ -6,6 +6,8 @@ import { useEffect, useState, useCallback } from "react";
 import { fetchPosts } from "@/lib/api";
 import { CreatePostModal } from "@/components/forum/CreatePostModal";
 import { LiveChatPanel } from "@/components/chat/LiveChatPanel";
+import { FeatureGate } from "@/components/entitlements/FeatureGate";
+import { UpgradeRequired } from "@/components/entitlements/UpgradeRequired";
 
 interface Post {
   id: string;
@@ -41,7 +43,27 @@ export default function CyberForumPage() {
   }, [loadPosts]);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <FeatureGate
+      feature="private_security_hub"
+      fallback={
+        <div className="py-12">
+          <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
+            Security Hub
+            <ShieldCheck className="w-8 h-8 text-emerald-500" />
+          </h1>
+          <p className="text-slate-400 mb-8">Exclusive discussions on vulnerabilities, pentesting, and forensics.</p>
+          <div className="max-w-2xl mx-auto">
+            <UpgradeRequired
+              feature="private_security_hub"
+              featureName="Private Security Hub"
+              planName="Premium"
+              description="Access to private vulnerability feeds, encrypted incident rooms, and AST threat intelligence is reserved for Premium and Enterprise subscriptions."
+            />
+          </div>
+        </div>
+      }
+    >
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
       {/* Left Column: Traditional Forum Feed */}
       <div className="lg:col-span-2 space-y-8">
         <CreatePostModal 
@@ -121,5 +143,6 @@ export default function CyberForumPage() {
         <LiveChatPanel room="cyber" />
       </div>
     </div>
-  );
+  </FeatureGate>
+);
 }

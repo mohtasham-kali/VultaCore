@@ -20,28 +20,37 @@ import {
 
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
+import { useEntitlements } from "@/hooks/useEntitlements";
+import { Lock } from "lucide-react";
 
+interface MenuItem {
+  name: string;
+  icon: any;
+  href: string;
+  feature?: string;
+  badge?: string;
+}
 
-const menuItems = [
+const menuItems: { category: string; items: MenuItem[] }[] = [
   {
     category: "Overview",
     items: [
       { name: "Dashboard", icon: LayoutDashboard, href: "/" },
-      { name: "Analytics", icon: BarChart2, href: "/analytics" },
+      { name: "Analytics", icon: BarChart2, href: "/analytics", feature: "personal_analytics", badge: "PRO" },
     ]
   },
   {
     category: "Forums",
     items: [
       { name: "Dev Forum", icon: MessageSquare, href: "/forum/dev" },
-      { name: "Security Hub", icon: ShieldAlert, href: "/forum/cyber" },
+      { name: "Security Hub", icon: ShieldAlert, href: "/forum/cyber", feature: "private_security_hub", badge: "PREM" },
     ]
   },
   {
     category: "AI Automation",
     items: [
       { name: "General Bots", icon: Bot, href: "/bots/general" },
-      { name: "Cyber Bots", icon: Cpu, href: "/bots/cyber" },
+      { name: "Cyber Bots", icon: Cpu, href: "/bots/cyber", feature: "private_security_hub", badge: "PREM" },
     ]
   },
   {
@@ -62,9 +71,8 @@ interface SidebarProps {
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
-
   const { user, signOut } = useAuth();
-
+  const { plan, hasFeature } = useEntitlements();
 
   return (
     <>
@@ -109,6 +117,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               <div className="space-y-1">
                 {section.items.map((item) => {
                   const isActive = pathname === item.href;
+                  const isEntitled = !item.feature || hasFeature(item.feature);
+
                   return (
                     <Link
                       key={item.href}
@@ -117,14 +127,20 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                         if (window.innerWidth < 1024) onClose();
                       }}
                       className={cn(
-                        "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-300",
+                        "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 relative group",
                         isActive 
                           ? "bg-purple-500/10 text-purple-400 border border-purple-500/20 shadow-lg shadow-purple-500/5" 
                           : "text-slate-400 hover:text-white hover:bg-white/5 border border-transparent"
                       )}
                     >
                       <item.icon className={cn("w-4 h-4 transition-transform duration-300", isActive && "scale-110")} />
-                      {item.name}
+                      <span className="truncate">{item.name}</span>
+                      {!isEntitled && (
+                        <span className="ml-auto text-[9px] font-bold text-amber-400/90 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 flex items-center gap-1">
+                          <Lock className="w-2.5 h-2.5" />
+                          {item.badge || 'PRO'}
+                        </span>
+                      )}
                     </Link>
                   );
                 })}
@@ -143,8 +159,13 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                  <span>{user?.email?.[0].toUpperCase() || 'U'}</span>
                )}
              </div>
-             <div className="min-w-0">
-               <p className="text-xs font-bold text-white truncate">{user?.user_metadata?.full_name || 'Authorized User'}</p>
+             <div className="min-w-0 flex-1">
+               <div className="flex items-center justify-between gap-1">
+                 <p className="text-xs font-bold text-white truncate">{user?.user_metadata?.full_name || 'Authorized User'}</p>
+                 <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 uppercase tracking-wider shrink-0">
+                   {plan.name}
+                 </span>
+               </div>
                <p className="text-[10px] text-slate-500 truncate">{user?.email}</p>
              </div>
           </div>

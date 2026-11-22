@@ -1,12 +1,15 @@
 "use client";
 
-import { Monitor, BrainCircuit } from "lucide-react";
+import { Monitor, BrainCircuit, Lock } from "lucide-react";
+import Link from "next/link";
 import { useSettings } from "@/providers/SettingsProvider";
 import type { AIModel } from "@/providers/SettingsProvider";
 import { cn } from "@/lib/utils";
+import { useEntitlements } from "@/hooks/useEntitlements";
 
 export default function SettingsPage() {
   const { chartType, setChartType, activeModel, setActiveModel } = useSettings();
+  const { hasFeature, plan, allowedModels } = useEntitlements();
 
   const aiProviders = [
     { 
@@ -15,6 +18,8 @@ export default function SettingsPage() {
       icon: "✨", 
       color: "from-blue-500 to-emerald-400",
       description: "Enterprise-grade multimodal reasoning. Pre-configured for high-speed data processing.",
+      requiredFeature: "gemini_pro",
+      minPlan: "Standard",
     },
     { 
       id: "claude-3-haiku", 
@@ -22,6 +27,8 @@ export default function SettingsPage() {
       icon: "🎭", 
       color: "from-orange-400 to-rose-500",
       description: "Optimized for complex coding tasks and natural language understanding.",
+      requiredFeature: "claude_ai",
+      minPlan: "Premium",
     },
     { 
       id: "mixtral-8x7b", 
@@ -29,6 +36,8 @@ export default function SettingsPage() {
       icon: "🌪️", 
       color: "from-orange-500 to-amber-600",
       description: "SOTA open-source model optimized for debugging and logic solving.",
+      requiredFeature: null,
+      minPlan: "Free",
     },
     { 
       id: "llama-3-3", 
@@ -36,6 +45,8 @@ export default function SettingsPage() {
       icon: "🦙", 
       color: "from-indigo-500 to-purple-600",
       description: "Industrial-strength security analysis and threat intelligence.",
+      requiredFeature: "llama_ai",
+      minPlan: "Premium",
     }
   ];
 
@@ -80,46 +91,84 @@ export default function SettingsPage() {
                   <p className="text-xs text-slate-500">Managed intelligence providers for your enterprise.</p>
                 </div>
               </div>
-              <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-full">
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">Enterprise API Enabled</span>
+              <div className="flex items-center gap-2 bg-purple-500/10 border border-purple-500/20 px-3 py-1.5 rounded-full">
+                <div className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" />
+                <span className="text-[10px] font-bold text-purple-300 uppercase tracking-widest">
+                  Plan: {plan.name} Tier
+                </span>
               </div>
             </div>
 
             <div className="grid grid-cols-1 gap-4">
-              {aiProviders.map((provider) => (
-                <div 
-                  key={provider.id}
-                  onClick={() => setActiveModel(provider.id as AIModel)}
-                  className={cn(
-                    "p-5 rounded-2xl border transition-all cursor-pointer relative group",
-                    activeModel === provider.id 
-                      ? "bg-white/5 border-purple-500/50 shadow-2xl shadow-purple-500/10" 
-                      : "bg-transparent border-white/5 hover:border-white/20"
-                  )}
-                >
-                  <div className="flex items-start gap-4">
-                    <div className={cn(
-                      "w-12 h-12 rounded-xl flex items-center justify-center text-2xl shadow-inner",
-                      "bg-gradient-to-br", provider.color
-                    )}>
-                      {provider.icon}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <h4 className="font-bold text-slate-200">{provider.name}</h4>
-                        <div className="flex gap-2">
-                           {activeModel === provider.id && (
-                            <span className="text-[10px] font-bold bg-purple-500/20 text-purple-400 px-2.5 py-1 rounded-full border border-purple-500/30 uppercase tracking-widest">Active</span>
-                          )}
-                          <span className="text-[9px] font-bold bg-white/5 text-slate-500 px-2 py-1 rounded-md border border-white/5">Managed</span>
-                        </div>
+              {aiProviders.map((provider) => {
+                const isAllowed = !provider.requiredFeature || hasFeature(provider.requiredFeature);
+                const isActive = activeModel === provider.id;
+
+                return (
+                  <div 
+                    key={provider.id}
+                    onClick={() => {
+                      if (isAllowed) {
+                        setActiveModel(provider.id as AIModel);
+                      }
+                    }}
+                    className={cn(
+                      "p-5 rounded-2xl border transition-all relative group",
+                      isAllowed ? "cursor-pointer" : "cursor-not-allowed opacity-60",
+                      isActive && isAllowed
+                        ? "bg-white/5 border-purple-500/50 shadow-2xl shadow-purple-500/10" 
+                        : isAllowed 
+                        ? "bg-transparent border-white/5 hover:border-white/20"
+                        : "bg-black/20 border-white/5"
+                    )}
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className={cn(
+                        "w-12 h-12 rounded-xl flex items-center justify-center text-2xl shadow-inner relative",
+                        "bg-gradient-to-br", provider.color,
+                        !isAllowed && "grayscale"
+                      )}>
+                        {provider.icon}
+                        {!isAllowed && (
+                          <div className="absolute inset-0 bg-black/60 rounded-xl flex items-center justify-center">
+                            <Lock className="w-4 h-4 text-amber-400" />
+                          </div>
+                        )}
                       </div>
-                      <p className="text-xs text-slate-500 leading-relaxed max-w-sm">{provider.description}</p>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <h4 className="font-bold text-slate-200 flex items-center gap-2">
+                            {provider.name}
+                            {!isAllowed && (
+                              <span className="text-[9px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                <Lock className="w-2.5 h-2.5" />
+                                Requires {provider.minPlan}
+                              </span>
+                            )}
+                          </h4>
+                          <div className="flex items-center gap-2">
+                            {isActive && isAllowed && (
+                              <span className="text-[10px] font-bold bg-purple-500/20 text-purple-400 px-2.5 py-1 rounded-full border border-purple-500/30 uppercase tracking-widest">Active</span>
+                            )}
+                            {!isAllowed ? (
+                              <Link
+                                href="/subscription"
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-[10px] font-bold text-purple-400 hover:text-purple-300 underline underline-offset-2"
+                              >
+                                Unlock
+                              </Link>
+                            ) : (
+                              <span className="text-[9px] font-bold bg-white/5 text-slate-500 px-2 py-1 rounded-md border border-white/5">Managed</span>
+                            )}
+                          </div>
+                        </div>
+                        <p className="text-xs text-slate-500 leading-relaxed max-w-sm">{provider.description}</p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </section>
 

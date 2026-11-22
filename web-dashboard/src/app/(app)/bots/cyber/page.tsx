@@ -4,6 +4,8 @@ import { ShieldAlert, Lock, FileSearch, Eye, Terminal, Upload, File, X as CloseI
 import { useEffect, useState, useRef } from "react";
 import { fetchBots, executeBot, fetchBotHistory } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { FeatureGate } from "@/components/entitlements/FeatureGate";
+import { UpgradeRequired } from "@/components/entitlements/UpgradeRequired";
 
 interface Bot {
   id: string;
@@ -114,7 +116,27 @@ export default function CyberBotsPage() {
   };
 
   return (
-    <div className="space-y-8">
+    <FeatureGate
+      feature="private_security_hub"
+      fallback={
+        <div className="py-12">
+          <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
+            Cyber Security Hub
+            <ShieldAlert className="w-8 h-8 text-red-500" />
+          </h1>
+          <p className="text-slate-400 mb-8">Advanced AI security agents and threat intelligence.</p>
+          <div className="max-w-2xl mx-auto">
+            <UpgradeRequired
+              feature="private_security_hub"
+              featureName="Private Security Hub"
+              planName="Premium"
+              description="Access to private vulnerability scanners, AST code analysis bots, and real-time threat intelligence is restricted to Premium and Enterprise accounts."
+            />
+          </div>
+        </div>
+      }
+    >
+      <div className="space-y-8">
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
@@ -302,5 +324,6 @@ export default function CyberBotsPage() {
         </div>
       </div>
     </div>
-  );
+  </FeatureGate>
+);
 }

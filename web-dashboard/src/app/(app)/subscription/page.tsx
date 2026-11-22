@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
-import { Check, Loader2, Sparkles, Zap, ExternalLink, Settings } from "lucide-react";
+import { Check, Loader2, Sparkles, Zap, ExternalLink, ShieldCheck } from "lucide-react";
 import { ManageSubscriptionButton } from "@/components/manage-subscription-button";
+import { EnterpriseContactModal } from "@/components/subscription/EnterpriseContactModal";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 import { io, Socket } from "socket.io-client";
@@ -20,65 +21,105 @@ const PLAN_RANKS: Record<string, number> = {
   enterprise: 3,
 };
 
-const PLANS = [
+interface DynamicPlan {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  monthlyPrice: number;
+  yearlyPrice: number;
+  currency: string;
+  interval: string;
+  isCustomPricing: boolean;
+  isRecommended: boolean;
+  badge?: string;
+  features: string[];
+  gradient?: string;
+}
+
+const FALLBACK_PLANS: DynamicPlan[] = [
   {
     id: "Free",
     name: "Free",
-    price: "0",
-    description: "Perfect for exploring the platform",
+    slug: "free",
+    monthlyPrice: 0,
+    yearlyPrice: 0,
+    currency: "USD",
+    interval: "month",
+    isCustomPricing: false,
+    description: "Perfect for exploring the platform and community.",
     features: [
       "Community Forum Access",
-      "Basic AI Chat (5/day)",
-      "Public Analytics",
-      "Standard Support",
+      "Basic AI Chat (5 msgs / day)",
+      "Public Analytics & Leaderboards",
+      "Standard Community Support",
     ],
-    buttonText: "Get Started Free",
-    highlight: false,
+    isRecommended: false,
     gradient: "from-slate-500 to-slate-600",
   },
   {
     id: "Standard",
     name: "Standard",
-    price: "29",
-    description: "Best for active developers",
+    slug: "standard",
+    monthlyPrice: 29,
+    yearlyPrice: 348,
+    currency: "USD",
+    interval: "both",
+    isCustomPricing: false,
+    description: "Best for active developers and daily code synthesis.",
     features: [
-      "Priority Forum Support",
-      "Pro AI Engine (Gemini)",
-      "Personal Analytics",
-      "API Access",
+      "Priority Developer Forum Support",
+      "Pro AI Engine (Gemini Pro)",
+      "Personal Real-Time Analytics",
+      "REST & WebSocket API Access",
+      "Unlimited Daily Inquiries",
+      "7-day free trial included",
     ],
-    buttonText: "Upgrade to Standard",
-    highlight: true,
+    isRecommended: true,
+    badge: "Most Popular",
     gradient: "from-purple-500 to-blue-500",
   },
   {
     id: "Premium",
     name: "Premium",
-    price: "99",
-    description: "For security professionals",
+    slug: "premium",
+    monthlyPrice: 99,
+    yearlyPrice: 1188,
+    currency: "USD",
+    interval: "both",
+    isCustomPricing: false,
+    description: "For security professionals and threat researchers.",
     features: [
-      "Private Security Hub",
-      "Claude 3 & Llama 3 AI",
-      "Advanced Threat Intel",
+      "Private Security Hub (AST & Scans)",
+      "Claude 3 & Llama 3 Security Models",
+      "Real-Time Vulnerability Feeds",
+      "Advanced Threat Intelligence",
       "Unlimited API Calls",
+      "Priority Email & Slack Support",
     ],
-    buttonText: "Upgrade to Premium",
-    highlight: false,
+    isRecommended: false,
+    badge: "Advanced Security",
     gradient: "from-amber-500 to-rose-500",
   },
   {
-    id: "enterprise",
+    id: "Enterprise",
     name: "Enterprise",
-    price: "Custom",
-    description: "Custom solutions for teams",
+    slug: "enterprise",
+    monthlyPrice: 299,
+    yearlyPrice: 3588,
+    currency: "USD",
+    interval: "both",
+    isCustomPricing: true,
+    description: "Tailored infrastructure and custom SLA guarantees.",
     features: [
-      "SLA Guarantees",
-      "Dedicated AI Instance",
-      "White-label Options",
-      "24/7 Phone Support",
+      "SLA Guarantees (99.9% Uptime)",
+      "Dedicated Private AI Instance",
+      "White-label & Custom Domain Options",
+      "24/7 Phone & Slack Support",
+      "Custom Vendor Security Audits",
     ],
-    buttonText: "Contact Sales",
-    highlight: false,
+    isRecommended: false,
+    badge: "Enterprise Grade",
     gradient: "from-emerald-500 to-teal-500",
   },
 ];
@@ -93,11 +134,14 @@ const PAYMENT_METHODS = [
 function SubscriptionPageClient() {
   const { user, session } = useAuth();
   const searchParams = useSearchParams();
+  const [plans, setPlans] = useState<DynamicPlan[]>(FALLBACK_PLANS);
   const [currentPlan, setCurrentPlan] = useState<string>("Free");
+  const [billingCycle, setBillingCycle] = useState<"month" | "year">("month");
   const [upgradingPlan, setUpgradingPlan] = useState<string | null>(null);
   const [isSocketConnected, setIsSocketConnected] = useState(false);
   const [justUpgraded, setJustUpgraded] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [isEnterpriseModalOpen, setIsEnterpriseModalOpen] = useState(false);
   const [paddle, setPaddle] = useState<Paddle | undefined>();
 
   // Detect return from Paddle checkout
@@ -108,7 +152,7 @@ function SubscriptionPageClient() {
     }
   }, [searchParams]);
 
-  // Initialize Paddle.js and handle _ptxn parameter if returning from hosted payment link
+  // Initialize Paddle.js and handle _ptxn parameter
   useEffect(() => {
     const paddleEnv = process.env.NEXT_PUBLIC_PADDLE_ENV;
     const paddleToken = process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN;
@@ -137,6 +181,58 @@ function SubscriptionPageClient() {
       .catch((err) => console.error("Paddle init error on subscription page:", err));
   }, [searchParams]);
 
+  // Fetch published plans dynamically from database
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/plans/published`)
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to fetch published plans");
+        return res.json();
+      })
+      .then((data: any[]) => {
+        if (Array.isArray(data) && data.length > 0) {
+          const mapped: DynamicPlan[] = data.map((p) => {
+            let featureList: string[] = [];
+            if (p.planFeatures && Array.isArray(p.planFeatures)) {
+              featureList = p.planFeatures
+                .filter((pf: any) => pf.isEnabled && pf.feature)
+                .map((pf: any) => {
+                  if (pf.limitValue) {
+                    return `${pf.feature.name} (${pf.limitValue}/day)`;
+                  }
+                  return pf.feature.name;
+                });
+            } else if (Array.isArray(p.features) && p.features.length > 0) {
+              featureList = p.features;
+            }
+
+            let grad = "from-slate-500 to-slate-600";
+            const lower = p.name.toLowerCase();
+            if (lower.includes("standard")) grad = "from-purple-500 to-blue-500";
+            if (lower.includes("premium")) grad = "from-amber-500 to-rose-500";
+            if (lower.includes("enterprise")) grad = "from-emerald-500 to-teal-500";
+
+            return {
+              id: p.id || p.name,
+              name: p.name,
+              slug: p.slug || p.name.toLowerCase(),
+              description: p.description || "",
+              monthlyPrice: Number(p.monthlyPrice ?? p.price ?? 0),
+              yearlyPrice: Number(p.yearlyPrice ?? (p.monthlyPrice ? p.monthlyPrice * 12 : 0)),
+              currency: p.currency || "USD",
+              interval: p.interval || "both",
+              isCustomPricing: Boolean(p.isCustomPricing),
+              isRecommended: Boolean(p.isRecommended),
+              badge: p.badge || (p.isRecommended ? "Recommended" : undefined),
+              features: featureList,
+              gradient: grad,
+            };
+          });
+          setPlans(mapped);
+        }
+      })
+      .catch((err) => console.warn("Using fallback plans:", err));
+  }, []);
+
   // Real-time WebSocket subscription sync
   useEffect(() => {
     if (!user?.id) return;
@@ -161,7 +257,7 @@ function SubscriptionPageClient() {
     };
   }, [user]);
 
-  // Fetch current plan from backend and mirrored Paddle subscription
+  // Fetch current plan from backend & entitlements
   useEffect(() => {
     if (!user?.id) return;
 
@@ -175,13 +271,12 @@ function SubscriptionPageClient() {
       .then((u) => {
         if (u?.rank) setCurrentPlan(u.rank);
       })
-      .catch(() => { });
+      .catch(() => {});
 
     getUserSubscription()
       .then((sub) => {
         if (sub && hasActiveSubscription(sub)) {
           const planMap: Record<string, string> = {
-            // Live Prices
             "pri_01m7r11zk5c3bma7a6k0y70g5n": "Standard",
             "pri_01m7zg022mbd9npg4k7d9462w4": "Standard",
             "pri_01m7r12e4rwbrt25331y3sm88p": "Premium",
@@ -189,48 +284,38 @@ function SubscriptionPageClient() {
             "pri_01m7zga1swv0y3tfj78g7bkqvj": "Enterprise",
             "pri_01m7zga22j5raphwqxbe31fgex": "Enterprise",
             "pri_01m7zga17631vansgnv8844tqp": "Free",
-            // Sandbox Prices (backward compatibility)
-            "pri_01m7r41d01n8xa18z8kzwhchv1": "Standard",
-            "pri_01m7r41d7yphdthpr9jhkw3b00": "Standard",
-            "pri_01m7r41dwfzw108seb2ptyvzrh": "Premium",
-            "pri_01m7r41e4p5a3w63m65b6ewd05": "Premium",
-            "pri_01m7r41epjb34524nsn3nebdym": "Enterprise",
-            "pri_01m7r6d5fzz6397fsw4c5a3xx4": "Free",
           };
-          const resolved = planMap[sub.price_id] || "Standard";
-          setCurrentPlan(resolved);
+          const resolved = planMap[sub.price_id];
+          if (resolved) {
+            setCurrentPlan(resolved);
+          }
         }
       })
-      .catch(() => { });
+      .catch(() => {});
   }, [user, session]);
 
-  const handleUpgrade = async (planId: string, planName: string) => {
-    if (planId === "enterprise") {
-      const subject = encodeURIComponent("Enterprise Plan Inquiry - VultaCore");
-      const body = encodeURIComponent(
-        `Hi TechProgression Sales Team,\n\nI would like to inquire about the VultaCore Enterprise Plan.\n\nMy Account Details:\n- Email: ${user?.email ?? "N/A"}\n- Username: ${user?.user_metadata?.username ?? user?.email?.split("@")[0] ?? "N/A"}\n- User ID: ${user?.id ?? "N/A"}\n\nPlease contact me to discuss custom pricing and onboarding.\n\nThank you!`
-      );
-      window.open(`mailto:sales@techprogression.com?subject=${subject}&body=${body}`, "_blank");
+  const handleAction = async (plan: DynamicPlan) => {
+    if (plan.isCustomPricing || plan.name.toLowerCase() === "enterprise") {
+      setIsEnterpriseModalOpen(true);
       return;
     }
 
-    if (planName.toLowerCase() === currentPlan.toLowerCase()) return;
+    if (plan.name.toLowerCase() === currentPlan.toLowerCase()) return;
 
     if (!user?.id || !user?.email) {
       setCheckoutError("Please log in to manage your plan.");
       return;
     }
 
-    const planKey = planName.toLowerCase();
+    const planKey = plan.name.toLowerCase();
     const currentKey = currentPlan.toLowerCase();
     const planRank = PLAN_RANKS[planKey] ?? 0;
     const currentRank = PLAN_RANKS[currentKey] ?? 0;
 
-    // Downgrading to a lower tier (including Free) from an active paid plan:
-    // Open the customer portal where the user can cancel/downgrade their active subscription
+    // Downgrade to lower tier -> open customer portal
     if (planRank < currentRank) {
       try {
-        setUpgradingPlan(planId);
+        setUpgradingPlan(plan.id);
         const result = await createPortalSession();
         if ("error" in result) {
           throw new Error(result.error);
@@ -239,20 +324,21 @@ function SubscriptionPageClient() {
         return;
       } catch (err: any) {
         console.error("Portal Error:", err);
-        setCheckoutError(err.message || "Failed to open subscription management portal. Please use Manage Subscription below.");
+        setCheckoutError(err.message || "Failed to open subscription management portal.");
         setUpgradingPlan(null);
         return;
       }
     }
 
+    // Upgrade to higher tier
     try {
-      setUpgradingPlan(planId);
+      setUpgradingPlan(plan.id);
 
       const res = await fetch(`${API_BASE_URL}/billing/checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          planName,
+          planName: plan.name,
           userId: user.id,
           userEmail: user.email,
         }),
@@ -264,8 +350,6 @@ function SubscriptionPageClient() {
       }
 
       const { checkoutUrl } = await res.json();
-
-      // Extract transaction ID if present in checkoutUrl (e.g. _ptxn=txn_...)
       const ptxnMatch = checkoutUrl ? checkoutUrl.match(/[?&]_ptxn=([a-zA-Z0-9_]+)/) : null;
       const ptxn = ptxnMatch ? ptxnMatch[1] : null;
 
@@ -282,7 +366,6 @@ function SubscriptionPageClient() {
         return;
       }
 
-      // Fallback: Redirect to Paddle checkout URL
       window.location.href = checkoutUrl;
     } catch (err: unknown) {
       console.error("Checkout Error:", err);
@@ -293,6 +376,14 @@ function SubscriptionPageClient() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-12">
+      {/* Enterprise Contact Sales Modal */}
+      <EnterpriseContactModal
+        isOpen={isEnterpriseModalOpen}
+        onClose={() => setIsEnterpriseModalOpen(false)}
+        userEmail={user?.email || ""}
+        userId={user?.id || ""}
+      />
+
       {/* Header */}
       <div className="text-center mb-16 space-y-4">
         {/* Live Sync Indicator */}
@@ -312,7 +403,7 @@ function SubscriptionPageClient() {
 
         {/* Just-upgraded banner */}
         {justUpgraded && (
-          <div className="mb-6 p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl text-center animate-in fade-in slide-in-from-top-2 duration-500">
+          <div className="mb-6 p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl text-center animate-in fade-in duration-500">
             <p className="text-emerald-400 font-semibold text-sm">
               🎉 Payment successful! Your plan is being activated. It will update automatically in a few seconds.
             </p>
@@ -321,14 +412,8 @@ function SubscriptionPageClient() {
 
         {/* Checkout error banner */}
         {checkoutError && (
-          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-2xl text-center animate-in fade-in slide-in-from-top-2 duration-300 flex items-center justify-between gap-3">
+          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-2xl text-center">
             <p className="text-red-400 font-semibold text-sm">⚠️ {checkoutError}</p>
-            <button
-              onClick={() => setCheckoutError(null)}
-              className="text-red-400 hover:text-red-300 text-xs font-bold shrink-0"
-            >
-              ✕ Dismiss
-            </button>
           </div>
         )}
 
@@ -339,9 +424,41 @@ function SubscriptionPageClient() {
           </span>
         </h1>
         <p className="text-slate-400 text-lg max-w-2xl mx-auto">
-          Secure payments.
-          Pay with card, PayPal, Google Pay or Apple Pay.
+          Dynamically managed plans backed by enterprise-grade entitlement controls.
         </p>
+
+        {/* Billing Cycle Toggle */}
+        <div className="pt-2 flex justify-center items-center">
+          <div className="inline-flex p-1 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">
+            <button
+              type="button"
+              onClick={() => setBillingCycle("month")}
+              className={cn(
+                "px-5 py-2 rounded-xl text-sm font-semibold transition-all duration-200",
+                billingCycle === "month"
+                  ? "bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-lg shadow-purple-500/20"
+                  : "text-slate-400 hover:text-white",
+              )}
+            >
+              Monthly Billing
+            </button>
+            <button
+              type="button"
+              onClick={() => setBillingCycle("year")}
+              className={cn(
+                "px-5 py-2 rounded-xl text-sm font-semibold transition-all duration-200 flex items-center gap-2",
+                billingCycle === "year"
+                  ? "bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-lg shadow-purple-500/20"
+                  : "text-slate-400 hover:text-white",
+              )}
+            >
+              <span>Annual Billing</span>
+              <span className="text-[10px] bg-emerald-500/20 text-emerald-400 font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
+                SAVE 20%
+              </span>
+            </button>
+          </div>
+        </div>
 
         {/* Accepted payment methods */}
         <div className="flex items-center justify-center gap-3 flex-wrap pt-2">
@@ -369,9 +486,9 @@ function SubscriptionPageClient() {
         )}
       </div>
 
-      {/* Plan Cards */}
+      {/* Plan Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-        {PLANS.map((plan) => {
+        {plans.map((plan) => {
           const planKey = plan.name.toLowerCase();
           const currentKey = currentPlan.toLowerCase();
           const planRank = PLAN_RANKS[planKey] ?? 0;
@@ -379,19 +496,25 @@ function SubscriptionPageClient() {
 
           const isCurrentPlan = planKey === currentKey;
           const isDowngrade = !isCurrentPlan && planRank < currentRank;
-          const isUpgrade = !isCurrentPlan && planRank > currentRank && plan.id !== "enterprise";
+          const isUpgrade = !isCurrentPlan && planRank > currentRank && !plan.isCustomPricing;
           const isLoading = upgradingPlan === plan.id;
 
-          let buttonText: string = plan.buttonText;
+          let buttonText = "Get Started";
           if (isCurrentPlan) {
             buttonText = "Current Plan";
-          } else if (plan.id === "enterprise") {
+          } else if (plan.isCustomPricing || planKey === "enterprise") {
             buttonText = "Contact Sales";
           } else if (isDowngrade) {
             buttonText = `Downgrade to ${plan.name}`;
           } else if (isUpgrade) {
             buttonText = `Upgrade to ${plan.name}`;
           }
+
+          const priceDisplay = plan.isCustomPricing
+            ? "Custom"
+            : billingCycle === "year"
+            ? `$${Math.round(plan.yearlyPrice / 12)}`
+            : `$${plan.monthlyPrice}`;
 
           return (
             <div
@@ -400,22 +523,20 @@ function SubscriptionPageClient() {
                 "relative flex flex-col p-8 rounded-3xl border transition-all duration-500 overflow-hidden",
                 isCurrentPlan
                   ? "bg-gradient-to-b from-indigo-900/40 to-slate-900 border-indigo-500/50 shadow-[0_0_40px_rgba(99,102,241,0.2)] scale-105"
-                  : plan.highlight
-                    ? "bg-slate-900 border-purple-500/50 shadow-2xl shadow-purple-500/10 ring-1 ring-purple-500/20 hover:scale-[1.02]"
-                    : "bg-slate-900/50 border-white/10 hover:border-white/20 hover:scale-[1.02]"
+                  : plan.isRecommended
+                  ? "bg-slate-900 border-purple-500/50 shadow-2xl shadow-purple-500/10 ring-1 ring-purple-500/20 hover:scale-[1.02]"
+                  : "bg-slate-900/50 border-white/10 hover:border-white/20 hover:scale-[1.02]",
               )}
             >
               {/* Active plan top bar */}
               {isCurrentPlan && (
-                <div
-                  className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r ${plan.gradient}`}
-                />
+                <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r ${plan.gradient || "from-purple-500 to-blue-500"}`} />
               )}
 
-              {/* Popular badge */}
-              {plan.highlight && !isCurrentPlan && (
+              {/* Recommended badge */}
+              {plan.badge && !isCurrentPlan && (
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-gradient-to-r from-purple-500 to-blue-500 text-white text-[10px] font-bold uppercase tracking-widest px-4 py-1.5 rounded-full shadow-lg flex items-center gap-1">
-                  <Sparkles className="w-3 h-3" /> Most Popular
+                  <Sparkles className="w-3 h-3" /> {plan.badge}
                 </div>
               )}
 
@@ -431,10 +552,9 @@ function SubscriptionPageClient() {
                 </h3>
                 <div className="flex items-baseline gap-1">
                   <span className="text-4xl font-extrabold text-white">
-                    {plan.id === "enterprise" ? "" : "$"}
-                    {plan.price}
+                    {priceDisplay}
                   </span>
-                  {plan.id !== "enterprise" && plan.price !== "0" && (
+                  {!plan.isCustomPricing && plan.monthlyPrice > 0 && (
                     <span className="text-slate-500 font-medium">/mo</span>
                   )}
                 </div>
@@ -443,7 +563,7 @@ function SubscriptionPageClient() {
                 </p>
               </div>
 
-              {/* Features */}
+              {/* Features List */}
               <div className="flex-1 space-y-4 mb-8 relative z-10">
                 {plan.features.map((feature, i) => (
                   <div key={i} className="flex items-start gap-3">
@@ -452,13 +572,13 @@ function SubscriptionPageClient() {
                         "mt-1 p-0.5 rounded-full border",
                         isCurrentPlan
                           ? "bg-indigo-500/10 border-indigo-500/30"
-                          : "bg-emerald-500/10 border-emerald-500/20"
+                          : "bg-emerald-500/10 border-emerald-500/20",
                       )}
                     >
                       <Check
                         className={cn(
                           "w-3 h-3",
-                          isCurrentPlan ? "text-indigo-400" : "text-emerald-400"
+                          isCurrentPlan ? "text-indigo-400" : "text-emerald-400",
                         )}
                       />
                     </div>
@@ -467,26 +587,26 @@ function SubscriptionPageClient() {
                 ))}
               </div>
 
-              {/* CTA Button */}
+              {/* Action Button */}
               <button
-                onClick={() => handleUpgrade(plan.id, plan.name)}
+                onClick={() => handleAction(plan)}
                 disabled={isCurrentPlan || isLoading}
                 className={cn(
                   "w-full py-4 rounded-2xl font-bold transition-all duration-300 flex items-center justify-center gap-2 relative z-10",
                   isCurrentPlan
                     ? "bg-white/5 text-slate-400 cursor-not-allowed border border-white/5"
                     : isDowngrade
-                      ? "bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-white/10 hover:border-white/20 active:scale-95"
-                      : plan.highlight
-                        ? "bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-xl shadow-purple-500/20 hover:opacity-90 active:scale-95"
-                        : `bg-gradient-to-r ${plan.gradient} text-white opacity-80 hover:opacity-100 active:scale-95`
+                    ? "bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-white/10 hover:border-white/20 active:scale-95"
+                    : plan.isRecommended
+                    ? "bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-xl shadow-purple-500/20 hover:opacity-90 active:scale-95"
+                    : `bg-gradient-to-r ${plan.gradient || "from-purple-500 to-blue-500"} text-white opacity-90 hover:opacity-100 active:scale-95`,
                 )}
               >
                 {isLoading ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
                 ) : isCurrentPlan ? (
                   "Current Plan"
-                ) : plan.id === "enterprise" ? (
+                ) : plan.isCustomPricing || planKey === "enterprise" ? (
                   "Contact Sales"
                 ) : (
                   <>
@@ -500,32 +620,19 @@ function SubscriptionPageClient() {
         })}
       </div>
 
-      {/* Manage / Cancel — shown only when the user has an active paid plan */}
-      {currentPlan !== "Free" && currentPlan !== "" && (
-        <div className="mt-12 flex flex-col items-center gap-3">
-          <p className="text-slate-500 text-sm">
-            Need to update your payment method, download invoices, or cancel?
-          </p>
-          <div className="flex flex-wrap gap-3 justify-center">
-            <ManageSubscriptionButton label="Manage Subscription" />
-            <ManageSubscriptionButton
-              label="Cancel Subscription"
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-transparent hover:bg-red-500/10 border border-red-500/30 hover:border-red-500/60 text-red-400 hover:text-red-300 text-sm font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-            />
-          </div>
-          <p className="text-slate-600 text-xs mt-1">
-            Powered by{" "}
-            <span className="text-slate-500 font-medium">Paddle</span> · Secure
-            billing portal
-          </p>
-        </div>
-      )}
+      {/* Customer Portal Management for active subscribers */}
+      <div className="mt-16 text-center">
+        <ManageSubscriptionButton />
+      </div>
 
-      {/* Powered by footer */}
-      <div className="mt-10 text-center">
-        <p className="text-slate-600 text-xs">
-          Payments securely processed by Paddle · All prices in USD · Cancel
-          anytime
+      {/* Security & Merchant of Record Note */}
+      <div className="mt-12 p-8 rounded-3xl bg-slate-900/40 border border-white/5 text-center max-w-3xl mx-auto space-y-4">
+        <div className="flex justify-center items-center gap-2 text-purple-400">
+          <ShieldCheck className="w-6 h-6" />
+          <span className="font-semibold text-white">Paddle Merchant of Record &amp; Dynamic Gating</span>
+        </div>
+        <p className="text-slate-400 text-sm leading-relaxed">
+          All transactions are processed through Paddle with automated tax compliance, 256-bit SSL encryption, and instant entitlement provisioning.
         </p>
       </div>
     </div>
@@ -534,12 +641,13 @@ function SubscriptionPageClient() {
 
 export default function SubscriptionPage() {
   return (
-    <Suspense fallback={
-      <div className="flex flex-col items-center justify-center py-40 gap-4">
-        <Loader2 className="w-12 h-12 text-purple-500 animate-spin" />
-        <p className="text-slate-500 animate-pulse uppercase tracking-widest text-xs font-bold">Loading Subscription...</p>
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+          <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
+        </div>
+      }
+    >
       <SubscriptionPageClient />
     </Suspense>
   );

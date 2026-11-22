@@ -23,6 +23,10 @@ export class BotsService {
     return this.botsRepository.find();
   }
 
+  findOne(id: string): Promise<Bot | null> {
+    return this.botsRepository.findOneBy({ id });
+  }
+
   async executeBot(id: string, prompt: string, userId: string, context?: string): Promise<any> {
     const bot = await this.botsRepository.findOneBy({ id });
     if (!bot) return { error: 'Bot not found' };
