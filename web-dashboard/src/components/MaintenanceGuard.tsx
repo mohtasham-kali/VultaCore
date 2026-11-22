@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { API_BASE_URL } from "@/lib/constants";
-import { AlertTriangle, RefreshCw } from "lucide-react";
+import { AlertTriangle, RefreshCw, LogIn } from "lucide-react";
+import Link from "next/link";
 
 const ADMIN_EMAIL = (
   process.env.NEXT_PUBLIC_ADMIN_EMAIL || "mohtasham.siddiqui17@gmail.com"
@@ -14,7 +15,6 @@ const ADMIN_EMAIL = (
 
 export function MaintenanceGuard() {
   const pathname = usePathname();
-  const router = useRouter();
   const { user, isLoading: authLoading } = useAuth();
   const [maintenanceModeActive, setMaintenanceModeActive] = useState<boolean | null>(null);
 
@@ -25,6 +25,9 @@ export function MaintenanceGuard() {
         user.app_metadata?.role === "admin" ||
         (user as any).isAdmin === true)
   );
+
+  const isAuthRoute = pathname.startsWith("/auth");
+  const isMaintenanceRoute = pathname === "/maintenance";
 
   useEffect(() => {
     let isCancelled = false;
@@ -51,13 +54,13 @@ export function MaintenanceGuard() {
           // If auth is still resolving, hold off until auth resolves
           if (authLoading) return;
 
-          // All users except Admin must be redirected to /maintenance
-          if (!isAdmin && pathname !== "/maintenance") {
+          // Never block or redirect from the authentication flow (/auth) or /maintenance
+          if (!isAdmin && !isAuthRoute && !isMaintenanceRoute) {
             window.location.replace("/maintenance");
           }
         } else {
           // If maintenance mode is off and user is currently on /maintenance, return to home
-          if (pathname === "/maintenance") {
+          if (isMaintenanceRoute) {
             window.location.replace("/");
           }
         }
@@ -74,11 +77,17 @@ export function MaintenanceGuard() {
       isCancelled = true;
       clearInterval(interval);
     };
-  }, [pathname, user, authLoading, isAdmin]);
+  }, [pathname, user, authLoading, isAdmin, isAuthRoute, isMaintenanceRoute]);
 
-  // If maintenance mode is active, auth is confirmed, user is NOT admin, and not yet on /maintenance:
+  // If maintenance mode is active, auth is confirmed, user is NOT admin, and not on /maintenance or /auth:
   // Render an immediate blocking overlay so the user NEVER sees the app content while redirecting
-  if (maintenanceModeActive === true && !authLoading && !isAdmin && pathname !== "/maintenance") {
+  if (
+    maintenanceModeActive === true &&
+    !authLoading &&
+    !isAdmin &&
+    !isAuthRoute &&
+    !isMaintenanceRoute
+  ) {
     return (
       <div className="fixed inset-0 z-[999999] bg-slate-950 flex flex-col items-center justify-center p-4">
         <div className="max-w-lg w-full bg-slate-900 border border-white/10 rounded-3xl p-8 lg:p-10 text-center shadow-2xl backdrop-blur-xl space-y-6">
@@ -103,7 +112,15 @@ export function MaintenanceGuard() {
             </p>
           </div>
 
-          <div className="pt-2">
+          <div className="space-y-3 pt-2">
+            <Link
+              href="/auth"
+              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-semibold py-3 rounded-xl transition-all text-sm shadow-lg shadow-purple-500/20"
+            >
+              <LogIn className="w-4 h-4" />
+              Sign In / Admin Login
+            </Link>
+
             <button
               onClick={() => window.location.reload()}
               className="w-full bg-white/10 hover:bg-white/15 text-white font-medium py-3 rounded-xl transition-all text-sm flex items-center justify-center gap-2 border border-white/5"

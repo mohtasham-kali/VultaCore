@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, ShieldCheck, RefreshCw, ArrowRight, Settings } from "lucide-react";
+import { AlertTriangle, ShieldCheck, RefreshCw, ArrowRight, Settings, LogIn, LogOut, User } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { useState } from "react";
@@ -12,21 +12,35 @@ const ADMIN_EMAIL = (
   .trim();
 
 export default function MaintenancePage() {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, signOut } = useAuth();
   const [checking, setChecking] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
   const isAdmin = Boolean(
     user &&
       (user.email?.toLowerCase().trim() === ADMIN_EMAIL ||
         user.user_metadata?.role === "admin" ||
-        user.app_metadata?.role === "admin")
+        user.app_metadata?.role === "admin" ||
+        (user as any).isAdmin === true)
   );
 
   const handleCheckAgain = () => {
     setChecking(true);
     setTimeout(() => {
       window.location.reload();
-    }, 600);
+    }, 500);
+  };
+
+  const handleSignOut = async () => {
+    try {
+      setSigningOut(true);
+      await signOut();
+      window.location.reload();
+    } catch (err) {
+      console.error("Sign out error:", err);
+    } finally {
+      setSigningOut(false);
+    }
   };
 
   return (
@@ -58,27 +72,27 @@ export default function MaintenancePage() {
           </p>
         </div>
 
-        {/* Admin Bypass Notice (Only for Admin) */}
+        {/* 1. Admin Bypass Notice (When signed in as Admin) */}
         {!isLoading && isAdmin && (
-          <div className="p-4 rounded-2xl bg-purple-500/10 border border-purple-500/30 text-left space-y-2">
+          <div className="p-4 rounded-2xl bg-purple-500/10 border border-purple-500/30 text-left space-y-3">
             <div className="flex items-center gap-2 text-purple-300 text-xs font-bold uppercase tracking-wider">
               <ShieldCheck className="w-4 h-4 text-purple-400" />
               Administrator Access Recognized
             </div>
             <p className="text-xs text-slate-300">
-              You are signed in as <span className="font-semibold text-white">{user?.email}</span>. You retain unrestricted access to platform controls and settings.
+              You are signed in as <span className="font-semibold text-white">{user?.email}</span>. You retain full access to disable maintenance mode or manage platform infrastructure.
             </p>
-            <div className="pt-2 flex items-center gap-2">
+            <div className="pt-1 flex flex-wrap items-center gap-2">
               <Link
                 href="/admin/settings"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold transition-all shadow"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold transition-all shadow"
               >
                 <Settings className="w-3.5 h-3.5" />
-                Admin Settings
+                Admin Settings (Disable Maintenance)
               </Link>
               <Link
                 href="/"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white text-xs font-semibold transition-all"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white text-xs font-semibold transition-all"
               >
                 Bypass to Dashboard
                 <ArrowRight className="w-3.5 h-3.5" />
@@ -87,7 +101,42 @@ export default function MaintenancePage() {
           </div>
         )}
 
+        {/* 2. Non-admin signed-in user notice */}
+        {!isLoading && user && !isAdmin && (
+          <div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-left space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-slate-300 text-xs font-medium">
+                <User className="w-4 h-4 text-slate-400" />
+                <span>Signed in as <span className="text-white font-semibold">{user.email}</span></span>
+              </div>
+              <button
+                onClick={handleSignOut}
+                disabled={signingOut}
+                className="text-xs text-purple-400 hover:text-purple-300 font-medium flex items-center gap-1 transition-colors"
+              >
+                <LogOut className="w-3 h-3" />
+                {signingOut ? "Signing out..." : "Sign Out"}
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-500">
+              This account does not have platform administrator privileges. If you are an administrator, please sign out and log in with your admin credentials.
+            </p>
+          </div>
+        )}
+
+        {/* Actions Section */}
         <div className="space-y-3 pt-2">
+          {/* Sign In button for unauthenticated users so admins can log back in */}
+          {!isLoading && !user && (
+            <Link
+              href="/auth"
+              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-semibold py-3 rounded-xl transition-all text-sm shadow-lg shadow-purple-500/20"
+            >
+              <LogIn className="w-4 h-4" />
+              Sign In / Admin Login
+            </Link>
+          )}
+
           <button 
             onClick={handleCheckAgain} 
             disabled={checking}
@@ -99,7 +148,7 @@ export default function MaintenancePage() {
         </div>
 
         <div className="pt-2 text-[11px] text-slate-500">
-          If you require urgent assistance, please contact{" "}
+          Need urgent access or platform support? Contact{" "}
           <span className="text-slate-400 font-medium">support@vultacore.io</span>
         </div>
       </div>
