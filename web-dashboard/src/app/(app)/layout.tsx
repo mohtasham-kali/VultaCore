@@ -29,14 +29,14 @@ export default function AppLayout({
 
     if (isAdmin) return;
 
-    fetch(`${API_BASE_URL}/settings`)
+    fetch(`${API_BASE_URL}/settings?_t=${Date.now()}`, { cache: 'no-store' })
       .then(res => {
         if (!res.ok) throw new Error('Failed to fetch settings');
         return res.json();
       })
       .then(settings => {
         if (settings.maintenanceMode === 'true' || settings.maintenanceMode === true) {
-          window.location.href = '/maintenance';
+          window.location.replace('/maintenance');
         }
       })
       .catch(err => console.error(err));
