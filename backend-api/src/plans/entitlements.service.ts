@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { UserSubscription } from './entities/user-subscription.entity';
 import { Plan } from './entities/plan.entity';
 import { Feature } from './entities/feature.entity';
+import { PlanFeature } from './entities/plan-feature.entity';
 import { FeatureUsage } from './entities/feature-usage.entity';
 
 export interface UserEntitlementsResponse {
@@ -48,6 +49,8 @@ export class EntitlementsService {
     private readonly planRepo: Repository<Plan>,
     @InjectRepository(Feature)
     private readonly featureRepo: Repository<Feature>,
+    @InjectRepository(PlanFeature)
+    private readonly planFeatureRepo: Repository<PlanFeature>,
     @InjectRepository(FeatureUsage)
     private readonly usageRepo: Repository<FeatureUsage>,
   ) {}
@@ -60,20 +63,34 @@ export class EntitlementsService {
    * Resolves or auto-creates an active subscription for a user.
    */
   async getOrCreateSubscription(userId: string, fallbackRank?: string): Promise<UserSubscription> {
+    // 1. Resolve user's authoritative tier from user or profiles table if not explicitly passed
+    let activeRank = fallbackRank;
+    if (!activeRank) {
+      try {
+        const rows = await this.subRepo.manager.query(
+          `SELECT rank FROM "user" WHERE id = $1 UNION SELECT INITCAP(plan) as rank FROM profiles WHERE id = $1 LIMIT 1`,
+          [userId],
+        );
+        if (rows && rows[0]?.rank) {
+          activeRank = rows[0].rank;
+        }
+      } catch (err) {
+        this.logger.warn(`Could not check user/profiles table for rank: ${err}`);
+      }
+    }
+
+    const targetRank = activeRank || 'Free';
+    const plan = await this.planRepo.findOne({
+      where: [{ name: targetRank }, { slug: targetRank.toLowerCase() }],
+    });
+
     let sub = await this.subRepo.findOne({
       where: { userId },
-      relations: ['plan', 'plan.planFeatures'],
+      relations: ['plan'],
       order: { createdAt: 'DESC' },
     });
 
     if (!sub) {
-      // Determine initial plan name
-      const targetRank = fallbackRank || 'Free';
-      const plan = await this.planRepo.findOne({
-        where: { name: targetRank },
-        relations: ['planFeatures'],
-      });
-
       sub = this.subRepo.create({
         userId,
         plan: plan || undefined,
@@ -87,7 +104,15 @@ export class EntitlementsService {
       });
 
       sub = await this.subRepo.save(sub);
-      this.logger.log(`Created default ${targetRank} subscription for user ${userId}`);
+      this.logger.log(`Created default ${sub.planName} subscription for user ${userId}`);
+    } else if (plan && sub.planName.toLowerCase() !== plan.name.toLowerCase() && !sub.isEnterpriseCustom) {
+      // Auto-sync if subscription plan name drifted from user's active rank in profiles/user table
+      sub.plan = plan;
+      sub.planId = plan.id;
+      sub.planName = plan.name;
+      sub.status = 'active';
+      sub = await this.subRepo.save(sub);
+      this.logger.log(`Auto-synced subscription for user ${userId} to active tier ${plan.name}`);
     }
 
     return sub;
@@ -150,29 +175,36 @@ export class EntitlementsService {
     } else {
       // 2. Standard / Catalog Plan Subscription
       const plan = sub.plan || (await this.planRepo.findOne({
-        where: { name: sub.planName || 'Free' },
-        relations: ['planFeatures'],
+        where: [{ id: sub.planId || '' }, { name: sub.planName || 'Free' }, { slug: (sub.planName || 'free').toLowerCase() }],
       }));
 
+      // Fetch plan features directly to guarantee feature relations are 100% loaded
+      const planFeatures = plan?.id
+        ? await this.planFeatureRepo.find({
+            where: { planId: plan.id },
+            relations: ['feature'],
+          })
+        : [];
+
+      const featureByIdMap = new Map(allFeatures.map((f) => [f.id, f]));
       const planFeatureMap = new Map<string, { enabled: boolean; limit: number | null; config: any }>();
-      if (plan?.planFeatures) {
-        for (const pf of plan.planFeatures) {
-          const featKey = pf.feature?.key;
-          if (featKey) {
-            let configObj = null;
-            if (pf.config) {
-              try {
-                configObj = JSON.parse(pf.config);
-              } catch {
-                configObj = pf.config;
-              }
+
+      for (const pf of planFeatures) {
+        const featKey = pf.feature?.key || featureByIdMap.get(pf.featureId)?.key;
+        if (featKey) {
+          let configObj = null;
+          if (pf.config) {
+            try {
+              configObj = JSON.parse(pf.config);
+            } catch {
+              configObj = pf.config;
             }
-            planFeatureMap.set(featKey, {
-              enabled: pf.isEnabled,
-              limit: pf.limitValue,
-              config: configObj,
-            });
           }
+          planFeatureMap.set(featKey, {
+            enabled: pf.isEnabled,
+            limit: pf.limitValue,
+            config: configObj,
+          });
         }
       }
 

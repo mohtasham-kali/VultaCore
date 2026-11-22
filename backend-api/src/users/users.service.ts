@@ -99,6 +99,31 @@ export class UsersService {
       // Non-fatal if profiles table does not contain the row yet
     }
 
+    try {
+      const planRows = await this.usersRepository.query(
+        `SELECT id, name FROM plan WHERE LOWER(name) = LOWER($1) OR LOWER(slug) = LOWER($1) LIMIT 1`,
+        [planName]
+      );
+      const planId = planRows && planRows[0] ? planRows[0].id : null;
+      const canonicalName = planRows && planRows[0] ? planRows[0].name : planName;
+
+      await this.usersRepository.query(
+        `INSERT INTO user_subscription ("id", "userId", "planId", "planName", "status", "billingInterval", "currentPeriodStart", "currentPeriodEnd", "createdAt", "updatedAt")
+         VALUES (gen_random_uuid(), $1, $2, $3, 'active', 'month', NOW(), NOW() + interval '30 days', NOW(), NOW())
+         ON CONFLICT DO NOTHING`,
+        [userId, planId, canonicalName]
+      );
+
+      await this.usersRepository.query(
+        `UPDATE user_subscription
+         SET "planId" = $1, "planName" = $2, "status" = 'active', "updatedAt" = NOW()
+         WHERE "userId" = $3`,
+        [planId, canonicalName, userId]
+      );
+    } catch (subErr) {
+      console.warn('Failed to sync user_subscription in updatePlan:', subErr);
+    }
+
     let paddleSyncResult: any = undefined;
     if (syncPaddle && this.billingService) {
       try {
