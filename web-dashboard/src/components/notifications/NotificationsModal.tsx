@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
   Search,
@@ -39,6 +40,7 @@ interface NotificationsModalProps {
 function timeAgo(dateString: string): string {
   try {
     const past = new Date(dateString).getTime();
+    if (isNaN(past)) return "Recently";
     const now = Date.now();
     const diff = Math.floor((now - past) / 1000);
 
@@ -48,7 +50,7 @@ function timeAgo(dateString: string): string {
     if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
     return new Date(dateString).toLocaleDateString([], { month: "short", day: "numeric" });
   } catch {
-    return "";
+    return "Recently";
   }
 }
 
@@ -56,6 +58,7 @@ export function NotificationsModal({ isOpen, onClose }: NotificationsModalProps)
   const { user } = useAuth();
   const router = useRouter();
 
+  const [mounted, setMounted] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
@@ -65,17 +68,27 @@ export function NotificationsModal({ isOpen, onClose }: NotificationsModalProps)
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const fetchNotifications = useCallback(async () => {
-    if (!user) return;
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       const res = await fetch(`${API_BASE_URL}/notifications/user/${user.id}`);
       if (res.ok) {
         const data = await res.json();
         setNotifications(Array.isArray(data) ? data : []);
+      } else {
+        setNotifications([]);
       }
     } catch (err) {
       console.error("Failed to fetch notifications:", err);
+      setNotifications([]);
     } finally {
       setLoading(false);
     }
@@ -87,7 +100,7 @@ export function NotificationsModal({ isOpen, onClose }: NotificationsModalProps)
       setFilter("all");
       setSelectedIndex(0);
       fetchNotifications();
-      setTimeout(() => inputRef.current?.focus(), 50);
+      setTimeout(() => inputRef.current?.focus(), 40);
     }
   }, [isOpen, fetchNotifications]);
 
@@ -104,7 +117,7 @@ export function NotificationsModal({ isOpen, onClose }: NotificationsModalProps)
   };
 
   const markAllAsRead = async () => {
-    if (!user) return;
+    if (!user?.id) return;
     try {
       await fetch(`${API_BASE_URL}/notifications/user/${user.id}/read-all`, {
         method: "PATCH",
@@ -135,17 +148,19 @@ export function NotificationsModal({ isOpen, onClose }: NotificationsModalProps)
     }
   };
 
-  // Filtered notifications
-  const filtered = notifications.filter((n) => {
+  // Safe filtered notifications
+  const safeList = Array.isArray(notifications) ? notifications : [];
+  const filtered = safeList.filter((n) => {
+    if (!n) return false;
     if (filter === "unread" && n.isRead) return false;
     if (filter === "alert" && n.type !== "alert" && n.type !== "warning") return false;
 
     if (!query.trim()) return true;
     const q = query.toLowerCase();
     return (
-      n.title.toLowerCase().includes(q) ||
-      n.message.toLowerCase().includes(q) ||
-      n.type?.toLowerCase().includes(q)
+      (n.title && n.title.toLowerCase().includes(q)) ||
+      (n.message && n.message.toLowerCase().includes(q)) ||
+      (n.type && n.type.toLowerCase().includes(q))
     );
   });
 
@@ -189,9 +204,9 @@ export function NotificationsModal({ isOpen, onClose }: NotificationsModalProps)
     setSelectedIndex(0);
   }, [query, filter]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted || typeof document === "undefined") return null;
 
-  const unreadCount = notifications.filter((n) => !n.isRead).length;
+  const unreadCount = safeList.filter((n) => !n?.isRead).length;
 
   const getIcon = (type: string) => {
     switch (type) {
@@ -206,9 +221,9 @@ export function NotificationsModal({ isOpen, onClose }: NotificationsModalProps)
     }
   };
 
-  return (
+  const modalContent = (
     <div
-      className="palette-backdrop fixed inset-0 z-[200] flex items-start justify-center pt-[10vh] px-4 animate-in fade-in duration-150"
+      className="palette-backdrop fixed inset-0 z-[99999] flex items-start justify-center pt-[10vh] px-4 animate-in fade-in duration-150"
       style={{ backgroundColor: "rgba(0,0,0,0.75)", backdropFilter: "blur(12px)" }}
       onClick={onClose}
     >
@@ -273,7 +288,7 @@ export function NotificationsModal({ isOpen, onClose }: NotificationsModalProps)
                   : "text-slate-400 hover:text-slate-200"
               )}
             >
-              All ({notifications.length})
+              All ({safeList.length})
             </button>
             <button
               onClick={() => setFilter("unread")}
@@ -482,5 +497,6 @@ export function NotificationsModal({ isOpen, onClose }: NotificationsModalProps)
       </div>
     </div>
   );
-}
 
+  return createPortal(modalContent, document.body);
+}
