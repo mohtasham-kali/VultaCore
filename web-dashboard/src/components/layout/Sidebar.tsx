@@ -36,21 +36,21 @@ const menuItems: { category: string; items: MenuItem[] }[] = [
     category: "Overview",
     items: [
       { name: "Dashboard", icon: LayoutDashboard, href: "/" },
-      { name: "Analytics", icon: BarChart2, href: "/analytics", feature: "personal_analytics", badge: "PRO" },
+      { name: "Analytics", icon: BarChart2, href: "/analytics", feature: "personal_analytics", badge: "STANDARD" },
     ]
   },
   {
     category: "Forums",
     items: [
       { name: "Dev Forum", icon: MessageSquare, href: "/forum/dev" },
-      { name: "Security Hub", icon: ShieldAlert, href: "/forum/cyber", feature: "private_security_hub", badge: "PREM" },
+      { name: "Security Hub", icon: ShieldAlert, href: "/forum/cyber", feature: "private_security_hub", badge: "PREMIUM" },
     ]
   },
   {
     category: "AI Automation",
     items: [
       { name: "General Bots", icon: Bot, href: "/bots/general" },
-      { name: "Cyber Bots", icon: Cpu, href: "/bots/cyber", feature: "private_security_hub", badge: "PREM" },
+      { name: "Cyber Bots", icon: Cpu, href: "/bots/cyber", feature: "private_security_hub", badge: "PREMIUM" },
     ]
   },
   {
@@ -138,7 +138,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                       {!isEntitled && (
                         <span className="ml-auto text-[9px] font-bold text-amber-400/90 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 flex items-center gap-1">
                           <Lock className="w-2.5 h-2.5" />
-                          {item.badge || 'PRO'}
+                          {item.badge || 'UPGRADE'}
                         </span>
                       )}
                     </Link>
