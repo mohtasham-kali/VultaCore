@@ -1,15 +1,22 @@
 "use client";
 
-import { Monitor, BrainCircuit, Lock } from "lucide-react";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Monitor, BrainCircuit, Lock, Bell, BarChart3, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useSettings } from "@/providers/SettingsProvider";
 import type { AIModel } from "@/providers/SettingsProvider";
 import { cn } from "@/lib/utils";
 import { useEntitlements } from "@/hooks/useEntitlements";
+import { NotificationsModal } from "@/components/notifications/NotificationsModal";
 
 export default function SettingsPage() {
+  const router = useRouter();
   const { chartType, setChartType, activeModel, setActiveModel } = useSettings();
-  const { hasFeature, plan, allowedModels } = useEntitlements();
+  const { hasFeature, plan } = useEntitlements();
+
+  const [activeTab, setActiveTab] = useState<"ai-hub" | "notifications" | "analytics">("ai-hub");
+  const [isNotificationsModalOpen, setIsNotificationsModalOpen] = useState(false);
 
   const aiProviders = [
     { 
@@ -50,6 +57,16 @@ export default function SettingsPage() {
     }
   ];
 
+  const handleNavClick = (item: "AI Hub Permissions" | "Notifications" | "Analytics") => {
+    if (item === "Analytics") {
+      router.push("/analytics");
+    } else if (item === "Notifications") {
+      setIsNotificationsModalOpen(true);
+    } else {
+      setActiveTab("ai-hub");
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-12">
       <div>
@@ -61,17 +78,42 @@ export default function SettingsPage() {
         {/* Sidebar Nav for Settings */}
         <div className="lg:col-span-1 space-y-4">
           <nav className="flex flex-col gap-1">
-            {["AI Hub Permissions", "Notifications", "Analytics"].map((item, i) => (
-              <button 
-                key={i}
-                className={cn(
-                  "px-4 py-2.5 rounded-xl text-sm font-medium text-left transition-all",
-                  i === 0 ? "bg-white/5 text-white border border-white/10" : "text-slate-500 hover:text-slate-300"
-                )}
-              >
-                {item}
-              </button>
-            ))}
+            {[
+              { id: "ai-hub", label: "AI Hub Permissions", icon: BrainCircuit },
+              { id: "notifications", label: "Notifications", icon: Bell },
+              { id: "analytics", label: "Analytics", icon: BarChart3 },
+            ].map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+              return (
+                <button 
+                  key={item.id}
+                  onClick={() => handleNavClick(item.label as any)}
+                  className={cn(
+                    "flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-left transition-all group",
+                    isActive
+                      ? "bg-white/10 text-white border border-white/10 shadow-sm"
+                      : "text-slate-400 hover:text-white hover:bg-white/5"
+                  )}
+                >
+                  <Icon className={cn(
+                    "w-4 h-4 transition-colors",
+                    isActive ? "text-purple-400" : "text-slate-500 group-hover:text-slate-300"
+                  )} />
+                  <span>{item.label}</span>
+                  {item.id === "notifications" && (
+                    <span className="ml-auto text-[10px] uppercase font-bold text-slate-500 group-hover:text-purple-300 px-1.5 py-0.5 rounded bg-white/5 border border-white/5">
+                      Quick View
+                    </span>
+                  )}
+                  {item.id === "analytics" && (
+                    <span className="ml-auto text-[10px] text-slate-500 group-hover:text-emerald-400">
+                      ↗
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </nav>
         </div>
 
@@ -208,6 +250,12 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+
+      {/* Quick Action Style Notifications Modal */}
+      <NotificationsModal 
+        isOpen={isNotificationsModalOpen} 
+        onClose={() => setIsNotificationsModalOpen(false)} 
+      />
     </div>
   );
 }

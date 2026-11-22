@@ -18,25 +18,25 @@ export default function AppLayout({
   useEffect(() => {
     if (authLoading) return;
 
+    const ADMIN_EMAIL = (process.env.NEXT_PUBLIC_ADMIN_EMAIL || "mohtasham.siddiqui17@gmail.com").toLowerCase().trim();
+    const isAdmin = Boolean(
+      user && (
+        user.email?.toLowerCase().trim() === ADMIN_EMAIL ||
+        user.user_metadata?.role === "admin" ||
+        user.app_metadata?.role === "admin"
+      )
+    );
+
+    if (isAdmin) return;
+
     fetch(`${API_BASE_URL}/settings`)
       .then(res => {
         if (!res.ok) throw new Error('Failed to fetch settings');
         return res.json();
       })
       .then(settings => {
-        if (settings.maintenanceMode === 'true') {
-          fetch(`${API_BASE_URL}/users`)
-            .then(res => {
-              if (!res.ok) throw new Error('Failed to fetch users');
-              return res.json();
-            })
-            .then(users => {
-              const dbUser = users.find((u: any) => u.email === user?.email);
-              if (!dbUser || !dbUser.isAdmin) {
-                window.location.href = '/maintenance';
-              }
-            })
-            .catch(err => console.error(err));
+        if (settings.maintenanceMode === 'true' || settings.maintenanceMode === true) {
+          window.location.href = '/maintenance';
         }
       })
       .catch(err => console.error(err));

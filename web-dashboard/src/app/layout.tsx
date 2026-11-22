@@ -115,6 +115,7 @@ export const metadata: Metadata = {
 };
 
 import { NavigationEvents } from "@/components/NavigationEvents";
+import { MaintenanceGuard } from "@/components/MaintenanceGuard";
 import { Suspense } from "react";
 
 export default function RootLayout({
@@ -212,6 +213,9 @@ export default function RootLayout({
           <SettingsProvider>
             <Suspense fallback={null}>
               <NavigationEvents />
+            </Suspense>
+            <Suspense fallback={null}>
+              <MaintenanceGuard />
             </Suspense>
             {children}
             <Analytics />
