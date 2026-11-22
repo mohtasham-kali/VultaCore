@@ -1,4 +1,13 @@
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, OneToMany } from 'typeorm';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  CreateDateColumn,
+  UpdateDateColumn,
+  OneToMany,
+  ManyToOne,
+  JoinColumn,
+} from 'typeorm';
 import { PlanFeature } from './plan-feature.entity';
 import { UserSubscription } from './user-subscription.entity';
 import { User } from '../../users/entities/user.entity';
@@ -58,6 +67,16 @@ export class Plan {
 
   @Column({ default: 1 })
   version: number;
+
+  @Column({ type: 'uuid', nullable: true })
+  inheritsPlanId: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  inheritsPlanSlug: string | null;
+
+  @ManyToOne(() => Plan, { nullable: true })
+  @JoinColumn({ name: 'inheritsPlanId' })
+  inheritedPlan: Plan | null;
 
   @Column({ default: 'immediate' })
   planChangePolicy: string; // 'immediate' | 'renewal' | 'new_subscribers'

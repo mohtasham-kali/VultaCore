@@ -33,6 +33,12 @@ export class EntitlementGuard implements CanActivate {
       throw new UnauthorizedException('Authentication required to verify subscription entitlements');
     }
 
+    const adminEmail = (process.env.ADMIN_EMAIL || 'mohtasham.siddiqui17@gmail.com').toLowerCase().trim();
+    const userEmail = (user.email || '').toLowerCase().trim();
+    if (user.isAdmin || userEmail === adminEmail || user.role === 'admin' || user.app_metadata?.role === 'admin') {
+      return true; // Full Server-Side Administrator Access Bypass
+    }
+
     const hasAccess = await this.entitlementsService.hasEntitlement(user.id, requiredFeature);
 
     if (!hasAccess) {

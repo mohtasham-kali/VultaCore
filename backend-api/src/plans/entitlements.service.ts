@@ -1,4 +1,4 @@
-import { Injectable, Logger, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserSubscription } from './entities/user-subscription.entity';
@@ -6,6 +6,7 @@ import { Plan } from './entities/plan.entity';
 import { Feature } from './entities/feature.entity';
 import { PlanFeature } from './entities/plan-feature.entity';
 import { FeatureUsage } from './entities/feature-usage.entity';
+import { PlansService } from './plans.service';
 
 export interface UserEntitlementsResponse {
   userId: string;
@@ -53,10 +54,33 @@ export class EntitlementsService {
     private readonly planFeatureRepo: Repository<PlanFeature>,
     @InjectRepository(FeatureUsage)
     private readonly usageRepo: Repository<FeatureUsage>,
+    @Inject(forwardRef(() => PlansService))
+    private readonly plansService: PlansService,
   ) {}
 
   private getTodayPeriod(): string {
     return new Date().toISOString().split('T')[0];
+  }
+
+  /**
+   * Checks if user has administrator privileges for complete server-side bypass.
+   */
+  async isAdminUser(userId: string): Promise<boolean> {
+    try {
+      const rows = await this.subRepo.manager.query(
+        `SELECT email, role, "isAdmin" FROM "user" WHERE id = $1 UNION SELECT email, role, false as "isAdmin" FROM profiles WHERE id = $1 LIMIT 1`,
+        [userId],
+      );
+      if (rows && rows.length > 0) {
+        const u = rows[0];
+        const email = (u.email || '').toLowerCase().trim();
+        const adminEmail = (process.env.ADMIN_EMAIL || 'mohtasham.siddiqui17@gmail.com').toLowerCase().trim();
+        return u.isAdmin === true || u.role === 'admin' || email === adminEmail;
+      }
+    } catch (err) {
+      this.logger.warn(`Could not verify admin status for ${userId}: ${err}`);
+    }
+    return false;
   }
 
   /**
@@ -120,10 +144,55 @@ export class EntitlementsService {
 
   /**
    * Retrieves dynamic, complete entitlements for a user based entirely on database records.
+   * Full server-side administrator bypass is enforced if user is an admin.
    */
   async getUserEntitlements(userId: string, fallbackRank?: string): Promise<UserEntitlementsResponse> {
-    const sub = await this.getOrCreateSubscription(userId, fallbackRank);
     const allFeatures = await this.featureRepo.find({ where: { isActive: true } });
+
+    // 0. Full Server-Side Administrator Access Bypass
+    const isAdmin = await this.isAdminUser(userId);
+    if (isAdmin) {
+      const adminFeatureMap: UserEntitlementsResponse['features'] = {};
+      for (const feat of allFeatures) {
+        adminFeatureMap[feat.key] = {
+          key: feat.key,
+          name: feat.name,
+          enabled: true,
+          limit: null, // Unlimited unmetered
+          usedToday: 0,
+          remainingToday: 'unlimited',
+          config: null,
+        };
+      }
+
+      return {
+        userId,
+        plan: {
+          id: null,
+          name: 'Enterprise (Admin Bypass)',
+          slug: 'enterprise',
+          status: 'active',
+          billingInterval: 'unlimited',
+          currentPeriodEnd: null,
+          isEnterpriseCustom: true,
+        },
+        features: adminFeatureMap,
+        allowedModels: [
+          'claude-3-5-sonnet-20241022',
+          'claude-3-opus',
+          'llama-3.3-70b-versatile',
+          'gemini-1.5-pro',
+          'llama-3.1-8b-instant',
+        ],
+        usage: {
+          aiChatsToday: 0,
+          aiChatsLimit: 'unlimited',
+          aiChatsRemaining: 'unlimited',
+        },
+      };
+    }
+
+    const sub = await this.getOrCreateSubscription(userId, fallbackRank);
     const today = this.getTodayPeriod();
 
     // Load usage counts for today
@@ -138,13 +207,13 @@ export class EntitlementsService {
     const featureMap: UserEntitlementsResponse['features'] = {};
     let allowedModels: string[] = ['llama-3.1-8b-instant'];
 
-    // 1. Enterprise Custom Subscription
+    // 1. Enterprise Custom Subscription (Customer-Isolated Entitlements)
     if (sub.isEnterpriseCustom && sub.customFeatures) {
       try {
         const parsed = JSON.parse(sub.customFeatures);
         const approved: string[] = Array.isArray(parsed.approvedFeatures) ? parsed.approvedFeatures : [];
         const limits: Record<string, number | null> = parsed.featureLimits || {};
-        
+
         if (Array.isArray(parsed.allowedModels) && parsed.allowedModels.length > 0) {
           allowedModels = parsed.allowedModels;
         }
@@ -173,45 +242,25 @@ export class EntitlementsService {
         this.logger.error(`Error parsing enterprise customFeatures for user ${userId}:`, err);
       }
     } else {
-      // 2. Standard / Catalog Plan Subscription
-      const plan = sub.plan || (await this.planRepo.findOne({
-        where: [{ id: sub.planId || '' }, { name: sub.planName || 'Free' }, { slug: (sub.planName || 'free').toLowerCase() }],
-      }));
+      // 2. Standard / Catalog Plan Subscription with Hierarchical Feature Inheritance
+      const plan =
+        sub.plan ||
+        (await this.planRepo.findOne({
+          where: [
+            { id: sub.planId || '' },
+            { name: sub.planName || 'Free' },
+            { slug: (sub.planName || 'free').toLowerCase() },
+          ],
+        }));
 
-      // Fetch plan features directly to guarantee feature relations are 100% loaded
-      const planFeatures = plan?.id
-        ? await this.planFeatureRepo.find({
-            where: { planId: plan.id },
-            relations: ['feature'],
-          })
-        : [];
-
-      const featureByIdMap = new Map(allFeatures.map((f) => [f.id, f]));
-      const planFeatureMap = new Map<string, { enabled: boolean; limit: number | null; config: any }>();
-
-      for (const pf of planFeatures) {
-        const featKey = pf.feature?.key || featureByIdMap.get(pf.featureId)?.key;
-        if (featKey) {
-          let configObj = null;
-          if (pf.config) {
-            try {
-              configObj = JSON.parse(pf.config);
-            } catch {
-              configObj = pf.config;
-            }
-          }
-          planFeatureMap.set(featKey, {
-            enabled: pf.isEnabled,
-            limit: pf.limitValue,
-            config: configObj,
-          });
-        }
-      }
+      // Dynamically resolve inherited features across Free -> Standard -> Premium -> Enterprise
+      const resolvedFeatures = plan?.id ? await this.plansService.resolvePlanFeatures(plan.id) : [];
+      const resolvedMap = new Map(resolvedFeatures.map((rf) => [rf.featureKey, rf]));
 
       for (const feat of allFeatures) {
-        const pf = planFeatureMap.get(feat.key);
-        const enabled = Boolean(pf?.enabled && sub.status === 'active');
-        const limit = pf?.limit !== undefined ? pf.limit : feat.defaultLimit;
+        const rf = resolvedMap.get(feat.key);
+        const enabled = Boolean(rf?.isEnabled && sub.status === 'active');
+        const limit = rf ? rf.limitValue : feat.defaultLimit;
         const usedToday = usageMap.get(feat.key) || 0;
 
         let remainingToday: number | 'unlimited' = 'unlimited';
@@ -226,7 +275,7 @@ export class EntitlementsService {
           limit,
           usedToday,
           remainingToday,
-          config: pf?.config,
+          config: rf?.config,
         };
       }
 
@@ -273,8 +322,10 @@ export class EntitlementsService {
 
   /**
    * Check if user is actively entitled to a specific feature.
+   * Admins always have access.
    */
   async hasEntitlement(userId: string, featureKey: string): Promise<boolean> {
+    if (await this.isAdminUser(userId)) return true;
     const entitlements = await this.getUserEntitlements(userId);
     const feat = entitlements.features[featureKey];
     return Boolean(feat && feat.enabled);
@@ -282,12 +333,16 @@ export class EntitlementsService {
 
   /**
    * Checks if user has remaining usage limit for a quota-controlled feature.
+   * Admins bypass quota checks.
    */
   async checkUsageLimit(
     userId: string,
     featureKey: string,
     requestedAmount: number = 1,
   ): Promise<{ allowed: boolean; remaining: number | 'unlimited'; limit: number | 'unlimited'; used: number }> {
+    if (await this.isAdminUser(userId)) {
+      return { allowed: true, remaining: 'unlimited', limit: 'unlimited', used: 0 };
+    }
     const entitlements = await this.getUserEntitlements(userId);
     const feat = entitlements.features[featureKey];
 
@@ -312,8 +367,12 @@ export class EntitlementsService {
 
   /**
    * Atomically increments usage counter for a feature on the current date.
+   * Admins are unmetered (usage counter is not consumed).
    */
   async consumeUsage(userId: string, featureKey: string, amount: number = 1): Promise<void> {
+    if (await this.isAdminUser(userId)) {
+      return; // Administrator bypass: unmetered
+    }
     const period = this.getTodayPeriod();
 
     try {

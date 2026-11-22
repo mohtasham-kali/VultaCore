@@ -41,6 +41,7 @@ interface Feature {
   category: string;
   type: string;
   defaultLimit: number | null;
+  enterprisePrice?: number;
   isActive: boolean;
   metadata?: string | null;
 }
@@ -70,6 +71,8 @@ interface Plan {
   badge?: string | null;
   displayOrder: number;
   version: number;
+  inheritsPlanSlug?: string | null;
+  inheritsPlanId?: string | null;
   planChangePolicy: string;
   paddlePriceIdMonth?: string | null;
   paddlePriceIdYear?: string | null;
@@ -160,6 +163,7 @@ export default function AdminSubscriptionsPage() {
     isRecommended: false,
     badge: "",
     displayOrder: 0,
+    inheritsPlanSlug: "",
     planChangePolicy: "immediate",
     selectedFeatures: [] as { featureId: string; isEnabled: boolean; limitValue: number | null }[],
   });
@@ -174,6 +178,7 @@ export default function AdminSubscriptionsPage() {
     category: "community",
     type: "boolean",
     defaultLimit: "" as string | number,
+    enterprisePrice: "5.00",
     isActive: true,
   });
 
@@ -246,6 +251,7 @@ export default function AdminSubscriptionsPage() {
       isRecommended: false,
       badge: "",
       displayOrder: plans.length,
+      inheritsPlanSlug: "",
       planChangePolicy: "immediate",
       selectedFeatures: features.map((f) => ({
         featureId: f.id,
@@ -278,6 +284,7 @@ export default function AdminSubscriptionsPage() {
       isRecommended: plan.isRecommended,
       badge: plan.badge || "",
       displayOrder: plan.displayOrder,
+      inheritsPlanSlug: plan.inheritsPlanSlug || "",
       planChangePolicy: plan.planChangePolicy || "immediate",
       selectedFeatures: features.map((f) => {
         const assigned = assignedMap.get(f.id);
@@ -312,6 +319,7 @@ export default function AdminSubscriptionsPage() {
         isRecommended: planForm.isRecommended,
         badge: planForm.badge || null,
         displayOrder: Number(planForm.displayOrder),
+        inheritsPlanSlug: planForm.inheritsPlanSlug || null,
         planChangePolicy: planForm.planChangePolicy,
         features: planForm.selectedFeatures.filter((f) => f.isEnabled),
       };
@@ -382,6 +390,7 @@ export default function AdminSubscriptionsPage() {
       category: "community",
       type: "boolean",
       defaultLimit: "",
+      enterprisePrice: "5.00",
       isActive: true,
     });
     setIsFeatureModalOpen(true);
@@ -396,6 +405,7 @@ export default function AdminSubscriptionsPage() {
       category: feat.category,
       type: feat.type,
       defaultLimit: feat.defaultLimit !== null ? feat.defaultLimit : "",
+      enterprisePrice: feat.enterprisePrice !== undefined && feat.enterprisePrice !== null ? String(feat.enterprisePrice) : "5.00",
       isActive: feat.isActive,
     });
     setIsFeatureModalOpen(true);
@@ -412,6 +422,7 @@ export default function AdminSubscriptionsPage() {
         category: featureForm.category,
         type: featureForm.type,
         defaultLimit: featureForm.defaultLimit === "" ? null : Number(featureForm.defaultLimit),
+        enterprisePrice: featureForm.enterprisePrice === "" ? 5.0 : Number(featureForm.enterprisePrice),
         isActive: featureForm.isActive,
       };
 
@@ -850,6 +861,7 @@ export default function AdminSubscriptionsPage() {
                   <th className="px-5 py-3">Category</th>
                   <th className="px-5 py-3">Type</th>
                   <th className="px-5 py-3">Default Limit</th>
+                  <th className="px-5 py-3">Ent. Price</th>
                   <th className="px-5 py-3 text-right">Actions</th>
                 </tr>
               </thead>
@@ -865,6 +877,9 @@ export default function AdminSubscriptionsPage() {
                     <td className="px-5 py-3 uppercase text-slate-400">{f.type}</td>
                     <td className="px-5 py-3 text-slate-300 font-mono">
                       {f.defaultLimit === null ? "Unlimited" : `${f.defaultLimit}/day`}
+                    </td>
+                    <td className="px-5 py-3 text-emerald-400 font-mono font-bold">
+                      ${Number(f.enterprisePrice !== undefined && f.enterprisePrice !== null ? f.enterprisePrice : 5.0).toFixed(2)}/mo
                     </td>
                     <td className="px-5 py-3 text-right">
                       <button
@@ -1148,6 +1163,22 @@ export default function AdminSubscriptionsPage() {
                   />
                 </div>
 
+                <div>
+                  <label className="block font-semibold text-slate-300 mb-1">
+                    Inherit Features From (Hierarchy)
+                  </label>
+                  <select
+                    value={planForm.inheritsPlanSlug}
+                    onChange={(e) => setPlanForm({ ...planForm, inheritsPlanSlug: e.target.value })}
+                    className="w-full bg-slate-950 border border-white/10 rounded-xl p-2.5 text-white outline-none focus:border-purple-500"
+                  >
+                    <option value="">None (Root Tier - e.g. Free)</option>
+                    <option value="free">Free Plan (Inherit Free features)</option>
+                    <option value="standard">Standard Plan (Inherit Free + Standard)</option>
+                    <option value="premium">Premium Plan (Inherit Free + Standard + Premium)</option>
+                  </select>
+                </div>
+
                 <div className="flex items-center gap-4 sm:col-span-2 pt-2">
                   <label className="flex items-center gap-2 cursor-pointer text-slate-300">
                     <input
@@ -1335,6 +1366,18 @@ export default function AdminSubscriptionsPage() {
                     placeholder="Uncapped"
                     value={featureForm.defaultLimit}
                     onChange={(e) => setFeatureForm({ ...featureForm, defaultLimit: e.target.value })}
+                    className="w-full bg-slate-950 border border-white/10 rounded-xl p-2.5 text-white font-mono outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-300 mb-1">Enterprise Add-On Price ($/mo)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="5.00"
+                    value={featureForm.enterprisePrice}
+                    onChange={(e) => setFeatureForm({ ...featureForm, enterprisePrice: e.target.value })}
                     className="w-full bg-slate-950 border border-white/10 rounded-xl p-2.5 text-white font-mono outline-none"
                   />
                 </div>

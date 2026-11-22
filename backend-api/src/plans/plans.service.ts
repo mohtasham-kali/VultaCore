@@ -72,11 +72,16 @@ export class PlansService implements OnModuleInit {
           ALTER TABLE plan ADD COLUMN IF NOT EXISTS badge varchar;
           ALTER TABLE plan ADD COLUMN IF NOT EXISTS "displayOrder" integer DEFAULT 0;
           ALTER TABLE plan ADD COLUMN IF NOT EXISTS version integer DEFAULT 1;
+          ALTER TABLE plan ADD COLUMN IF NOT EXISTS "inheritsPlanId" uuid;
+          ALTER TABLE plan ADD COLUMN IF NOT EXISTS "inheritsPlanSlug" varchar;
           ALTER TABLE plan ADD COLUMN IF NOT EXISTS "planChangePolicy" varchar DEFAULT 'immediate';
           ALTER TABLE plan ADD COLUMN IF NOT EXISTS "paddlePriceIdMonth" varchar;
           ALTER TABLE plan ADD COLUMN IF NOT EXISTS "paddlePriceIdYear" varchar;
           ALTER TABLE plan ADD COLUMN IF NOT EXISTS "createdAt" timestamp with time zone DEFAULT NOW();
           ALTER TABLE plan ADD COLUMN IF NOT EXISTS "updatedAt" timestamp with time zone DEFAULT NOW();
+
+          -- Feature Table Updates
+          ALTER TABLE feature ADD COLUMN IF NOT EXISTS "enterprisePrice" numeric(10,2) DEFAULT 5.00;
 
           -- PlanFeature Table
           CREATE TABLE IF NOT EXISTS plan_feature (
@@ -173,8 +178,118 @@ export class PlansService implements OnModuleInit {
     return query.getMany();
   }
 
+  /**
+   * Dynamically resolves all hierarchical inherited features for a given plan.
+   * Inheritance chain: FREE -> STANDARD -> PREMIUM -> ENTERPRISE
+   * Higher-tier plans automatically inherit all features from their parent plans,
+   * while overriding limitValue, isEnabled, or config without duplicating entries.
+   */
+  async resolvePlanFeatures(planIdOrSlug: string): Promise<Array<{
+    featureId: string;
+    featureKey: string;
+    name: string;
+    description: string;
+    category: string;
+    type: string;
+    isEnabled: boolean;
+    limitValue: number | null;
+    config: any;
+    enterprisePrice: number;
+    inheritedFrom: string | null;
+  }>> {
+    const targetPlan = await this.planRepo.findOne({
+      where: [{ id: planIdOrSlug }, { slug: planIdOrSlug.toLowerCase() }],
+    });
+
+    if (!targetPlan) {
+      return [];
+    }
+
+    // Traverse inheritance hierarchy up to root
+    const chain: Plan[] = [targetPlan];
+    const visited = new Set<string>([targetPlan.id]);
+
+    let curr = targetPlan;
+    while (curr.inheritsPlanId || curr.inheritsPlanSlug) {
+      const parent = await this.planRepo.findOne({
+        where: curr.inheritsPlanId
+          ? { id: curr.inheritsPlanId }
+          : { slug: curr.inheritsPlanSlug! },
+      });
+
+      if (!parent || visited.has(parent.id)) {
+        break; // Guard against missing parents or cycles
+      }
+
+      visited.add(parent.id);
+      chain.unshift(parent); // Prepend to chain so root (Free) is index 0
+      curr = parent;
+    }
+
+    // Load all features for fast reference
+    const allFeatures = await this.featureRepo.find();
+    const featById = new Map<string, Feature>(allFeatures.map((f) => [f.id, f]));
+
+    // Merge features in order: Root -> Child -> Leaf
+    const mergedMap = new Map<
+      string,
+      {
+        featureId: string;
+        featureKey: string;
+        name: string;
+        description: string;
+        category: string;
+        type: string;
+        isEnabled: boolean;
+        limitValue: number | null;
+        config: any;
+        enterprisePrice: number;
+        inheritedFrom: string | null;
+      }
+    >();
+
+    for (const plan of chain) {
+      const planFeatures = await this.planFeatureRepo.find({
+        where: { planId: plan.id },
+        relations: ['feature'],
+      });
+
+      for (const pf of planFeatures) {
+        const feat = pf.feature || featById.get(pf.featureId);
+        if (!feat) continue;
+
+        let parsedConfig: any = null;
+        if (pf.config) {
+          try {
+            parsedConfig = JSON.parse(pf.config);
+          } catch {
+            parsedConfig = pf.config;
+          }
+        }
+
+        const isInherited = plan.id !== targetPlan.id;
+
+        mergedMap.set(feat.key, {
+          featureId: feat.id,
+          featureKey: feat.key,
+          name: feat.name,
+          description: feat.description,
+          category: feat.category,
+          type: feat.type,
+          isEnabled: pf.isEnabled,
+          limitValue: pf.limitValue,
+          config: parsedConfig,
+          enterprisePrice: Number(feat.enterprisePrice || 5.00),
+          inheritedFrom: isInherited ? plan.name : null,
+        });
+      }
+    }
+
+    return Array.from(mergedMap.values());
+  }
+
   async findPublished(): Promise<Plan[]> {
-    return this.planRepo
+    const plans = await this.planRepo
       .createQueryBuilder('plan')
       .leftJoinAndSelect('plan.planFeatures', 'pf')
       .leftJoinAndSelect('pf.feature', 'feature')
@@ -183,6 +298,43 @@ export class PlansService implements OnModuleInit {
       .andWhere('plan.isPublic = true')
       .orderBy('plan.displayOrder', 'ASC')
       .getMany();
+
+    // Enrich each published plan with dynamically resolved inherited features
+    for (const plan of plans) {
+      const resolved = await this.resolvePlanFeatures(plan.id);
+      (plan as any).resolvedFeatures = resolved;
+
+      // Populate planFeatures with resolved items so frontend sees all inherited features
+      plan.planFeatures = resolved.map((rf) => ({
+        id: rf.featureId,
+        planId: plan.id,
+        featureId: rf.featureId,
+        isEnabled: rf.isEnabled,
+        limitValue: rf.limitValue,
+        config: typeof rf.config === 'object' ? JSON.stringify(rf.config) : rf.config,
+        feature: {
+          id: rf.featureId,
+          key: rf.featureKey,
+          name: rf.name,
+          description: rf.description,
+          category: rf.category,
+          type: rf.type,
+          defaultLimit: rf.limitValue,
+          enterprisePrice: rf.enterprisePrice,
+          isActive: true,
+        } as any,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        plan,
+      }));
+
+      // Also populate string features array
+      plan.features = resolved
+        .filter((rf) => rf.isEnabled)
+        .map((rf) => (rf.limitValue ? `${rf.name} (${rf.limitValue}/day)` : rf.name));
+    }
+
+    return plans;
   }
 
   async findOne(idOrSlug: string): Promise<Plan> {
@@ -223,6 +375,8 @@ export class PlansService implements OnModuleInit {
       badge: dto.badge || null,
       displayOrder: dto.displayOrder || 0,
       version: 1,
+      inheritsPlanId: dto.inheritsPlanId || null,
+      inheritsPlanSlug: dto.inheritsPlanSlug || null,
       planChangePolicy: dto.planChangePolicy || 'immediate',
       paddlePriceIdMonth: dto.paddlePriceIdMonth || null,
       paddlePriceIdYear: dto.paddlePriceIdYear || null,
@@ -276,6 +430,8 @@ export class PlansService implements OnModuleInit {
     if (dto.isRecommended !== undefined) plan.isRecommended = dto.isRecommended;
     if (dto.badge !== undefined) plan.badge = dto.badge;
     if (dto.displayOrder !== undefined) plan.displayOrder = dto.displayOrder;
+    if (dto.inheritsPlanId !== undefined) plan.inheritsPlanId = dto.inheritsPlanId || null;
+    if (dto.inheritsPlanSlug !== undefined) plan.inheritsPlanSlug = dto.inheritsPlanSlug || null;
     if (dto.planChangePolicy !== undefined) plan.planChangePolicy = dto.planChangePolicy;
     if (dto.paddlePriceIdMonth !== undefined) plan.paddlePriceIdMonth = dto.paddlePriceIdMonth;
     if (dto.paddlePriceIdYear !== undefined) plan.paddlePriceIdYear = dto.paddlePriceIdYear;
@@ -333,6 +489,8 @@ export class PlansService implements OnModuleInit {
       badge: source.badge,
       displayOrder: source.displayOrder + 1,
       version: 1,
+      inheritsPlanId: source.inheritsPlanId,
+      inheritsPlanSlug: source.inheritsPlanSlug,
       planChangePolicy: source.planChangePolicy,
       paddlePriceIdMonth: source.paddlePriceIdMonth,
       paddlePriceIdYear: source.paddlePriceIdYear,
@@ -406,6 +564,7 @@ export class PlansService implements OnModuleInit {
         isRecommended: false,
         badge: null,
         displayOrder: 0,
+        inheritsPlanSlug: null,
         paddlePriceIdMonth: 'pri_01m7zga17631vansgnv8844tqp',
         features: [
           { key: 'community_forum', limit: null },
@@ -430,6 +589,7 @@ export class PlansService implements OnModuleInit {
         isRecommended: true,
         badge: 'Most Popular',
         displayOrder: 1,
+        inheritsPlanSlug: 'free',
         paddlePriceIdMonth: 'pri_01m7r11zk5c3bma7a6k0y70g5n',
         paddlePriceIdYear: 'pri_01m7zg022mbd9npg4k7d9462w4',
         features: [
@@ -437,7 +597,7 @@ export class PlansService implements OnModuleInit {
           { key: 'priority_forum_support', limit: null },
           { key: 'gemini_pro', limit: null },
           { key: 'basic_ai_chat', limit: 100 },
-          { key: 'personal_analytics', limit: null },
+          { key: 'personal_analytics', limit: 1 },
           { key: 'public_analytics', limit: null },
           { key: 'api_access', limit: 5000 },
           { key: 'standard_support', limit: null },
@@ -459,6 +619,7 @@ export class PlansService implements OnModuleInit {
         isRecommended: false,
         badge: 'Advanced Security',
         displayOrder: 2,
+        inheritsPlanSlug: 'standard',
         paddlePriceIdMonth: 'pri_01m7r12e4rwbrt25331y3sm88p',
         paddlePriceIdYear: 'pri_01m7zga0kvb5ycrvpa9mw8n1f1',
         features: [
@@ -480,8 +641,8 @@ export class PlansService implements OnModuleInit {
         slug: 'enterprise',
         description: 'Tailored infrastructure, dedicated security tooling, and SLA guarantees for enterprise teams.',
         category: 'enterprise',
-        monthlyPrice: 299,
-        yearlyPrice: 3588,
+        monthlyPrice: 99,
+        yearlyPrice: 1188,
         currency: 'USD',
         interval: 'both',
         isCustomPricing: true,
@@ -491,6 +652,7 @@ export class PlansService implements OnModuleInit {
         isRecommended: false,
         badge: 'Enterprise Grade',
         displayOrder: 3,
+        inheritsPlanSlug: 'premium',
         paddlePriceIdMonth: 'pri_01m7zga1swv0y3tfj78g7bkqvj',
         paddlePriceIdYear: 'pri_01m7zga22j5raphwqxbe31fgex',
         features: [
@@ -538,6 +700,7 @@ export class PlansService implements OnModuleInit {
           isRecommended: item.isRecommended,
           badge: item.badge,
           displayOrder: item.displayOrder,
+          inheritsPlanSlug: item.inheritsPlanSlug,
           version: 1,
           paddlePriceIdMonth: item.paddlePriceIdMonth,
           paddlePriceIdYear: item.paddlePriceIdYear,
@@ -551,6 +714,9 @@ export class PlansService implements OnModuleInit {
         if (plan.monthlyPrice === 0 && item.monthlyPrice > 0) {
           plan.monthlyPrice = item.monthlyPrice;
         }
+        if (item.inheritsPlanSlug !== undefined && plan.inheritsPlanSlug !== item.inheritsPlanSlug) {
+          plan.inheritsPlanSlug = item.inheritsPlanSlug;
+        }
         if (item.paddlePriceIdMonth && !plan.paddlePriceIdMonth) {
           plan.paddlePriceIdMonth = item.paddlePriceIdMonth;
         }
@@ -560,12 +726,24 @@ export class PlansService implements OnModuleInit {
         await this.planRepo.save(plan);
       }
 
-      // Ensure plan features exist
+      // Link inheritsPlanId if inheritsPlanSlug is present
+      if (plan.inheritsPlanSlug && !plan.inheritsPlanId) {
+        const parentPlan = await this.planRepo.findOne({ where: { slug: plan.inheritsPlanSlug } });
+        if (parentPlan) {
+          plan.inheritsPlanId = parentPlan.id;
+          await this.planRepo.save(plan);
+        }
+      }
+
+      // Ensure plan features exist and reflect accurate limits
       const existingFeatures = await this.planFeatureRepo.find({ where: { planId: plan.id } });
-      if (existingFeatures.length === 0) {
-        for (const fItem of item.features) {
-          const feat = featureMap.get(fItem.key);
-          if (feat) {
+      const existingFeatureMap = new Map(existingFeatures.map((pf) => [pf.featureId, pf]));
+
+      for (const fItem of item.features) {
+        const feat = featureMap.get(fItem.key);
+        if (feat) {
+          const existingPf = existingFeatureMap.get(feat.id);
+          if (!existingPf) {
             const pf: PlanFeature = this.planFeatureRepo.create({
               planId: plan.id,
               featureId: feat.id,
@@ -573,6 +751,9 @@ export class PlansService implements OnModuleInit {
               limitValue: fItem.limit,
             });
             await this.planFeatureRepo.save(pf);
+          } else if (existingPf.limitValue !== fItem.limit) {
+            existingPf.limitValue = fItem.limit;
+            await this.planFeatureRepo.save(existingPf);
           }
         }
       }

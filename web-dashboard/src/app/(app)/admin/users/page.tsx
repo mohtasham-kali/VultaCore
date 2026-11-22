@@ -33,6 +33,7 @@ interface Feature {
   name: string;
   category: string;
   defaultLimit: number | null;
+  enterprisePrice?: number;
 }
 
 export default function AdminUsersPage() {
@@ -139,17 +140,63 @@ export default function AdminUsersPage() {
     setOpenDropdownUserId(null);
     setSelectedUserForEnterprise(user);
 
-    // Look up any pending enterprise inquiry for this user
     try {
       const headers = { Authorization: `Bearer ${token}` };
-      const inquiryRes = await fetch(
-        `${API_BASE_URL}/enterprise/inquiries/user?email=${encodeURIComponent(user.email)}&userId=${user.id}`,
-        { headers },
-      );
-      if (inquiryRes.ok) {
-        const inq = await inquiryRes.json();
-        setEnterpriseInquiryData(inq);
+      const [inquiryRes, subRes] = await Promise.all([
+        fetch(
+          `${API_BASE_URL}/enterprise/inquiries/user?email=${encodeURIComponent(user.email)}&userId=${user.id}`,
+          { headers },
+        ).catch(() => null),
+        fetch(`${API_BASE_URL}/subscriptions/user/${user.id}`, { headers }).catch(() => null),
+      ]);
 
+      let existingSub: any = null;
+      if (subRes && subRes.ok) {
+        existingSub = await subRes.json().catch(() => null);
+      }
+
+      let inq: any = null;
+      if (inquiryRes && inquiryRes.ok) {
+        inq = await inquiryRes.json().catch(() => null);
+        setEnterpriseInquiryData(inq);
+      } else {
+        setEnterpriseInquiryData(null);
+      }
+
+      if (existingSub && existingSub.isEnterpriseCustom) {
+        let customFeatures: any = {};
+        try {
+          customFeatures = existingSub.customFeatures ? JSON.parse(existingSub.customFeatures) : {};
+        } catch {
+          customFeatures = {};
+        }
+
+        const approved = Array.isArray(customFeatures.approvedFeatures) && customFeatures.approvedFeatures.length > 0
+          ? customFeatures.approvedFeatures
+          : ["sla_guarantees", "dedicated_ai_instance", "phone_support_24_7", "white_label"];
+
+        setEnterpriseForm({
+          approvedFeatures: approved,
+          featureLimits: customFeatures.featureLimits || {},
+          allowedModels: customFeatures.allowedModels || [
+            "claude-3-5-sonnet-20241022",
+            "claude-3-opus",
+            "llama-3.3-70b-versatile",
+            "gemini-1.5-pro",
+            "llama-3.1-8b-instant",
+          ],
+          customPrice: existingSub.customPrice !== null && existingSub.customPrice !== undefined ? Number(existingSub.customPrice) : 99,
+          billingInterval: existingSub.billingInterval || "month",
+          startDate: existingSub.currentPeriodStart
+            ? new Date(existingSub.currentPeriodStart).toISOString().split("T")[0]
+            : new Date().toISOString().split("T")[0],
+          expirationDate: existingSub.currentPeriodEnd
+            ? new Date(existingSub.currentPeriodEnd).toISOString().split("T")[0]
+            : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+          status: existingSub.status || "active",
+          adminNotes: customFeatures.adminNotes || inq?.reference ? `Inquiry ${inq?.reference}` : "",
+        });
+      } else {
         let requestedList: string[] = [];
         try {
           requestedList = inq?.requestedFeatures ? JSON.parse(inq.requestedFeatures) : [];
@@ -161,36 +208,52 @@ export default function AdminUsersPage() {
           "sla_guarantees",
           "dedicated_ai_instance",
           "phone_support_24_7",
-          "private_security_hub",
-          "advanced_threat_intel",
+          "white_label",
         ];
 
-        setEnterpriseForm((prev) => ({
-          ...prev,
+        setEnterpriseForm({
           approvedFeatures: approved,
-          adminNotes: inq?.reference ? `Converted from inquiry ${inq.reference}` : "",
-        }));
-      } else {
-        setEnterpriseInquiryData(null);
-        setEnterpriseForm((prev) => ({
-          ...prev,
-          approvedFeatures: [
-            "sla_guarantees",
-            "dedicated_ai_instance",
-            "phone_support_24_7",
-            "private_security_hub",
-            "advanced_threat_intel",
+          featureLimits: {},
+          allowedModels: [
+            "claude-3-5-sonnet-20241022",
+            "claude-3-opus",
+            "llama-3.3-70b-versatile",
+            "gemini-1.5-pro",
+            "llama-3.1-8b-instant",
           ],
-        }));
+          customPrice: 99,
+          billingInterval: "month",
+          startDate: new Date().toISOString().split("T")[0],
+          expirationDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+          status: "active",
+          adminNotes: inq?.reference ? `Converted from inquiry ${inq.reference}` : "",
+        });
       }
-    } catch {
-      setEnterpriseInquiryData(null);
+    } catch (err) {
+      console.warn("Failed to prefetch user enterprise details:", err);
     }
   };
 
-  const handleSaveEnterpriseCustomization = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Base platform price is $99.00/mo
+  const BASE_ENTERPRISE_PRICE = 99;
+  const calculatedEnterprisePrice = useMemo(() => {
+    let sum = BASE_ENTERPRISE_PRICE;
+    for (const key of enterpriseForm.approvedFeatures) {
+      const feat = features.find((f) => f.key === key);
+      const price = feat?.enterprisePrice ? Number(feat.enterprisePrice) : 5.0;
+      sum += price;
+    }
+    return Number(sum.toFixed(2));
+  }, [enterpriseForm.approvedFeatures, features]);
+
+  const handleSaveEnterpriseCustomization = async (e?: React.FormEvent, overrideStatus?: string) => {
+    if (e) e.preventDefault();
     if (!token || !selectedUserForEnterprise) return;
+
+    const payload = {
+      ...enterpriseForm,
+      status: overrideStatus || enterpriseForm.status,
+    };
 
     try {
       setIsSavingEnterprise(true);
@@ -202,7 +265,7 @@ export default function AdminUsersPage() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify(enterpriseForm),
+          body: JSON.stringify(payload),
         },
       );
 
@@ -211,12 +274,15 @@ export default function AdminUsersPage() {
         throw new Error(err.message || "Failed to customize Enterprise agreement");
       }
 
+      const newRank = payload.status === "active" ? "Enterprise" : selectedUserForEnterprise.rank;
       setUsers((prev) =>
-        prev.map((u) => (u.id === selectedUserForEnterprise.id ? { ...u, rank: "Enterprise" } : u)),
+        prev.map((u) => (u.id === selectedUserForEnterprise.id ? { ...u, rank: newRank } : u)),
       );
 
       setSelectedUserForEnterprise(null);
-      setSyncStatus(`Enterprise plan activated with custom entitlements for ${selectedUserForEnterprise.username}`);
+      setSyncStatus(
+        `Enterprise agreement (${payload.status.toUpperCase()}) saved with ${payload.approvedFeatures.length} features at $${payload.customPrice}/mo for ${selectedUserForEnterprise.username}`,
+      );
       setTimeout(() => setSyncStatus(null), 5000);
     } catch (err: any) {
       console.error("Enterprise customization error:", err);
@@ -225,6 +291,12 @@ export default function AdminUsersPage() {
     } finally {
       setIsSavingEnterprise(false);
     }
+  };
+
+  const handleRenewAgreement = () => {
+    const currentExp = enterpriseForm.expirationDate ? new Date(enterpriseForm.expirationDate) : new Date();
+    const newExp = new Date(currentExp.getTime() + 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    setEnterpriseForm({ ...enterpriseForm, expirationDate: newExp, status: "active" });
   };
 
   const filteredUsers = useMemo(() => {
@@ -286,8 +358,8 @@ export default function AdminUsersPage() {
       )}
 
       {/* Accounts Table */}
-      <div className="overflow-hidden rounded-2xl bg-slate-900 border border-white/5 shadow-2xl">
-        <table className="w-full text-left border-collapse">
+      <div className="overflow-x-auto rounded-2xl bg-slate-900 border border-white/5 shadow-2xl min-h-[360px]">
+        <table className="w-full text-left border-collapse min-w-[760px]">
           <thead>
             <tr className="border-b border-white/5 bg-slate-950/40">
               <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-widest">
@@ -445,7 +517,7 @@ export default function AdminUsersPage() {
       {/* ENTERPRISE CUSTOMIZATION MODAL FOR SPECIFIC USER */}
       {selectedUserForEnterprise && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-          <div className="relative w-full max-w-2xl bg-slate-900 border border-blue-500/40 rounded-3xl p-6 sm:p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div className="relative w-full max-w-3xl bg-slate-900 border border-blue-500/40 rounded-3xl p-6 sm:p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => setSelectedUserForEnterprise(null)}
               className="absolute top-5 right-5 p-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white"
@@ -454,13 +526,80 @@ export default function AdminUsersPage() {
             </button>
 
             <div className="mb-6">
-              <span className="px-2.5 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs font-bold uppercase tracking-wider">
-                Isolated Enterprise Plan Customization
-              </span>
-              <h2 className="text-2xl font-extrabold text-white mt-1">
+              <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                <span className="px-2.5 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs font-bold uppercase tracking-wider">
+                  Isolated Enterprise Plan Customization
+                </span>
+                <span
+                  className={cn(
+                    "px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider",
+                    enterpriseForm.status === "active"
+                      ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+                      : enterpriseForm.status === "draft"
+                      ? "bg-amber-500/10 text-amber-400 border border-amber-500/30"
+                      : enterpriseForm.status === "suspended"
+                      ? "bg-rose-500/10 text-rose-400 border border-rose-500/30"
+                      : "bg-slate-800 text-slate-400 border border-white/10",
+                  )}
+                >
+                  Status: {enterpriseForm.status}
+                </span>
+              </div>
+              <h2 className="text-2xl font-extrabold text-white">
                 {selectedUserForEnterprise.username}
               </h2>
               <p className="text-xs text-slate-400">{selectedUserForEnterprise.email}</p>
+            </div>
+
+            {/* LIVE AUTOMATIC ENTERPRISE PRICING BREAKDOWN */}
+            <div className="mb-6 p-4 rounded-2xl bg-gradient-to-br from-slate-950 to-blue-950/30 border border-blue-500/20 text-xs space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="font-bold text-sm text-blue-400 flex items-center gap-2">
+                  <CreditCard className="w-4 h-4" />
+                  <span>Enterprise Contract Pricing Breakdown</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setEnterpriseForm({ ...enterpriseForm, customPrice: calculatedEnterprisePrice })
+                  }
+                  className="px-2.5 py-1 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/40 text-blue-300 text-[11px] font-semibold transition-colors flex items-center gap-1.5"
+                >
+                  <span>Apply Calculated (${calculatedEnterprisePrice}/mo)</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1 border-t border-white/5">
+                <div className="p-2.5 rounded-xl bg-slate-900/60 border border-white/5">
+                  <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Base Platform</div>
+                  <div className="text-base font-extrabold text-white mt-0.5">${BASE_ENTERPRISE_PRICE}/mo</div>
+                  <div className="text-[9px] text-slate-500">Includes Free, Std, &amp; Prem</div>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-slate-900/60 border border-white/5">
+                  <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Add-on Features</div>
+                  <div className="text-base font-extrabold text-blue-400 mt-0.5">
+                    +${(calculatedEnterprisePrice - BASE_ENTERPRISE_PRICE).toFixed(2)}/mo
+                  </div>
+                  <div className="text-[9px] text-slate-500">{enterpriseForm.approvedFeatures.length} features chosen</div>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-slate-900/60 border border-white/5">
+                  <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Calculated Monthly</div>
+                  <div className="text-base font-extrabold text-emerald-400 mt-0.5">
+                    ${calculatedEnterprisePrice}/mo
+                  </div>
+                  <div className="text-[9px] text-slate-500">${(calculatedEnterprisePrice * 12).toFixed(2)}/year</div>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-slate-900/60 border border-blue-500/30">
+                  <div className="text-[10px] text-blue-400 uppercase font-bold tracking-wider">Agreed Contract Price</div>
+                  <div className="text-base font-extrabold text-white mt-0.5">
+                    ${enterpriseForm.customPrice}/mo
+                  </div>
+                  <div className="text-[9px] text-slate-500">{enterpriseForm.billingInterval} interval</div>
+                </div>
+              </div>
             </div>
 
             {enterpriseInquiryData && (
@@ -486,10 +625,25 @@ export default function AdminUsersPage() {
                   <label className="block font-semibold text-slate-300 mb-1">Agreed Monthly Price ($)</label>
                   <input
                     type="number"
+                    step="0.01"
                     value={enterpriseForm.customPrice}
                     onChange={(e) => setEnterpriseForm({ ...enterpriseForm, customPrice: Number(e.target.value) })}
                     className="w-full bg-slate-950 border border-white/10 rounded-xl p-2.5 text-white outline-none focus:border-blue-500"
                   />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-300 mb-1">Contract Status</label>
+                  <select
+                    value={enterpriseForm.status}
+                    onChange={(e) => setEnterpriseForm({ ...enterpriseForm, status: e.target.value })}
+                    className="w-full bg-slate-950 border border-white/10 rounded-xl p-2.5 text-white outline-none"
+                  >
+                    <option value="active">Active (Full Customer Access)</option>
+                    <option value="draft">Draft Proposal (Not Activated)</option>
+                    <option value="suspended">Suspended (Access Temporarily Held)</option>
+                    <option value="canceled">Canceled / Closed Contract</option>
+                  </select>
                 </div>
 
                 <div>
@@ -524,16 +678,34 @@ export default function AdminUsersPage() {
                     className="w-full bg-slate-950 border border-white/10 rounded-xl p-2.5 text-white outline-none"
                   />
                 </div>
+
+                <div className="flex items-end">
+                  <button
+                    type="button"
+                    onClick={handleRenewAgreement}
+                    className="w-full py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-white/10 text-white font-semibold flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Renew Contract (+1 Year)</span>
+                  </button>
+                </div>
               </div>
 
               {/* Select Approved Features */}
               <div>
-                <label className="block font-bold text-sm text-white mb-2">
-                  Administrator-Approved Features (Specific Customer Entitlements)
-                </label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block font-bold text-sm text-white">
+                    Administrator-Approved Features (Specific Customer Entitlements)
+                  </label>
+                  <span className="text-[11px] text-slate-400">
+                    Base $99 + $5.00/feature default
+                  </span>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-2">
                   {features.map((feat) => {
                     const isChecked = enterpriseForm.approvedFeatures.includes(feat.key);
+                    const featPrice = feat.enterprisePrice ? Number(feat.enterprisePrice) : 5.0;
+
                     return (
                       <button
                         type="button"
@@ -545,21 +717,26 @@ export default function AdminUsersPage() {
                           setEnterpriseForm({ ...enterpriseForm, approvedFeatures: updated });
                         }}
                         className={cn(
-                          "flex items-center gap-2.5 p-2 rounded-xl border text-left transition-colors",
+                          "flex items-center justify-between p-2.5 rounded-xl border text-left transition-colors",
                           isChecked
                             ? "bg-blue-500/10 border-blue-500/40 text-white font-medium"
                             : "bg-slate-950 border-white/5 text-slate-400 hover:border-white/15",
                         )}
                       >
-                        <div
-                          className={cn(
-                            "w-4 h-4 rounded border flex items-center justify-center",
-                            isChecked ? "bg-blue-500 border-blue-500 text-white" : "border-white/20 bg-slate-900",
-                          )}
-                        >
-                          {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                        <div className="flex items-center gap-2.5 truncate">
+                          <div
+                            className={cn(
+                              "w-4 h-4 rounded border flex items-center justify-center shrink-0",
+                              isChecked ? "bg-blue-500 border-blue-500 text-white" : "border-white/20 bg-slate-900",
+                            )}
+                          >
+                            {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                          </div>
+                          <span className="truncate">{feat.name}</span>
                         </div>
-                        <span className="truncate">{feat.name}</span>
+                        <span className="text-[10px] text-slate-500 font-mono shrink-0 ml-2">
+                          +${featPrice.toFixed(2)}/mo
+                        </span>
                       </button>
                     );
                   })}
@@ -616,22 +793,45 @@ export default function AdminUsersPage() {
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">
-                <button
-                  type="button"
-                  onClick={() => setSelectedUserForEnterprise(null)}
-                  className="px-5 py-2.5 rounded-xl bg-white/5 text-slate-300 font-semibold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSavingEnterprise}
-                  className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-purple-500 text-white font-semibold shadow-lg shadow-blue-500/20 disabled:opacity-50"
-                >
-                  {isSavingEnterprise ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
-                  <span>Activate Customer Enterprise Plan</span>
-                </button>
+              {/* ACTION BUTTONS BAR */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-white/10">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleSaveEnterpriseCustomization(undefined, "draft")}
+                    disabled={isSavingEnterprise}
+                    className="px-4 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 font-semibold border border-amber-500/30 transition-colors"
+                  >
+                    Save as Draft
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSaveEnterpriseCustomization(undefined, "suspended")}
+                    disabled={isSavingEnterprise}
+                    className="px-4 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 font-semibold border border-rose-500/30 transition-colors"
+                  >
+                    Suspend
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedUserForEnterprise(null)}
+                    className="px-4 py-2 rounded-xl bg-white/5 text-slate-300 hover:text-white font-semibold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSaveEnterpriseCustomization(undefined, "active")}
+                    disabled={isSavingEnterprise}
+                    className="inline-flex items-center gap-2 px-6 py-2 rounded-xl bg-gradient-to-r from-blue-500 to-purple-500 text-white font-semibold shadow-lg shadow-blue-500/20 disabled:opacity-50"
+                  >
+                    {isSavingEnterprise ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+                    <span>Activate Enterprise Plan</span>
+                  </button>
+                </div>
               </div>
             </form>
           </div>

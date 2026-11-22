@@ -3,8 +3,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserSubscription } from './entities/user-subscription.entity';
 import { Plan } from './entities/plan.entity';
+import { Feature } from './entities/feature.entity';
 import { SubscriptionAuditLog } from './entities/subscription-audit-log.entity';
-import { CustomizeEnterpriseDto } from './dto/plans.dto';
+import { CustomizeEnterpriseDto, CalculateEnterprisePriceDto } from './dto/plans.dto';
 import { UsersService } from '../users/users.service';
 import { EventsGateway } from '../events/events.gateway';
 
@@ -17,6 +18,8 @@ export class SubscriptionsService {
     private readonly subRepo: Repository<UserSubscription>,
     @InjectRepository(Plan)
     private readonly planRepo: Repository<Plan>,
+    @InjectRepository(Feature)
+    private readonly featureRepo: Repository<Feature>,
     @InjectRepository(SubscriptionAuditLog)
     private readonly auditRepo: Repository<SubscriptionAuditLog>,
     @Inject(forwardRef(() => UsersService))
@@ -188,6 +191,62 @@ export class SubscriptionsService {
     return saved;
   }
 
+  /**
+   * Calculates live dynamic Enterprise pricing based on base platform cost ($99/mo default)
+   * plus selected add-on features ($5.00/mo default each, or admin configured per-feature price).
+   */
+  async calculateEnterprisePrice(dto: CalculateEnterprisePriceDto): Promise<{
+    basePrice: number;
+    featuresPrice: number;
+    totalMonthlyPrice: number;
+    totalYearlyPrice: number;
+    selectedCount: number;
+    breakdown: Array<{
+      key: string;
+      name: string;
+      category: string;
+      unitPrice: number;
+      isCustomPrice: boolean;
+    }>;
+  }> {
+    const basePrice = dto.basePrice !== undefined ? Number(dto.basePrice) : 99.0;
+    const allFeatures = await this.featureRepo.find();
+    const featMap = new Map<string, Feature>(allFeatures.map((f) => [f.key, f]));
+
+    let featuresPrice = 0;
+    const breakdown = [];
+
+    const selected = Array.isArray(dto.selectedFeatures) ? dto.selectedFeatures : [];
+    for (const key of selected) {
+      const feat = featMap.get(key);
+      const isCustom = dto.customFeaturePrices?.[key] !== undefined;
+      const unitPrice = isCustom
+        ? Number(dto.customFeaturePrices![key])
+        : Number(feat?.enterprisePrice ?? 5.0);
+
+      featuresPrice += unitPrice;
+      breakdown.push({
+        key,
+        name: feat?.name || key,
+        category: feat?.category || 'enterprise',
+        unitPrice,
+        isCustomPrice: isCustom,
+      });
+    }
+
+    const totalMonthlyPrice = Number((basePrice + featuresPrice).toFixed(2));
+    const totalYearlyPrice = Number((totalMonthlyPrice * 12).toFixed(2));
+
+    return {
+      basePrice,
+      featuresPrice: Number(featuresPrice.toFixed(2)),
+      totalMonthlyPrice,
+      totalYearlyPrice,
+      selectedCount: selected.length,
+      breakdown,
+    };
+  }
+
   async customizeEnterprise(
     userId: string,
     dto: CustomizeEnterpriseDto,
@@ -199,7 +258,7 @@ export class SubscriptionsService {
     });
 
     const enterprisePlan = await this.planRepo.findOne({
-      where: { name: 'Enterprise' },
+      where: [{ name: 'Enterprise' }, { slug: 'enterprise' }],
     });
 
     const customFeaturesPayload = {
@@ -215,15 +274,18 @@ export class SubscriptionsService {
       adminNotes: dto.adminNotes || '',
     };
 
+    const effectiveStatus = dto.status || 'active';
+    const effectivePrice = dto.customPrice !== undefined ? dto.customPrice : 99;
+
     if (!sub) {
       sub = this.subRepo.create({
         userId,
         plan: enterprisePlan || null,
         planId: enterprisePlan?.id || null,
         planName: 'Enterprise',
-        status: dto.status || 'active',
+        status: effectiveStatus,
         billingInterval: dto.billingInterval || 'month',
-        customPrice: dto.customPrice || 299,
+        customPrice: effectivePrice,
         isEnterpriseCustom: true,
         customFeatures: JSON.stringify(customFeaturesPayload),
         currentPeriodStart: dto.startDate ? new Date(dto.startDate) : new Date(),
@@ -235,9 +297,9 @@ export class SubscriptionsService {
       sub.plan = enterprisePlan || null;
       sub.planId = enterprisePlan?.id || null;
       sub.planName = 'Enterprise';
-      sub.status = dto.status || 'active';
+      sub.status = effectiveStatus;
       sub.billingInterval = dto.billingInterval || sub.billingInterval || 'month';
-      sub.customPrice = dto.customPrice !== undefined ? dto.customPrice : sub.customPrice;
+      sub.customPrice = effectivePrice;
       sub.isEnterpriseCustom = true;
       sub.customFeatures = JSON.stringify(customFeaturesPayload);
       if (dto.startDate) sub.currentPeriodStart = new Date(dto.startDate);
@@ -246,8 +308,12 @@ export class SubscriptionsService {
 
     const saved = await this.subRepo.save(sub);
 
-    // Sync user rank to Enterprise
-    await this.usersService.updatePlan(userId, 'Enterprise', false);
+    // Sync user rank
+    if (effectiveStatus === 'active') {
+      await this.usersService.updatePlan(userId, 'Enterprise', false);
+    } else if (effectiveStatus === 'canceled') {
+      await this.usersService.updatePlan(userId, 'Free', false);
+    }
 
     // Record audit log
     const audit: SubscriptionAuditLog = this.auditRepo.create({
@@ -258,6 +324,7 @@ export class SubscriptionsService {
         customPrice: sub.customPrice,
         approvedFeatures: customFeaturesPayload.approvedFeatures,
         status: sub.status,
+        expirationDate: sub.currentPeriodEnd,
       }),
     });
     await this.auditRepo.save(audit);
@@ -265,7 +332,7 @@ export class SubscriptionsService {
     // Emit real-time WebSocket update
     this.eventsGateway.emitSubscriptionUpdated(userId, 'Enterprise');
 
-    this.logger.log(`Customized Enterprise subscription for user ${userId} with ${customFeaturesPayload.approvedFeatures.length} features`);
+    this.logger.log(`Customized Enterprise subscription for user ${userId} with ${customFeaturesPayload.approvedFeatures.length} features (status: ${sub.status})`);
     return saved;
   }
 

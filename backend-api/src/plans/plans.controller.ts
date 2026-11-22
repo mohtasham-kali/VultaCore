@@ -21,6 +21,7 @@ import {
   UpdateFeatureDto,
   EnterpriseInquiryDto,
   CustomizeEnterpriseDto,
+  CalculateEnterprisePriceDto,
 } from './dto/plans.dto';
 import { SupabaseAuthGuard } from '../common/guards/supabase-auth.guard';
 import { AdminGuard } from '../common/guards/admin.guard';
@@ -165,6 +166,12 @@ export class PlansController {
   ) {
     const adminEmail = req.user?.email || 'admin';
     return this.subscriptionsService.assignPlan(userId, plan, adminEmail);
+  }
+
+  @Post('subscriptions/calculate-enterprise-price')
+  @UseGuards(SupabaseAuthGuard, AdminGuard)
+  calculateEnterprisePrice(@Body() dto: CalculateEnterprisePriceDto) {
+    return this.subscriptionsService.calculateEnterprisePrice(dto);
   }
 
   @Post('subscriptions/user/:userId/enterprise')

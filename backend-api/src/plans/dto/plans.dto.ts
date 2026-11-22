@@ -21,6 +21,8 @@ export class CreatePlanDto {
   isRecommended?: boolean;
   badge?: string;
   displayOrder?: number;
+  inheritsPlanId?: string;
+  inheritsPlanSlug?: string;
   planChangePolicy?: string; // 'immediate' | 'renewal' | 'new_subscribers'
   paddlePriceIdMonth?: string;
   paddlePriceIdYear?: string;
@@ -43,6 +45,8 @@ export class UpdatePlanDto {
   isRecommended?: boolean;
   badge?: string;
   displayOrder?: number;
+  inheritsPlanId?: string;
+  inheritsPlanSlug?: string;
   planChangePolicy?: string;
   paddlePriceIdMonth?: string;
   paddlePriceIdYear?: string;
@@ -56,6 +60,7 @@ export class CreateFeatureDto {
   category?: string; // 'community' | 'ai' | 'analytics' | 'security' | 'api' | 'enterprise'
   type?: string; // 'boolean' | 'quota' | 'tier'
   defaultLimit?: number | null;
+  enterprisePrice?: number;
   isActive?: boolean;
   metadata?: Record<string, any> | string;
 }
@@ -66,8 +71,15 @@ export class UpdateFeatureDto {
   category?: string;
   type?: string;
   defaultLimit?: number | null;
+  enterprisePrice?: number;
   isActive?: boolean;
   metadata?: Record<string, any> | string;
+}
+
+export class CalculateEnterprisePriceDto {
+  basePrice?: number;
+  selectedFeatures: string[];
+  customFeaturePrices?: Record<string, number>;
 }
 
 export class EnterpriseInquiryDto {

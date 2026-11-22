@@ -27,6 +27,9 @@ export class Feature {
   @Column({ default: true })
   isActive: boolean;
 
+  @Column('decimal', { precision: 10, scale: 2, default: 5.00 })
+  enterprisePrice: number;
+
   @Column({ type: 'text', nullable: true })
   metadata: string | null; // JSON string for model list, extra config
 

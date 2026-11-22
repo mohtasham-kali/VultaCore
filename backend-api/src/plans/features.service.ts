@@ -109,6 +109,16 @@ export const INITIAL_FEATURES = [
     category: 'api',
     type: 'quota',
     defaultLimit: 1000,
+    enterprisePrice: 5.00,
+  },
+  {
+    key: 'websocket_api_access',
+    name: 'WebSocket API Access',
+    description: 'High-throughput bi-directional event streaming and real-time vulnerability event sockets.',
+    category: 'api',
+    type: 'boolean',
+    defaultLimit: null,
+    enterprisePrice: 5.00,
   },
   {
     key: 'unlimited_api',
@@ -117,6 +127,7 @@ export const INITIAL_FEATURES = [
     category: 'api',
     type: 'boolean',
     defaultLimit: null,
+    enterprisePrice: 5.00,
   },
   // Enterprise
   {
@@ -126,6 +137,7 @@ export const INITIAL_FEATURES = [
     category: 'enterprise',
     type: 'boolean',
     defaultLimit: null,
+    enterprisePrice: 5.00,
   },
   {
     key: 'dedicated_ai_instance',
@@ -134,6 +146,7 @@ export const INITIAL_FEATURES = [
     category: 'enterprise',
     type: 'boolean',
     defaultLimit: null,
+    enterprisePrice: 5.00,
   },
   {
     key: 'white_label',
@@ -142,6 +155,7 @@ export const INITIAL_FEATURES = [
     category: 'enterprise',
     type: 'boolean',
     defaultLimit: null,
+    enterprisePrice: 5.00,
   },
   {
     key: 'phone_support_24_7',
@@ -150,6 +164,7 @@ export const INITIAL_FEATURES = [
     category: 'enterprise',
     type: 'boolean',
     defaultLimit: null,
+    enterprisePrice: 5.00,
   },
 ];
 
@@ -193,6 +208,7 @@ export class FeaturesService {
       category: dto.category || 'community',
       type: dto.type || 'boolean',
       defaultLimit: dto.defaultLimit !== undefined ? dto.defaultLimit : null,
+      enterprisePrice: dto.enterprisePrice !== undefined ? Number(dto.enterprisePrice) : 5.00,
       isActive: dto.isActive !== undefined ? dto.isActive : true,
       metadata: typeof dto.metadata === 'object' ? JSON.stringify(dto.metadata) : dto.metadata || null,
     });
@@ -208,6 +224,7 @@ export class FeaturesService {
     if (dto.category !== undefined) feature.category = dto.category;
     if (dto.type !== undefined) feature.type = dto.type;
     if (dto.defaultLimit !== undefined) feature.defaultLimit = dto.defaultLimit;
+    if (dto.enterprisePrice !== undefined) feature.enterprisePrice = Number(dto.enterprisePrice);
     if (dto.isActive !== undefined) feature.isActive = dto.isActive;
     if (dto.metadata !== undefined) {
       feature.metadata = typeof dto.metadata === 'object' ? JSON.stringify(dto.metadata) : dto.metadata || null;
@@ -228,10 +245,14 @@ export class FeaturesService {
           category: item.category,
           type: item.type,
           defaultLimit: item.defaultLimit,
+          enterprisePrice: (item as any).enterprisePrice ?? 5.00,
           isActive: true,
           metadata: (item as any).metadata || null,
         });
         await this.featureRepo.save(feature);
+      } else if (item.category === 'enterprise' && (!exists.enterprisePrice || Number(exists.enterprisePrice) === 0)) {
+        exists.enterprisePrice = 5.00;
+        await this.featureRepo.save(exists);
       }
     }
   }
