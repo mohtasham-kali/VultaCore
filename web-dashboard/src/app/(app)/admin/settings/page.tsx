@@ -12,7 +12,7 @@ export default function AdminSettingsPage() {
   const token = session?.access_token;
 
   const [platformName, setPlatformName] = useState("VultaCore");
-  const [supportEmail, setSupportEmail] = useState("support@vultacore.io");
+  const [supportEmail, setSupportEmail] = useState("support@techprogression.com");
   const [analyticsEngineUrl, setAnalyticsEngineUrl] = useState("http://localhost:8080");
   const [maintenanceMode, setMaintenanceMode] = useState(false);
 
@@ -26,7 +26,7 @@ export default function AdminSettingsPage() {
       const res = await fetch(`${API_BASE_URL}/settings`);
       if (!res.ok) throw new Error("Failed to load settings");
       const data = await res.json();
-      
+
       if (data.platformName) setPlatformName(data.platformName);
       if (data.supportEmail) setSupportEmail(data.supportEmail);
       if (data.analyticsEngineUrl) setAnalyticsEngineUrl(data.analyticsEngineUrl);

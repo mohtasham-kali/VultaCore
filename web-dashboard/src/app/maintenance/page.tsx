@@ -18,10 +18,10 @@ export default function MaintenancePage() {
 
   const isAdmin = Boolean(
     user &&
-      (user.email?.toLowerCase().trim() === ADMIN_EMAIL ||
-        user.user_metadata?.role === "admin" ||
-        user.app_metadata?.role === "admin" ||
-        (user as any).isAdmin === true)
+    (user.email?.toLowerCase().trim() === ADMIN_EMAIL ||
+      user.user_metadata?.role === "admin" ||
+      user.app_metadata?.role === "admin" ||
+      (user as any).isAdmin === true)
   );
 
   const handleCheckAgain = () => {
@@ -137,8 +137,8 @@ export default function MaintenancePage() {
             </Link>
           )}
 
-          <button 
-            onClick={handleCheckAgain} 
+          <button
+            onClick={handleCheckAgain}
             disabled={checking}
             className="w-full bg-white/10 hover:bg-white/15 text-white font-medium py-3 rounded-xl transition-all text-sm flex items-center justify-center gap-2 border border-white/5"
           >
@@ -149,7 +149,7 @@ export default function MaintenancePage() {
 
         <div className="pt-2 text-[11px] text-slate-500">
           Need urgent access or platform support? Contact{" "}
-          <span className="text-slate-400 font-medium">support@vultacore.io</span>
+          <span className="text-slate-400 font-medium">support@techprogression.com</span>
         </div>
       </div>
     </div>
